@@ -10,6 +10,9 @@ const SELECTORS = {
   conversationContainer: '[data-conversation-id], .conversation-container, main',
   sessionTitle: 'h1[data-conversation-title], .conversation-title, h1',
 
+  // Scroll container (for lazy-loaded conversations)
+  scrollContainer: '[data-scroll-container], .conversation-scroll, main, [role="main"]',
+
   // Message elements
   userMessage: '[data-message-author-role="user"], .user-query-container, .query-content',
   assistantMessage: '[data-message-author-role="model"], .model-response-container, .response-container',

@@ -182,6 +182,168 @@ async function expandAllContent() {
 }
 
 // ============================================================================
+// Auto-Scroll to Load All Messages
+// ============================================================================
+
+/**
+ * Configuration for auto-scroll behavior.
+ */
+const SCROLL_CONFIG = {
+  scrollStep: 500,           // Pixels to scroll per step
+  scrollDelay: 150,          // Ms to wait between scroll steps
+  stabilityDelay: 500,       // Ms to wait for content to stabilize
+  stabilityChecks: 3,        // Number of stable checks before considering done
+  maxScrollAttempts: 1000,   // Safety limit to prevent infinite loops
+  progressUpdateInterval: 10 // Update progress every N scroll steps
+};
+
+/**
+ * Count current messages in the DOM.
+ * @returns {number} - Number of message elements
+ */
+function countMessages() {
+  const messages = document.querySelectorAll(SELECTORS.allMessages);
+  if (messages.length > 0) return messages.length;
+
+  // Fallback: count user + assistant messages
+  const userMsgs = document.querySelectorAll(SELECTORS.userMessage);
+  const assistantMsgs = document.querySelectorAll(SELECTORS.assistantMessage);
+  return userMsgs.length + assistantMsgs.length;
+}
+
+/**
+ * Find the scrollable container for the conversation.
+ * @returns {Element|null} - The scroll container element
+ */
+function findScrollContainer() {
+  // Try scroll container selector first
+  const container = document.querySelector(SELECTORS.scrollContainer);
+  if (container && container.scrollHeight > container.clientHeight) {
+    return container;
+  }
+
+  // Fallback: find the first scrollable ancestor of conversation content
+  const conversationContainer = document.querySelector(SELECTORS.conversationContainer);
+  if (!conversationContainer) return null;
+
+  let element = conversationContainer;
+  while (element && element !== document.body) {
+    const style = window.getComputedStyle(element);
+    const overflowY = style.overflowY;
+    if ((overflowY === 'auto' || overflowY === 'scroll') &&
+        element.scrollHeight > element.clientHeight) {
+      return element;
+    }
+    element = element.parentElement;
+  }
+
+  // Last resort: use document.documentElement or body
+  if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
+    return document.documentElement;
+  }
+
+  return document.body;
+}
+
+/**
+ * Scroll to load all messages in a lazy-loaded conversation.
+ * Scrolls up from current position until no new messages appear.
+ *
+ * @param {function} onProgress - Callback for progress updates (optional)
+ * @returns {Promise<{success: boolean, messagesLoaded: number, scrollAttempts: number}>}
+ */
+async function scrollToLoadAllMessages(onProgress) {
+  const scrollContainer = findScrollContainer();
+  if (!scrollContainer) {
+    return {
+      success: false,
+      error: 'Could not find scroll container',
+      messagesLoaded: 0,
+      scrollAttempts: 0
+    };
+  }
+
+  let lastMessageCount = countMessages();
+  let stableCount = 0;
+  let scrollAttempts = 0;
+  let lastScrollTop = scrollContainer.scrollTop;
+
+  // Progress callback helper
+  const reportProgress = (message) => {
+    showProgress(message);
+    if (onProgress) onProgress(message);
+  };
+
+  reportProgress(`Loading conversation history... (${lastMessageCount} messages)`);
+
+  while (scrollAttempts < SCROLL_CONFIG.maxScrollAttempts) {
+    scrollAttempts++;
+
+    // Scroll up
+    scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop - SCROLL_CONFIG.scrollStep);
+
+    // Wait for content to potentially load
+    await sleep(SCROLL_CONFIG.scrollDelay);
+
+    // Check if we've reached the top
+    const currentScrollTop = scrollContainer.scrollTop;
+    const atTop = currentScrollTop === 0;
+
+    // Count messages after scroll
+    const currentMessageCount = countMessages();
+
+    // Check for new messages
+    if (currentMessageCount > lastMessageCount) {
+      // New messages loaded, reset stability counter
+      stableCount = 0;
+      lastMessageCount = currentMessageCount;
+
+      if (scrollAttempts % SCROLL_CONFIG.progressUpdateInterval === 0) {
+        reportProgress(`Loading conversation history... (${currentMessageCount} messages)`);
+      }
+    } else if (atTop || currentScrollTop === lastScrollTop) {
+      // At top or can't scroll further, check stability
+      stableCount++;
+
+      if (stableCount >= SCROLL_CONFIG.stabilityChecks) {
+        // Wait a bit longer to make sure no more content is loading
+        await sleep(SCROLL_CONFIG.stabilityDelay);
+
+        // Final check
+        const finalCount = countMessages();
+        if (finalCount === lastMessageCount) {
+          // Conversation is fully loaded
+          reportProgress(`Loaded ${finalCount} messages`);
+          return {
+            success: true,
+            messagesLoaded: finalCount,
+            scrollAttempts
+          };
+        } else {
+          // More messages appeared during stability delay
+          lastMessageCount = finalCount;
+          stableCount = 0;
+        }
+      }
+    } else {
+      // Still scrolling but no new messages yet
+      stableCount = 0;
+    }
+
+    lastScrollTop = currentScrollTop;
+  }
+
+  // Hit max attempts - return what we have
+  const finalCount = countMessages();
+  return {
+    success: true,
+    messagesLoaded: finalCount,
+    scrollAttempts,
+    warning: `Reached maximum scroll attempts (${SCROLL_CONFIG.maxScrollAttempts}). Conversation may be incomplete.`
+  };
+}
+
+// ============================================================================
 // Metadata Extraction
 // ============================================================================
 
@@ -557,24 +719,37 @@ async function extractConversation() {
       };
     }
 
-    // Phase 1: Expand content
+    // Phase 1: Auto-scroll to load all messages (for lazy-loaded conversations)
+    showProgress('Loading conversation history...');
+    const scrollResult = await scrollToLoadAllMessages();
+
+    // Phase 2: Expand content
     showProgress('Expanding content...');
     const expandedCount = await expandAllContent();
     await sleep(500); // Wait for expansions to settle
 
-    // Phase 2: Extract metadata
+    // Phase 3: Extract metadata
     showProgress('Extracting metadata...');
     const conversationId = extractConversationId();
     const title = extractTitle();
     const url = window.location.href;
     const extractedAt = new Date().toISOString();
 
-    // Phase 3: Extract turns
+    // Phase 4: Extract turns
     showProgress('Extracting conversation...');
     const turns = await extractTurns();
 
-    // Phase 4: Extract images (Fail Open)
+    // Phase 5: Extract images (Fail Open)
     const { images, errors } = await extractImages(turns);
+
+    // Collect warnings
+    const warnings = [];
+    if (scrollResult.warning) {
+      warnings.push(scrollResult.warning);
+    }
+    if (errors.length > 0) {
+      warnings.push(`${errors.length} image(s) failed to download`);
+    }
 
     // Build result
     const data = {
@@ -586,7 +761,11 @@ async function extractConversation() {
         turnCount: turns.length,
         imageCount: images.length,
         extractionErrors: errors,
-        partialSuccess: errors.length > 0
+        partialSuccess: errors.length > 0 || !!scrollResult.warning,
+        scrollInfo: {
+          messagesLoaded: scrollResult.messagesLoaded,
+          scrollAttempts: scrollResult.scrollAttempts
+        }
       },
       turns
     };
@@ -597,7 +776,7 @@ async function extractConversation() {
       success: true,
       data,
       images,
-      warnings: errors.length > 0 ? [`${errors.length} image(s) failed to download`] : []
+      warnings
     };
 
   } catch (error) {
@@ -657,6 +836,11 @@ if (typeof module !== 'undefined' && module.exports) {
     isStreaming,
     expandAllContent,
     extractImages,
-    extractConversation
+    extractConversation,
+    // Auto-scroll exports
+    SCROLL_CONFIG,
+    countMessages,
+    findScrollContainer,
+    scrollToLoadAllMessages
   };
 }

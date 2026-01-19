@@ -29,12 +29,19 @@ function hideProgress() {
   progressEl.classList.remove('visible');
 }
 
-function showResult(turns, images, errors) {
+function showResult(turns, images, errors, scrollInfo) {
   const resultEl = document.getElementById('result');
   resultEl.classList.add('visible');
   document.getElementById('turnCount').textContent = turns;
   document.getElementById('imageCount').textContent = images;
   document.getElementById('errorCount').textContent = errors;
+
+  // Show scroll info if available
+  const scrollInfoEl = document.getElementById('scrollInfo');
+  if (scrollInfoEl && scrollInfo) {
+    scrollInfoEl.textContent = `(${scrollInfo.messagesLoaded} loaded)`;
+    scrollInfoEl.classList.add('visible');
+  }
 }
 
 function setButtonState(enabled, text = 'Extract Conversation') {
@@ -190,7 +197,8 @@ async function handleExtract() {
     showResult(
       data.metadata.turnCount,
       data.metadata.imageCount,
-      data.metadata.extractionErrors.length
+      data.metadata.extractionErrors.length,
+      data.metadata.scrollInfo
     );
 
     // Check size

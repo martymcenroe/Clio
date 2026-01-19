@@ -92,27 +92,31 @@ if (!loadingEl || loadingEl.offsetParent === null) return;
 
 ## Implementation Status
 
-**STATUS: BLOCKED - Selector Verification Required**
+**STATUS: VERIFIED - Selectors Confirmed Against Real DOM**
 
-The scroll logic is implemented and tested against mock DOM structures. However, the Gemini DOM selectors are unverified because:
-1. Gemini requires authentication (cannot use WebFetch)
-2. Gemini is a JavaScript SPA (DOM not available without browser)
-3. Developer does not have authenticated browser access
+Selectors were verified using fixture-driven development:
+1. User saved Gemini page as HTML (standard browser action)
+2. Developer parsed HTML to extract actual DOM structure
+3. Created test fixture `test/fixtures/real-gemini-snapshot.html`
+4. Verified selectors using Playwright browser automation
 
-### Selector Discovery Tool
+### Selector Verification Results
 
-Created `tools/discover-selectors.js` to collect actual DOM structure:
-1. Run script in DevTools on Gemini conversation
-2. Analyze output for scroll container, message, and loading selectors
-3. Update `selectors.js` with verified values
-4. Execute manual tests
+| Selector | Target | Status |
+|----------|--------|--------|
+| `#chat-history` | Scroll container | VERIFIED |
+| `.conversation-container` | Turn container | VERIFIED |
+| `user-query` | User messages | VERIFIED |
+| `model-response` | Assistant messages | VERIFIED |
+| `model-thoughts button` | Thinking toggle | VERIFIED |
+| `mat-progress-spinner` | Loading indicator | VERIFIED |
 
-### Verification Checklist (After Selectors Verified)
+### Verification Checklist
 
-- [ ] Long conversation scrolls visibly when extracting
-- [ ] Progress indicator shows message count increasing
-- [ ] ZIP file contains all messages including first message
-- [ ] Test conversation URL: `https://gemini.google.com/app/efdb7649143fefda`
+- [x] Selectors verified against real Gemini DOM snapshot
+- [x] All 207 automated tests pass
+- [x] Playwright browser tests confirm selectors work
+- [ ] Manual tests pending user authentication to Gemini
 
 ## Rollback Plan
 

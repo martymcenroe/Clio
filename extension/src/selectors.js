@@ -2,28 +2,39 @@
  * Centralized DOM selectors for Gemini UI elements.
  * Isolated here for easy maintenance when Gemini updates their UI.
  *
+ * VERIFIED: 2026-01-19 from real Gemini DOM snapshot
+ * Source: docs/html-input/Google Gemini.htm
+ *
  * LLD Reference: docs/reports/1/lld-clio.md Section 6.1
  */
 
 const SELECTORS = {
   // Conversation structure
-  conversationContainer: '[data-conversation-id], .conversation-container, main',
-  sessionTitle: 'h1[data-conversation-title], .conversation-title, h1',
+  // VERIFIED: <div class="conversation-container message-actions-hover-boundary" id="...">
+  conversationContainer: '.conversation-container, [data-conversation-id], main',
+  // VERIFIED: <span class="conversation-title gds-title-m">
+  sessionTitle: '.conversation-title, h1[data-conversation-title], h1',
 
   // Scroll container (for lazy-loaded conversations)
-  scrollContainer: '[data-scroll-container], .conversation-scroll, main, [role="main"]',
+  // VERIFIED: <div id="chat-history" class="chat-history-scroll-container">
+  scrollContainer: '#chat-history, .chat-history-scroll-container, [data-scroll-container], main',
 
   // Message elements
-  userMessage: '[data-message-author-role="user"], .user-query-container, .query-content',
-  assistantMessage: '[data-message-author-role="model"], .model-response-container, .response-container',
+  // VERIFIED: <user-query> custom element with nested .query-text
+  userMessage: 'user-query, [data-message-author-role="user"], .user-query-container',
+  // VERIFIED: <model-response> custom element with nested .response-container
+  assistantMessage: 'model-response, [data-message-author-role="model"], .model-response-container, .response-container',
 
-  // All messages (for DOM order traversal)
-  allMessages: '[data-message-author-role], .message-container, .conversation-turn',
+  // All messages (conversation turns)
+  // VERIFIED: <div class="conversation-container"> contains both user-query and model-response
+  allMessages: '.conversation-container, [data-message-author-role], .conversation-turn',
 
-  // Expandable content (note: :has-text is not valid CSS, use data attributes or classes)
+  // Expandable content
   expandButton: 'button[aria-expanded="false"], [data-expand-button], .expand-button',
-  thinkingToggle: '[data-thinking-toggle], .thinking-toggle, button[aria-label*="thinking"]',
-  thinkingContent: '.thinking-content, [data-thinking-content], .thought-process',
+  // VERIFIED: <model-thoughts data-test-id="model-thoughts">
+  thinkingToggle: '[data-test-id="model-thoughts"] button, model-thoughts button, [data-thinking-toggle], button[aria-label*="thinking"]',
+  // VERIFIED: .thoughts-body inside model-thoughts
+  thinkingContent: 'model-thoughts .thoughts-body, .thinking-content, [data-thinking-content], .thought-process',
 
   // Code blocks
   codeBlock: 'pre code, .code-block code, code-block',
@@ -36,7 +47,8 @@ const SELECTORS = {
   streamingIndicator: 'button[aria-label*="Stop"], .streaming-indicator, .generating, [data-streaming="true"]',
 
   // Loading indicator (shown while fetching older messages during scroll)
-  loadingIndicator: '[data-loading], .loading-spinner, [aria-busy="true"], mat-spinner, .loading, [role="progressbar"]'
+  // VERIFIED: <mat-progress-spinner aria-label="Loading conversation history" class="mat-mdc-progress-spinner mdc-circular-progress">
+  loadingIndicator: 'mat-progress-spinner, .mdc-circular-progress, [role="progressbar"], [aria-busy="true"], .loading-spinner'
 };
 
 // For use in content script (non-module context)

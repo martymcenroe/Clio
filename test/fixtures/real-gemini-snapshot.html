@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<!--
+  Real Gemini DOM Snapshot (Minimal Fixture)
+  Extracted from: https://gemini.google.com/app/efdb7649143fefda
+  Date: 2026-01-19
+
+  This fixture contains the actual DOM structure from Gemini,
+  minimized to essential elements for testing selectors.
+-->
+<html>
+<head>
+  <title>Google Gemini - Test Fixture</title>
+  <style>
+    /* Simulate Gemini's scroll container */
+    .chat-history-scroll-container {
+      overflow-y: auto;
+      height: 500px;
+    }
+    /* Loading spinner */
+    .mdc-circular-progress {
+      display: none;
+    }
+    .mdc-circular-progress.loading {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <chat-app id="app-root">
+    <main class="chat-app">
+      <!-- Scroll container - VERIFIED: id="chat-history" class="chat-history-scroll-container" -->
+      <div id="chat-history" class="chat-history-scroll-container">
+        <infinite-scroller data-test-id="chat-history-container" class="chat-history">
+
+          <!-- Conversation turn 1 - VERIFIED: class="conversation-container" -->
+          <div class="conversation-container message-actions-hover-boundary" id="turn-001">
+            <!-- User message - VERIFIED: custom element <user-query> -->
+            <user-query>
+              <span class="user-query-container">
+                <user-query-content class="user-query-container">
+                  <div class="user-query-container">
+                    <div class="query-content">
+                      <span class="user-query-bubble-with-background">
+                        <span class="horizontal-container">
+                          <div role="heading" aria-level="2" class="query-text gds-body-l">
+                            <p class="query-text-line">I have a Pixel 8 Pro phone and want to test the camera</p>
+                          </div>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </user-query-content>
+              </span>
+            </user-query>
+
+            <!-- Model response - VERIFIED: custom element <model-response> -->
+            <model-response>
+              <div>
+                <response-container class="reduced-bottom-padding">
+                  <div class="response-container response-container-with-gpi">
+                    <div class="presented-response-container">
+                      <div class="response-container-content has-thoughts">
+                        <div class="response-content">
+                          <!-- Thinking section - VERIFIED: <model-thoughts> with data-test-id -->
+                          <div class="thoughts-container">
+                            <div class="thoughts-content">
+                              <div class="thoughts-wrapper">
+                                <model-thoughts data-test-id="model-thoughts">
+                                  <div class="model-thoughts">
+                                    <div class="thoughts-header">
+                                      <button class="thoughts-header-button">
+                                        <span>Show thinking</span>
+                                      </button>
+                                    </div>
+                                    <div class="thoughts-body" style="display:none;">
+                                      <p>Let me analyze the user's request about the Pixel 8 Pro camera...</p>
+                                    </div>
+                                  </div>
+                                </model-thoughts>
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- Response text -->
+                          <structured-content-container class="model-response-text has-thoughts">
+                            <div class="container">
+                              <message-content id="message-content-id-r_turn001">
+                                <div class="markdown markdown-main-panel">
+                                  <p>Great choice! The Pixel 8 Pro has an excellent camera system.</p>
+                                </div>
+                              </message-content>
+                            </div>
+                          </structured-content-container>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </response-container>
+              </div>
+            </model-response>
+          </div>
+
+          <!-- Conversation turn 2 -->
+          <div class="conversation-container message-actions-hover-boundary" id="turn-002">
+            <user-query>
+              <span class="user-query-container">
+                <user-query-content class="user-query-container">
+                  <div class="user-query-container">
+                    <div class="query-content">
+                      <span class="user-query-bubble-with-background">
+                        <span class="horizontal-container">
+                          <div role="heading" aria-level="2" class="query-text gds-body-l">
+                            <p class="query-text-line">What are the best settings for night photography?</p>
+                          </div>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </user-query-content>
+              </span>
+            </user-query>
+
+            <model-response>
+              <div>
+                <response-container class="reduced-bottom-padding">
+                  <div class="response-container response-container-with-gpi">
+                    <div class="presented-response-container">
+                      <div class="response-container-content">
+                        <div class="response-content">
+                          <structured-content-container class="model-response-text">
+                            <div class="container">
+                              <message-content id="message-content-id-r_turn002">
+                                <div class="markdown markdown-main-panel">
+                                  <p>For night photography with your Pixel 8 Pro, I recommend:</p>
+                                  <ul>
+                                    <li>Enable Night Sight mode</li>
+                                    <li>Use a tripod for stability</li>
+                                    <li>Keep ISO low when possible</li>
+                                  </ul>
+                                </div>
+                              </message-content>
+                            </div>
+                          </structured-content-container>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </response-container>
+              </div>
+            </model-response>
+          </div>
+
+          <!-- Loading indicator - VERIFIED: mat-progress-spinner with aria-label -->
+          <div class="loading-history-spinner-container" style="display:none;">
+            <mat-progress-spinner
+              role="progressbar"
+              data-test-id="loading-history-spinner"
+              mode="indeterminate"
+              aria-label="Loading conversation history"
+              class="mat-mdc-progress-spinner mdc-circular-progress mat-primary mdc-circular-progress--indeterminate">
+            </mat-progress-spinner>
+          </div>
+
+        </infinite-scroller>
+      </div>
+    </main>
+  </chat-app>
+</body>
+</html>

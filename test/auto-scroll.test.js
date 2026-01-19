@@ -502,13 +502,13 @@ describe('SELECTORS.loadingIndicator', () => {
   // Test ID: SCROLL-SEL-002
   test('loadingIndicator matches common loading patterns', () => {
     // Test various loading indicator patterns
+    // VERIFIED patterns from real Gemini DOM
     const patterns = [
-      '<div data-loading>Loading</div>',
-      '<div class="loading-spinner"></div>',
+      '<mat-progress-spinner class="mdc-circular-progress"></mat-progress-spinner>',
+      '<div class="mdc-circular-progress">Loading</div>',
+      '<div role="progressbar" aria-label="Loading"></div>',
       '<div aria-busy="true">Loading</div>',
-      '<mat-spinner></mat-spinner>',
-      '<div class="loading">Please wait</div>',
-      '<div role="progressbar"></div>'
+      '<div class="loading-spinner"></div>'
     ];
 
     for (const pattern of patterns) {

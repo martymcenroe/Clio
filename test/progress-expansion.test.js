@@ -49,13 +49,19 @@ describe('Content Expansion', () => {
 
     test('clicks thinking toggles', async () => {
       const clickHandler = jest.fn();
-      document.body.innerHTML = `
-        <main data-conversation-id="test">
-          <button class="thinking-toggle">Show thinking</button>
-        </main>
-      `;
+      // VERIFIED: Real Gemini DOM uses model-thoughts custom element with data-test-id
+      const main = document.createElement('main');
+      main.classList.add('conversation-container');
+      const thoughts = document.createElement('model-thoughts');
+      thoughts.setAttribute('data-test-id', 'model-thoughts');
+      const btn = document.createElement('button');
+      btn.classList.add('thoughts-header-button');
+      btn.textContent = 'Show thinking';
+      thoughts.appendChild(btn);
+      main.appendChild(thoughts);
+      document.body.appendChild(main);
 
-      const toggle = document.querySelector('.thinking-toggle');
+      const toggle = document.querySelector('[data-test-id="model-thoughts"] button');
       toggle.addEventListener('click', clickHandler);
 
       const expandPromise = expandAllContent();
@@ -68,13 +74,33 @@ describe('Content Expansion', () => {
 
     test('handles multiple expand elements', async () => {
       const clicks = [];
-      document.body.innerHTML = `
-        <main data-conversation-id="test">
-          <button aria-expanded="false" id="btn1">Expand 1</button>
-          <button aria-expanded="false" id="btn2">Expand 2</button>
-          <button class="thinking-toggle" id="btn3">Think 1</button>
-        </main>
-      `;
+      // VERIFIED: Real Gemini DOM structure
+      const main = document.createElement('main');
+      main.classList.add('conversation-container');
+
+      // Two expand buttons
+      const btn1 = document.createElement('button');
+      btn1.setAttribute('aria-expanded', 'false');
+      btn1.id = 'btn1';
+      btn1.textContent = 'Expand 1';
+
+      const btn2 = document.createElement('button');
+      btn2.setAttribute('aria-expanded', 'false');
+      btn2.id = 'btn2';
+      btn2.textContent = 'Expand 2';
+
+      // Thinking toggle (model-thoughts with data-test-id)
+      const thoughts = document.createElement('model-thoughts');
+      thoughts.setAttribute('data-test-id', 'model-thoughts');
+      const btn3 = document.createElement('button');
+      btn3.id = 'btn3';
+      btn3.textContent = 'Think 1';
+      thoughts.appendChild(btn3);
+
+      main.appendChild(btn1);
+      main.appendChild(btn2);
+      main.appendChild(thoughts);
+      document.body.appendChild(main);
 
       document.querySelectorAll('button').forEach(btn => {
         btn.addEventListener('click', () => clicks.push(btn.id));

@@ -4,11 +4,17 @@
   "description": "Chrome extension for extracting full Gemini conversations to JSON with images",
   "private": true,
   "scripts": {
-    "test": "jest",
-    "test:coverage": "jest --coverage",
-    "test:watch": "jest --watch"
+    "build:viewer": "node viewer/build.js",
+    "prebuild": "npm run build:viewer",
+    "test": "jest --testPathIgnorePatterns=e2e",
+    "test:coverage": "jest --coverage --testPathIgnorePatterns=e2e",
+    "test:watch": "jest --watch --testPathIgnorePatterns=e2e",
+    "test:e2e": "npm run build:viewer && playwright test",
+    "test:e2e:headed": "npm run build:viewer && playwright test --headed",
+    "test:all": "npm run build:viewer && npm run test && npm run test:e2e"
   },
   "devDependencies": {
+    "@playwright/test": "^1.40.0",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0"
   },

@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "conversationId": "test-fixture-001",
+    "title": "Test Conversation for Viewer",
+    "extractedAt": "2026-01-19T12:00:00.000Z",
+    "url": "https://gemini.google.com/app/test-fixture-001",
+    "turnCount": 4,
+    "imageCount": 0,
+    "extractionErrors": [],
+    "partialSuccess": false
+  },
+  "turns": [
+    {
+      "index": 0,
+      "role": "user",
+      "content": "Hello! Can you help me understand recursion?",
+      "thinking": null,
+      "attachments": []
+    },
+    {
+      "index": 1,
+      "role": "assistant",
+      "content": "Of course! Recursion is when a function calls itself.\n\nHere's a simple example:\n\n```python\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)\n```\n\nThe key elements are:\n1. Base case (n <= 1)\n2. Recursive case (calls itself with smaller input)",
+      "thinking": "Let me think about how to explain recursion clearly...",
+      "attachments": []
+    },
+    {
+      "index": 2,
+      "role": "user",
+      "content": "That makes sense! What about tail recursion?",
+      "thinking": null,
+      "attachments": []
+    },
+    {
+      "index": 3,
+      "role": "assistant",
+      "content": "Tail recursion is when the recursive call is the last operation in the function.\n\n```python\ndef factorial_tail(n, accumulator=1):\n    if n <= 1:\n        return accumulator\n    return factorial_tail(n - 1, n * accumulator)\n```\n\nSome languages optimize tail recursion to avoid stack overflow.",
+      "thinking": null,
+      "attachments": []
+    }
+  ]
+}

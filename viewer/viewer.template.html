@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clio Viewer</title>
+  <style>
+    /* Reset and base */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      display: flex;
+      height: 100vh;
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #fafafa;
+      color: #1a1a1a;
+    }
+
+    /* Drop zone overlay */
+    #drop-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(66, 133, 244, 0.15);
+      border: 4px dashed #4285f4;
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #drop-overlay.active {
+      display: flex;
+    }
+
+    #drop-overlay p {
+      font-size: 24px;
+      color: #4285f4;
+      font-weight: 500;
+    }
+
+    /* Header */
+    #header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      z-index: 50;
+    }
+
+    #header h1 {
+      font-size: 18px;
+      font-weight: 500;
+      margin: 0;
+      color: #5f6368;
+    }
+
+    #header-controls {
+      display: flex;
+      gap: 12px;
+      margin-left: auto;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      background: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .btn:hover {
+      background: #f1f3f4;
+      border-color: #c6c6c6;
+    }
+
+    .btn-primary {
+      background: #4285f4;
+      color: #fff;
+      border-color: #4285f4;
+    }
+
+    .btn-primary:hover {
+      background: #3367d6;
+      border-color: #3367d6;
+    }
+
+    #file-input {
+      display: none;
+    }
+
+    /* Main layout */
+    #main {
+      display: flex;
+      width: 100%;
+      margin-top: 56px;
+      height: calc(100vh - 56px);
+    }
+
+    /* Sidebar */
+    #sidebar {
+      width: 280px;
+      background: #fff;
+      border-right: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    #sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    #sidebar-header h2 {
+      font-size: 14px;
+      font-weight: 500;
+      margin: 0;
+      color: #5f6368;
+    }
+
+    #conv-list {
+      list-style: none;
+      margin: 0;
+      padding: 8px 0;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    #conv-list li {
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      border-left: 3px solid transparent;
+      transition: background 0.15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #conv-list li:hover {
+      background: #f1f3f4;
+    }
+
+    #conv-list li.active {
+      background: #e8f0fe;
+      border-left-color: #4285f4;
+      color: #1967d2;
+    }
+
+    /* Empty state */
+    #empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #5f6368;
+      padding: 40px;
+      text-align: center;
+    }
+
+    #empty-state svg {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 24px;
+      opacity: 0.5;
+    }
+
+    #empty-state h2 {
+      font-size: 20px;
+      font-weight: 400;
+      margin: 0 0 8px 0;
+    }
+
+    #empty-state p {
+      font-size: 14px;
+      margin: 0 0 24px 0;
+      max-width: 300px;
+    }
+
+    /* Conversation panel */
+    #conversation-panel {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      background: #fafafa;
+    }
+
+    #conversation-panel.visible {
+      display: flex;
+    }
+
+    #conv-header {
+      padding: 16px 24px;
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    #conv-title {
+      font-size: 18px;
+      font-weight: 500;
+      margin: 0 0 4px 0;
+    }
+
+    #conv-meta {
+      font-size: 12px;
+      color: #5f6368;
+    }
+
+    /* Bubbles container */
+    #bubbles-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* Bubble styles */
+    .bubble {
+      max-width: 75%;
+      padding: 12px 16px;
+      margin: 12px 0;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: box-shadow 0.15s, transform 0.1s;
+      position: relative;
+    }
+
+    .bubble:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .bubble:active {
+      transform: scale(0.99);
+    }
+
+    .bubble.copied {
+      animation: flash 0.3s ease;
+    }
+
+    @keyframes flash {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .bubble.user {
+      margin-left: auto;
+      background: #e3f2fd;
+      border-bottom-right-radius: 4px;
+    }
+
+    .bubble.assistant {
+      margin-right: auto;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-bottom-left-radius: 4px;
+    }
+
+    .role-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      color: #5f6368;
+    }
+
+    .bubble.user .role-label {
+      color: #1967d2;
+    }
+
+    .bubble.assistant .role-label {
+      color: #188038;
+    }
+
+    .content {
+      white-space: pre-wrap;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    /* Compact mode */
+    .bubble.compact .content {
+      max-height: 7.5em;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bubble.compact .content::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2.5em;
+      background: linear-gradient(transparent, inherit);
+      pointer-events: none;
+    }
+
+    .bubble.user.compact .content::after {
+      background: linear-gradient(transparent, #e3f2fd);
+    }
+
+    .bubble.assistant.compact .content::after {
+      background: linear-gradient(transparent, #fff);
+    }
+
+    .expand-toggle {
+      display: block;
+      margin-top: 8px;
+      padding: 4px 8px;
+      font-size: 11px;
+      color: #4285f4;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .expand-toggle:hover {
+      text-decoration: underline;
+    }
+
+    /* Thinking section */
+    .thinking-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed #dadce0;
+    }
+
+    .thinking-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      font-size: 11px;
+      color: #5f6368;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .thinking-toggle:hover {
+      color: #1a1a1a;
+    }
+
+    .thinking-content {
+      display: none;
+      margin-top: 8px;
+      padding: 8px;
+      background: #f8f9fa;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #5f6368;
+      white-space: pre-wrap;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    .thinking-content.visible {
+      display: block;
+    }
+
+    /* Toast notifications */
+    #toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 12px 20px;
+      border-radius: 8px;
+      background: #323232;
+      color: #fff;
+      font-size: 14px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s ease;
+      max-width: 350px;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .toast-error {
+      background: #d32f2f;
+    }
+
+    .toast-success {
+      background: #388e3c;
+    }
+
+    .toast-warning {
+      background: #f57c00;
+    }
+  </style>
+</head>
+<body>
+  <!-- Drop overlay -->
+  <div id="drop-overlay">
+    <p>Drop JSON files here</p>
+  </div>
+
+  <!-- Header -->
+  <header id="header">
+    <h1>Clio Viewer</h1>
+    <div id="header-controls">
+      <input type="file" id="file-input" multiple accept=".json" />
+      <button class="btn" id="browse-btn">Browse Files</button>
+      <button class="btn" id="toggle-mode">Compact Mode</button>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main id="main">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <h2>Conversations (<span id="conv-count">0</span>)</h2>
+      </div>
+      <ul id="conv-list"></ul>
+    </aside>
+
+    <!-- Empty state -->
+    <div id="empty-state">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 17h7v-2H7v2zm0-4h10v-2H7v2zm0-4h10V7H7v2z"/>
+      </svg>
+      <h2>No conversations loaded</h2>
+      <p>Drag and drop JSON files here, or click Browse Files to get started.</p>
+      <button class="btn btn-primary" id="empty-browse-btn">Browse Files</button>
+    </div>
+
+    <!-- Conversation panel -->
+    <div id="conversation-panel">
+      <header id="conv-header">
+        <h1 id="conv-title"></h1>
+        <span id="conv-meta"></span>
+      </header>
+      <div id="bubbles-container"></div>
+    </div>
+  </main>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <script>
+    // ============================================
+    // INJECTED LOGIC (from viewer-logic.js - unit tested)
+    // ============================================
+    // {{VIEWER_LOGIC}}
+
+    // ============================================
+    // State
+    // ============================================
+    const AppState = {
+      conversations: [],
+      activeIndex: -1,
+      compactMode: true,
+      expandedBubbles: new Set(),
+      expandedThinking: new Set()
+    };
+
+    // ============================================
+    // Toast Notifications
+    // ============================================
+    const toastQueue = [];
+    let toastActive = false;
+
+    function showToast(message, type = 'info') {
+      toastQueue.push({ message, type });
+      if (!toastActive) processToastQueue();
+    }
+
+    function processToastQueue() {
+      if (toastQueue.length === 0) {
+        toastActive = false;
+        return;
+      }
+      toastActive = true;
+      const { message, type } = toastQueue.shift();
+
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      document.getElementById('toast-container').appendChild(toast);
+
+      requestAnimationFrame(() => toast.classList.add('show'));
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+          toast.remove();
+          processToastQueue();
+        }, 300);
+      }, 2500);
+    }
+
+    // ============================================
+    // File Loading
+    // ============================================
+    async function loadFiles(fileList) {
+      const results = { loaded: [], failed: [] };
+
+      for (const file of fileList) {
+        try {
+          // File size checks (uses injected checkFileSize)
+          const sizeCheck = checkFileSize(file.size);
+          if (!sizeCheck.valid) {
+            throw new Error(sizeCheck.error);
+          }
+          if (sizeCheck.warning) {
+            showToast(`Large file: ${file.name} (${formatSize(file.size)})`, 'warning');
+          }
+
+          // Filename check (uses injected checkFilename)
+          const nameCheck = checkFilename(file.name);
+          if (!nameCheck.valid) {
+            throw new Error(nameCheck.error);
+          }
+
+          const text = await file.text();
+          const json = JSON.parse(text);
+          validateConversation(json);  // Uses injected validateConversation
+          results.loaded.push({ filename: file.name, data: json });
+        } catch (err) {
+          results.failed.push({ filename: file.name, error: err.message });
+          showToast(`Failed: ${file.name} - ${err.message}`, 'error');
+          console.error(`Failed to load ${file.name}:`, err);
+        }
+      }
+
+      if (results.loaded.length > 0) {
+        showToast(`Loaded ${results.loaded.length} conversation(s)`, 'success');
+        AppState.conversations.push(...results.loaded.map(r => r.data));
+        renderSidebar();
+        if (AppState.activeIndex === -1) {
+          selectConversation(0);
+        }
+        updateEmptyState();
+      }
+
+      return results;
+    }
+
+    // ============================================
+    // Rendering
+    // ============================================
+    function updateEmptyState() {
+      const emptyState = document.getElementById('empty-state');
+      const convPanel = document.getElementById('conversation-panel');
+
+      if (AppState.conversations.length === 0) {
+        emptyState.style.display = 'flex';
+        convPanel.classList.remove('visible');
+      } else {
+        emptyState.style.display = 'none';
+      }
+    }
+
+    function renderSidebar() {
+      const list = document.getElementById('conv-list');
+      list.innerHTML = '';
+
+      AppState.conversations.forEach((conv, index) => {
+        const li = document.createElement('li');
+        li.className = index === AppState.activeIndex ? 'active' : '';
+        li.textContent = conv.metadata.title || `Conversation ${index + 1}`;
+        li.dataset.index = index;
+        li.addEventListener('click', () => selectConversation(index));
+        list.appendChild(li);
+      });
+
+      document.getElementById('conv-count').textContent = AppState.conversations.length;
+    }
+
+    function selectConversation(index) {
+      if (index < 0 || index >= AppState.conversations.length) return;
+
+      AppState.activeIndex = index;
+      AppState.expandedBubbles.clear();
+      AppState.expandedThinking.clear();
+
+      // Update sidebar selection
+      document.querySelectorAll('#conv-list li').forEach((li, i) => {
+        li.classList.toggle('active', i === index);
+      });
+
+      // Show conversation panel
+      document.getElementById('conversation-panel').classList.add('visible');
+      document.getElementById('empty-state').style.display = 'none';
+
+      renderConversation(AppState.conversations[index]);
+    }
+
+    function renderConversation(conv) {
+      const container = document.getElementById('bubbles-container');
+      container.innerHTML = '';
+
+      document.getElementById('conv-title').textContent = conv.metadata.title || 'Untitled';
+      document.getElementById('conv-meta').textContent =
+        `${conv.turns.length} turns · Extracted ${formatDate(conv.metadata.extractedAt)}`;
+
+      conv.turns.forEach((turn, index) => {
+        const bubble = createBubble(turn, index);
+        container.appendChild(bubble);
+      });
+    }
+
+    function createBubble(turn, index) {
+      const bubble = document.createElement('div');
+      const isCompact = AppState.compactMode && !AppState.expandedBubbles.has(index);
+
+      bubble.className = `bubble ${turn.role} ${isCompact ? 'compact' : ''}`;
+      bubble.dataset.index = index;
+      bubble.dataset.rawContent = turn.content;
+
+      // Role label
+      const roleLabel = document.createElement('div');
+      roleLabel.className = 'role-label';
+      roleLabel.textContent = turn.role === 'user' ? 'You' : 'Gemini';
+      bubble.appendChild(roleLabel);
+
+      // Content (safe: textContent only)
+      const content = document.createElement('div');
+      content.className = 'content';
+      content.textContent = turn.content;
+      bubble.appendChild(content);
+
+      // Expand/collapse toggle (visible when content might be truncated)
+      const toggle = document.createElement('button');
+      toggle.className = 'expand-toggle';
+      toggle.textContent = isCompact ? '▼ Show more' : '▲ Show less';
+      toggle.style.display = AppState.compactMode ? 'block' : 'none';
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleBubble(index);
+      });
+      bubble.appendChild(toggle);
+
+      // Thinking section (if present)
+      if (turn.thinking) {
+        const thinkingSection = document.createElement('div');
+        thinkingSection.className = 'thinking-section';
+
+        const thinkingToggle = document.createElement('button');
+        thinkingToggle.className = 'thinking-toggle';
+        thinkingToggle.innerHTML = '💭 <span>Show thinking</span>';
+        thinkingToggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleThinking(index, thinkingContent, thinkingToggle);
+        });
+
+        const thinkingContent = document.createElement('div');
+        thinkingContent.className = 'thinking-content';
+        thinkingContent.textContent = turn.thinking;
+        if (AppState.expandedThinking.has(index)) {
+          thinkingContent.classList.add('visible');
+          thinkingToggle.querySelector('span').textContent = 'Hide thinking';
+        }
+
+        thinkingSection.appendChild(thinkingToggle);
+        thinkingSection.appendChild(thinkingContent);
+        bubble.appendChild(thinkingSection);
+      }
+
+      // Click to copy
+      bubble.addEventListener('click', (e) => {
+        // Don't copy if clicking on buttons
+        if (e.target.tagName === 'BUTTON') return;
+        copyBubbleContent(bubble);
+      });
+
+      return bubble;
+    }
+
+    function toggleBubble(index) {
+      if (AppState.expandedBubbles.has(index)) {
+        AppState.expandedBubbles.delete(index);
+      } else {
+        AppState.expandedBubbles.add(index);
+      }
+      renderConversation(AppState.conversations[AppState.activeIndex]);
+    }
+
+    function toggleThinking(index, contentEl, toggleBtn) {
+      if (AppState.expandedThinking.has(index)) {
+        AppState.expandedThinking.delete(index);
+        contentEl.classList.remove('visible');
+        toggleBtn.querySelector('span').textContent = 'Show thinking';
+      } else {
+        AppState.expandedThinking.add(index);
+        contentEl.classList.add('visible');
+        toggleBtn.querySelector('span').textContent = 'Hide thinking';
+      }
+    }
+
+    // ============================================
+    // Clipboard
+    // ============================================
+    async function copyBubbleContent(bubble) {
+      const content = bubble.dataset.rawContent;
+
+      try {
+        await navigator.clipboard.writeText(content);
+        bubble.classList.add('copied');
+        showToast('Copied to clipboard');
+        setTimeout(() => bubble.classList.remove('copied'), 300);
+      } catch (err) {
+        console.error('Copy failed:', err);
+        showToast('Failed to copy', 'error');
+      }
+    }
+
+    // ============================================
+    // Mode Toggle
+    // ============================================
+    function toggleCompactMode() {
+      AppState.compactMode = !AppState.compactMode;
+      AppState.expandedBubbles.clear();
+
+      const toggleBtn = document.getElementById('toggle-mode');
+      toggleBtn.textContent = AppState.compactMode ? 'Compact Mode' : 'Full Mode';
+
+      if (AppState.activeIndex >= 0) {
+        renderConversation(AppState.conversations[AppState.activeIndex]);
+      }
+    }
+
+    // ============================================
+    // Drag and Drop
+    // ============================================
+    function setupDragAndDrop() {
+      const overlay = document.getElementById('drop-overlay');
+      let dragCounter = 0;
+
+      document.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        overlay.classList.add('active');
+      });
+
+      document.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter === 0) {
+          overlay.classList.remove('active');
+        }
+      });
+
+      document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+
+      document.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        overlay.classList.remove('active');
+
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+          loadFiles(files);
+        }
+      });
+    }
+
+    // ============================================
+    // Event Listeners
+    // ============================================
+    function setupEventListeners() {
+      const fileInput = document.getElementById('file-input');
+      const browseBtn = document.getElementById('browse-btn');
+      const emptyBrowseBtn = document.getElementById('empty-browse-btn');
+      const toggleBtn = document.getElementById('toggle-mode');
+
+      browseBtn.addEventListener('click', () => fileInput.click());
+      emptyBrowseBtn.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+          loadFiles(files);
+        }
+        fileInput.value = ''; // Reset to allow re-selecting same file
+      });
+
+      toggleBtn.addEventListener('click', toggleCompactMode);
+    }
+
+    // ============================================
+    // Initialize
+    // ============================================
+    function init() {
+      setupEventListeners();
+      setupDragAndDrop();
+      updateEmptyState();
+    }
+
+    // Start the app
+    init();
+  </script>
+</body>
+</html>

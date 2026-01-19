@@ -1,0 +1,11 @@
+{
+  "turns": [
+    {
+      "index": 0,
+      "role": "user",
+      "content": "Hello",
+      "thinking": null,
+      "attachments": []
+    }
+  ]
+}

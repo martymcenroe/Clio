@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "conversationId": "large-001",
+    "title": "Large Content Test",
+    "extractedAt": "2026-01-19T12:00:00.000Z",
+    "url": "https://gemini.google.com/app/large-001",
+    "turnCount": 1,
+    "imageCount": 0,
+    "extractionErrors": [],
+    "partialSuccess": false
+  },
+  "turns": [
+    {
+      "index": 0,
+      "role": "assistant",
+      "content": "This is a long response that spans many lines to test the compact mode truncation feature.\n\nLine 1: Lorem ipsum dolor sit amet, consectetur adipiscing elit.\nLine 2: Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\nLine 3: Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.\nLine 4: Duis aute irure dolor in reprehenderit in voluptate velit esse cillum.\nLine 5: Excepteur sint occaecat cupidatat non proident, sunt in culpa.\nLine 6: This line should be hidden in compact mode.\nLine 7: And this one too.\nLine 8: Still hidden.\nLine 9: More content that should be truncated.\nLine 10: The user should see the expand button to reveal all this content.\nLine 11: Testing the fade gradient at the bottom of compact bubbles.\nLine 12: Final line of the large content test fixture.",
+      "thinking": null,
+      "attachments": []
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "variables": {
+    "PROJECT_ROOT": "/c/Users/mcwiz/Projects/Clio",
+    "PROJECT_NAME": "Clio",
+    "GITHUB_REPO": "martymcenroe/Clio",
+    "TOOLS_DIR": "/c/Users/mcwiz/Projects/Clio/tools",
+    "WORKTREE_PATTERN": "Clio-{ID}"
+  },
+  "inherit_from": "C:\\Users\\mcwiz\\Projects\\AgentOS"
+}

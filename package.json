@@ -1,0 +1,27 @@
+{
+  "name": "clio",
+  "version": "1.0.0",
+  "description": "Chrome extension for extracting full Gemini conversations to JSON with images",
+  "private": true,
+  "scripts": {
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  },
+  "keywords": [
+    "chrome-extension",
+    "gemini",
+    "conversation",
+    "export",
+    "json"
+  ],
+  "author": "",
+  "license": "MIT"
+}

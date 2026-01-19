@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clio</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+      width: 320px;
+      padding: 16px;
+      background: #fff;
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 500;
+      color: #202124;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h1::before {
+      content: '';
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(135deg, #4285f4, #34a853, #fbbc05, #ea4335);
+      border-radius: 50%;
+    }
+
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .status.ready {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .status.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+
+    .status.warning {
+      background: #fff3e0;
+      color: #e65100;
+    }
+
+    .status.info {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+
+    #extractBtn {
+      width: 100%;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #fff;
+      background: #1a73e8;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    #extractBtn:hover:not(:disabled) {
+      background: #1557b0;
+    }
+
+    #extractBtn:disabled {
+      background: #dadce0;
+      color: #80868b;
+      cursor: not-allowed;
+    }
+
+    .progress {
+      margin-top: 12px;
+      display: none;
+    }
+
+    .progress.visible {
+      display: block;
+    }
+
+    .progress-bar {
+      height: 4px;
+      background: #e0e0e0;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar-inner {
+      height: 100%;
+      background: #1a73e8;
+      width: 0%;
+      transition: width 0.3s;
+      animation: indeterminate 1.5s infinite linear;
+    }
+
+    @keyframes indeterminate {
+      0% { transform: translateX(-100%); width: 50%; }
+      100% { transform: translateX(200%); width: 50%; }
+    }
+
+    .progress-text {
+      font-size: 12px;
+      color: #5f6368;
+      margin-top: 8px;
+      text-align: center;
+    }
+
+    .result {
+      margin-top: 12px;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      font-size: 12px;
+      display: none;
+    }
+
+    .result.visible {
+      display: block;
+    }
+
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      color: #5f6368;
+    }
+
+    .result-row span:last-child {
+      color: #202124;
+      font-weight: 500;
+    }
+
+    .footer {
+      margin-top: 16px;
+      font-size: 11px;
+      color: #80868b;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Clio</h1>
+
+  <div id="status" class="status ready">
+    Ready to extract conversation.
+  </div>
+
+  <button id="extractBtn">Extract Conversation</button>
+
+  <div id="progress" class="progress">
+    <div class="progress-bar">
+      <div class="progress-bar-inner"></div>
+    </div>
+    <div id="progressText" class="progress-text">Initializing...</div>
+  </div>
+
+  <div id="result" class="result">
+    <div class="result-row">
+      <span>Turns:</span>
+      <span id="turnCount">-</span>
+    </div>
+    <div class="result-row">
+      <span>Images:</span>
+      <span id="imageCount">-</span>
+    </div>
+    <div class="result-row">
+      <span>Errors:</span>
+      <span id="errorCount">-</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    Local processing only. No data sent to servers.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

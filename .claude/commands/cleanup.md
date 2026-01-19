@@ -1,0 +1,219 @@
+---
+description: Session cleanup with quick/normal/full modes (project)
+argument-hint: "[--help] [--quick|--normal|--full]"
+aliases: ["/closeout", "/goodbye"]
+---
+
+# Cleanup
+
+**Aliases:** `/closeout` (same as `/cleanup`), `/goodbye` (same as `/cleanup --quick`)
+
+**If `$ARGUMENTS` contains `--help`:** Display the Help section below and STOP.
+
+---
+
+## Help
+
+Usage: `/cleanup [--help] [--quick|--normal|--full] [--no-auto-delete]`
+
+| Argument | Description |
+|----------|-------------|
+| `--help` | Show this help message and exit |
+| `--quick` | Minimal cleanup (~2 min) - appends session log, does NOT commit |
+| `--normal` | Standard cleanup (~5 min) - typical session end (default) |
+| `--full` | Comprehensive cleanup (~12 min) - after features, before breaks |
+| `--no-auto-delete` | Skip automatic deletion of orphaned branches |
+
+**Examples:**
+- `/cleanup --help` - show this help
+- `/cleanup` - normal mode (default)
+- `/cleanup --quick` - fast exit
+- `/cleanup --full` - thorough cleanup
+
+**What each mode does:**
+| Check | Quick | Normal | Full |
+|-------|:-----:|:------:|:----:|
+| Git status | YES | YES | YES |
+| Branch list | YES | YES | YES |
+| Open PRs | YES | YES | YES |
+| **Session log append** | YES | YES | YES |
+| **Commit & push** | | YES | YES |
+| Stash list | | YES | YES |
+| Worktree list | | YES | YES |
+| **POST-MERGE cleanup** | | YES | YES |
+| **Auto-delete orphans** | | YES | YES |
+| Inventory audit | | | YES |
+| **Permission check** | | | YES |
+
+**Quick mode philosophy:** Record what happened (session log), but don't commit. Changes accumulate until a normal/full cleanup commits them. Protects contribution graph from trivial commits.
+
+---
+
+## Execution
+
+**Mode:** Parse `$ARGUMENTS` for flags. Default is `--normal` if no flag provided.
+
+**Session Name:** Determine the session identifier to include in the session log:
+1. If `/rename` was used in this conversation, extract the name from the output
+2. If no rename, look for the session ID in any visible transcript path
+3. If neither available, use "unnamed"
+
+| Flag | Mode | Time | Use Case |
+|------|------|------|----------|
+| `--quick` | Quick | ~2 min | End of chat, minimal changes |
+| `--normal` | Normal | ~5 min | Standard session end (default) |
+| `--full` | Full | ~12 min | Feature complete, before breaks |
+
+---
+
+**IMPORTANT:** Use the **Task tool** with `model: sonnet` to execute the cleanup.
+
+Spawn a Task with `subagent_type: general-purpose` and `model: sonnet` with the following prompt (substitute MODE based on parsed arguments):
+
+---
+
+### Task Prompt for Sonnet Agent
+
+```
+You are executing a cleanup procedure for the Clio project.
+Mode: [MODE: quick|normal|full]
+Session: [SESSION_NAME]
+
+## Rules
+- Use absolute paths with git -C /c/Users/mcwiz/Projects/Clio
+- Use --repo martymcenroe/Clio for all gh commands
+- NO pipes (|) or chain operators (&&) - one command per Bash call
+- Run independent commands in PARALLEL (multiple Bash calls in one message)
+- ONE commit at the end - stage files as you go, commit once
+
+## Phase 1: Information Gathering (ALL PARALLEL)
+
+Run these commands simultaneously in a single message with multiple Bash tool calls:
+
+**Quick mode (3 parallel calls):**
+- git -C /c/Users/mcwiz/Projects/Clio status
+- git -C /c/Users/mcwiz/Projects/Clio branch --list
+- gh pr list --state open --repo martymcenroe/Clio
+
+**Normal mode adds (7 parallel calls total):**
+- git -C /c/Users/mcwiz/Projects/Clio stash list
+- git -C /c/Users/mcwiz/Projects/Clio fetch --prune
+- git -C /c/Users/mcwiz/Projects/Clio worktree list
+- gh issue list --state open --repo martymcenroe/Clio
+
+**Full mode adds (10 parallel calls total):**
+- git -C /c/Users/mcwiz/Projects/Clio branch -vv
+- git -C /c/Users/mcwiz/Projects/Clio branch -r
+- poetry run --directory /c/Users/mcwiz/Projects/AgentOS python /c/Users/mcwiz/Projects/AgentOS/tools/agentos-permissions.py --quick-check --project Clio
+
+## Phase 2: Conditional Fixes
+
+**Analyze Phase 1 results:**
+
+1. **Branches vs Worktrees** - Cross-reference branch list against worktree list:
+   - For each branch OTHER than main, check if it appears in the worktree list
+   - If branch HAS a worktree: OK (active work - do NOT flag)
+   - If branch has NO worktree: Flag as potential orphan
+
+2. **Auto-Delete Orphaned Branches** (Normal and Full) - For each orphaned branch:
+
+   **Safety Criteria (ALL must be met to auto-delete):**
+   - Branch is not `main`
+   - Remote tracking shows `gone` (was deleted on GitHub)
+   - No worktree exists for this branch
+
+   **Detection:** Parse `git branch -vv` output for `[origin/...: gone]` marker.
+
+   **Action based on `--no-auto-delete` flag:**
+
+   a. If remote shows `gone` AND no worktree AND `--no-auto-delete` NOT set:
+      - Auto-delete: `git -C /c/Users/mcwiz/Projects/Clio branch -D {branch-name}`
+      - Report: "AUTO-DELETE: Removed orphan branch {name} (remote gone)"
+
+   b. If remote shows `gone` AND no worktree AND `--no-auto-delete` IS set:
+      - Report: "ORPHAN: Branch {name} has no remote (--no-auto-delete set, skipping)"
+
+3. **Open PRs** - Should be 0. Flag if any exist.
+
+4. **Stashes** - Document any stash entries found.
+
+5. **Permission Check** (Full mode only) - If the permission quick-check returned exit code 1:
+   - Report: "Stale permissions detected in settings.local.json"
+   - Suggest: "Run `poetry run python tools/agentos-permissions.py --clean --project Clio` to clean"
+
+## Phase 3: Session Log
+
+Append session log entry (if tool available):
+```bash
+poetry run python /c/Users/mcwiz/Projects/Clio/tools/append_session_log.py \
+    --model "Claude Sonnet 4" \
+    --summary "Cleanup ([MODE] mode) | Session: [SESSION_NAME]" \
+    --created "None" \
+    --closed "None" \
+    --next "Per user direction"
+```
+
+If no session log tool exists, manually append to the current day's session log.
+
+## Phase 4: Single Commit & Push (SKIP FOR QUICK MODE)
+
+**If mode is `quick`: SKIP this entire phase. Go directly to Phase 5.**
+
+Stage all documentation changes:
+```bash
+git -C /c/Users/mcwiz/Projects/Clio add docs/session-logs/
+```
+
+Review staged changes:
+```bash
+git -C /c/Users/mcwiz/Projects/Clio status
+```
+
+Commit (ONE commit for everything):
+```bash
+git -C /c/Users/mcwiz/Projects/Clio commit -m "docs: [MODE] cleanup $(powershell.exe -Command "Get-Date -Format 'yyyy-MM-dd'")"
+```
+
+Push:
+```bash
+git -C /c/Users/mcwiz/Projects/Clio push
+```
+
+## Phase 5: Verification (PARALLEL)
+
+Run these simultaneously:
+```bash
+git -C /c/Users/mcwiz/Projects/Clio status
+gh pr list --state open --repo martymcenroe/Clio
+```
+
+For Full mode, add:
+```bash
+git -C /c/Users/mcwiz/Projects/Clio worktree list
+git -C /c/Users/mcwiz/Projects/Clio branch -r
+```
+
+## Return Results
+
+Return a summary table:
+
+| Check | Status |
+|-------|--------|
+| Git Status | Clean / {details} |
+| Open PRs | 0 / {count} open |
+| Open Issues | {count} |
+| Branches | Only main / {list} |
+| Worktrees | Only main / {list} |
+| Auto-Deleted | {count} branches / Skipped |
+| Stashes | None / {count} |
+| Permissions | Clean / Stale (Full mode only) |
+| Commit | Pushed / Failed |
+
+Flag any unexpected conditions.
+```
+
+---
+
+## After Task Completes
+
+When the Sonnet task returns, display the results summary to the user. If any warnings were flagged, highlight them.

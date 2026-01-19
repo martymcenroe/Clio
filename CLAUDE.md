@@ -2,12 +2,87 @@
 
 You are a team member on the Clio project, not a tool.
 
-## FIRST: Read AgentOS Core Rules
+---
 
-**Before doing any work, read the AgentOS core rules:**
+## COMPACTION-SAFE RULES (NEVER SUMMARIZE AWAY)
+
+**These rules MUST survive context compaction. They are non-negotiable constraints.**
+
+### BASH COMMAND CONSTRAINTS (HARD REQUIREMENTS)
+
+```
+BANNED:     &&    |    ;    cd X && command
+REQUIRED:   One command per Bash call, absolute paths only
+```
+
+| WRONG | CORRECT |
+|-------|---------|
+| `cd /path && git status` | `git -C /path status` |
+| `cat file.txt` | Use `Read` tool |
+| `grep pattern file` | Use `Grep` tool |
+| `cmd1 && cmd2 && cmd3` | 3 parallel Bash calls |
+
+**If you are about to type `&&` in a Bash command, STOP and rewrite.**
+
+### PATH FORMAT CONSTRAINTS
+
+| Tool | Format | Example |
+|------|--------|---------|
+| Bash | Unix `/c/...` | `/c/Users/mcwiz/Projects/Clio/...` |
+| Read/Write/Edit/Glob | Windows `C:\...` | `C:\Users\mcwiz\Projects\Clio\...` |
+
+**NEVER use `~` - Windows doesn't expand it.**
+
+### DANGEROUS PATH CONSTRAINTS (I/O SAFETY)
+
+**NEVER search or traverse these paths:**
+
+| Path | Risk |
+|------|------|
+| `C:\Users\mcwiz\OneDrive\` | CRITICAL - triggers massive cloud downloads |
+| `C:\Users\mcwiz\` (root) | HIGH - contains OneDrive, AppData |
+| `C:\Users\mcwiz\AppData\` | HIGH - hundreds of thousands of files |
+
+**Always scope searches to `C:\Users\mcwiz\Projects\` or narrower.**
+
+### VISIBLE SELF-CHECK PROTOCOL (MANDATORY)
+
+**Every Bash call requires visible self-checking:**
+
+```
+**Bash Check:** `[the command]`
+**Scan:** [&&, |, ;, cd at start?] → [CLEAN or VIOLATION]
+**Action:** [Execute, Rewrite, or Use Read/Grep/Glob instead]
+```
+
+### WORKTREE ISOLATION RULE (CRITICAL)
+
+**ALL code changes MUST be made in a worktree. NEVER commit code directly to main.**
+
+**What requires a worktree:**
+- ANY change to `.js`, `.html`, `.css`, `.json` files
+- Bug fixes, even "quick" ones
+
+**What can be committed directly to main:**
+- Documentation files (`docs/**/*.md`)
+- `CLAUDE.md` updates
+
+**Worktree creation pattern:**
+```bash
+git worktree add ../Clio-{IssueID} -b {IssueID}-short-desc
+git -C ../Clio-{IssueID} push -u origin HEAD
+```
+
+### COMPACTION DETECTION (AUTO-REFRESH)
+
+**If you see "This session is being continued from a previous conversation" or similar compaction signals, run `/onboard --refresh` IMMEDIATELY.**
+
+---
+
+## Full AgentOS Reference
+
+For complete rules (Gemini gates, destructive command constraints, etc.):
 `C:\Users\mcwiz\Projects\AgentOS\CLAUDE.md`
-
-That file contains core rules that apply to ALL projects.
 
 ---
 

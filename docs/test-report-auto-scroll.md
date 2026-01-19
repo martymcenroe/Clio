@@ -10,6 +10,18 @@
 | Test Suites | 10 |
 | Execution Time | ~12s |
 
+## Implementation Status
+
+**STATUS: BLOCKED - Selector Verification Required**
+
+The automated tests verify the scroll logic works correctly with mock DOM structures. However, the actual Gemini selectors cannot be verified without browser access to the authenticated Gemini application.
+
+**Before this PR can be merged:**
+1. Run `tools/discover-selectors.js` in DevTools on a Gemini conversation
+2. Update `selectors.js` with verified selectors
+3. Execute manual tests MT-001 through MT-004
+4. Update this report with actual results
+
 ## Test Coverage by Feature
 
 ### Auto-Scroll Tests (`test/auto-scroll.test.js`)
@@ -103,33 +115,43 @@ This config allows tests to complete quickly (~12s total) while still exercising
 
 ## Manual Test Plan
 
+**Status: BLOCKED - Requires selector verification first**
+
+These tests must be executed by the developer after selectors are verified:
+
 ### MT-001: Short Conversation
 - **Steps:** Open short Gemini conversation, click Extract
 - **Expected:** Quick extraction, minimal scrolling
-- **Status:** Not yet tested
+- **Status:** BLOCKED
 
 ### MT-002: Long Conversation (100+ messages)
 - **Steps:** Open long conversation, click Extract
 - **Expected:** Visible scrolling, progress updates, all messages extracted
-- **Status:** Not yet tested
+- **Status:** BLOCKED
 
 ### MT-003: Very Long Conversation (Test URL)
 - **URL:** `https://gemini.google.com/app/efdb7649143fefda`
 - **Steps:** Open URL, click Extract
 - **Expected:** ZIP file ~10x larger, first message present
-- **Status:** Not yet tested
+- **Status:** BLOCKED
 
 ### MT-004: Slow Network
 - **Steps:** Throttle network in DevTools, extract long conversation
 - **Expected:** Waits for loading, doesn't exit early
-- **Status:** Not yet tested
+- **Status:** BLOCKED
 
-## Known Limitations
+## Selector Verification Process
 
-1. **Selectors may need adjustment** - Gemini's actual DOM structure hasn't been verified; selectors are educated guesses
-2. **Virtual scrolling detection** - If Gemini uses aggressive virtualization, more DOM analysis may be needed
-3. **Loading indicator** - The `loadingIndicator` selector may need tuning for Gemini's specific spinner
+1. Open Gemini conversation in Chrome
+2. Open DevTools Console (F12)
+3. Run `tools/discover-selectors.js`
+4. Analyze output for:
+   - Scroll container selector
+   - Message container selectors
+   - Loading indicator selector
+5. Update `extension/src/selectors.js` with verified values
+6. Re-run manual tests
 
 ## Conclusion
 
-All 207 automated tests pass. Manual testing on actual Gemini conversations is required to verify the implementation works correctly with Gemini's real DOM structure and lazy loading behavior.
+All 207 automated tests pass. The scroll logic implementation is complete and tested against mock DOM structures. **This PR is BLOCKED pending selector verification on the live Gemini application.** The developer cannot verify selectors without authenticated browser access to Gemini.

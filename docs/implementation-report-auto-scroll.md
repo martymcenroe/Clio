@@ -90,9 +90,25 @@ if (!loadingEl || loadingEl.offsetParent === null) return;
 - **New Tests Added:** 18 auto-scroll specific tests
 - **Test Files Updated:** 6 (added fast scroll config)
 
-## Verification Needed
+## Implementation Status
 
-Manual testing required on actual Gemini conversation:
+**STATUS: BLOCKED - Selector Verification Required**
+
+The scroll logic is implemented and tested against mock DOM structures. However, the Gemini DOM selectors are unverified because:
+1. Gemini requires authentication (cannot use WebFetch)
+2. Gemini is a JavaScript SPA (DOM not available without browser)
+3. Developer does not have authenticated browser access
+
+### Selector Discovery Tool
+
+Created `tools/discover-selectors.js` to collect actual DOM structure:
+1. Run script in DevTools on Gemini conversation
+2. Analyze output for scroll container, message, and loading selectors
+3. Update `selectors.js` with verified values
+4. Execute manual tests
+
+### Verification Checklist (After Selectors Verified)
+
 - [ ] Long conversation scrolls visibly when extracting
 - [ ] Progress indicator shows message count increasing
 - [ ] ZIP file contains all messages including first message

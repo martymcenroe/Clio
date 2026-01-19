@@ -38,6 +38,13 @@ If Gemini is still generating a response, wait for it to finish. You'll know it'
 3. Wait for extraction to complete (progress will be shown)
 4. Choose where to save the zip file
 
+> **Warning: Automatic Scrolling**
+>
+> For long conversations, Clio will automatically scroll up to load all messages.
+> **Do not touch your mouse or keyboard** during this process. The page will
+> take control and scroll automatically. Wait until the progress indicator
+> shows completion before interacting with the page.
+
 ### Step 4: Review Your Export
 
 The downloaded zip file contains:

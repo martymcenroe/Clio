@@ -33,7 +33,10 @@ const SELECTORS = {
   image: 'img',
 
   // Streaming indicator (to detect active generation)
-  streamingIndicator: 'button[aria-label*="Stop"], .streaming-indicator, .generating, [data-streaming="true"]'
+  streamingIndicator: 'button[aria-label*="Stop"], .streaming-indicator, .generating, [data-streaming="true"]',
+
+  // Loading indicator (shown while fetching older messages during scroll)
+  loadingIndicator: '[data-loading], .loading-spinner, [aria-busy="true"], mat-spinner, .loading, [role="progressbar"]'
 };
 
 // For use in content script (non-module context)

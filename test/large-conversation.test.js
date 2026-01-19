@@ -103,6 +103,25 @@ describe('Large Conversation Support', () => {
 
   // Test ID: LARGE-020 - Full extraction with large data
   describe('extractConversation with large data', () => {
+    beforeEach(() => {
+      // Use fast scroll config for tests
+      const { setScrollConfig } = require('../extension/src/content.js');
+      setScrollConfig({
+        scrollStep: 100,
+        scrollDelay: 10,
+        mutationTimeout: 50,
+        maxScrollAttempts: 20,
+        loadingCheckInterval: 10,
+        maxLoadingWait: 100,
+        progressUpdateInterval: 2
+      });
+    });
+
+    afterEach(() => {
+      const { resetScrollConfig } = require('../extension/src/content.js');
+      resetScrollConfig();
+    });
+
     test('extracts 100+ turn conversation successfully', async () => {
       const container = document.createElement('main');
       container.setAttribute('data-conversation-id', 'full-large-test');

@@ -9,6 +9,17 @@ const { SELECTORS } = require('../extension/src/selectors.js');
 
 global.SELECTORS = SELECTORS;
 
+// Fast config for tests to avoid timeouts
+const FAST_SCROLL_CONFIG = {
+  scrollStep: 100,
+  scrollDelay: 10,
+  mutationTimeout: 50,
+  maxScrollAttempts: 20,
+  loadingCheckInterval: 10,
+  maxLoadingWait: 100,
+  progressUpdateInterval: 2
+};
+
 describe('Chrome Message Passing', () => {
   let messageHandler = null;
   let originalAddListener;
@@ -25,11 +36,17 @@ describe('Chrome Message Passing', () => {
 
     // Set up valid DOM
     setFixture('gemini-conversation.html');
+
+    // Use fast scroll config
+    const { setScrollConfig } = require('../extension/src/content.js');
+    setScrollConfig(FAST_SCROLL_CONFIG);
   });
 
   afterEach(() => {
     chrome.runtime.onMessage.addListener = originalAddListener;
     messageHandler = null;
+    const { resetScrollConfig } = require('../extension/src/content.js');
+    resetScrollConfig();
   });
 
   test('registers message listener on load', () => {
@@ -105,16 +122,16 @@ describe('Chrome Message Passing', () => {
 });
 
 describe('Message Response Format', () => {
-  beforeEach(() => {
+  test('successful response has required fields', (done) => {
     jest.resetModules();
     setFixture('gemini-conversation.html');
-  });
 
-  test('successful response has required fields', (done) => {
     let handler;
     chrome.runtime.onMessage.addListener = jest.fn((h) => { handler = h; });
 
-    require('../extension/src/content.js');
+    // Load content.js - this registers the handler and sets up exports
+    const { setScrollConfig } = require('../extension/src/content.js');
+    setScrollConfig(FAST_SCROLL_CONFIG);
 
     const sendResponse = (response) => {
       expect(response).toHaveProperty('success');
@@ -133,12 +150,15 @@ describe('Message Response Format', () => {
   });
 
   test('error response has required fields', (done) => {
+    jest.resetModules();
     document.body.innerHTML = ''; // Empty DOM triggers validation failure
 
     let handler;
     chrome.runtime.onMessage.addListener = jest.fn((h) => { handler = h; });
 
-    require('../extension/src/content.js');
+    // Load content.js - this registers the handler
+    const { setScrollConfig } = require('../extension/src/content.js');
+    setScrollConfig(FAST_SCROLL_CONFIG);
 
     const sendResponse = (response) => {
       expect(response).toHaveProperty('success', false);

@@ -317,6 +317,18 @@ describe('Image Extraction - Fail Open Logic', () => {
 
 describe('extractConversation with image errors', () => {
   beforeEach(() => {
+    // Use fast scroll config for tests
+    const { setScrollConfig } = require('../extension/src/content.js');
+    setScrollConfig({
+      scrollStep: 100,
+      scrollDelay: 10,
+      mutationTimeout: 50,
+      maxScrollAttempts: 20,
+      loadingCheckInterval: 10,
+      maxLoadingWait: 100,
+      progressUpdateInterval: 2
+    });
+
     // Create a fixture with https images that will be fetched
     document.body.innerHTML = `
       <main data-conversation-id="error-test">
@@ -332,6 +344,11 @@ describe('extractConversation with image errors', () => {
         </div>
       </main>
     `;
+  });
+
+  afterEach(() => {
+    const { resetScrollConfig } = require('../extension/src/content.js');
+    resetScrollConfig();
   });
 
   test('reports partialSuccess when https images fail', async () => {

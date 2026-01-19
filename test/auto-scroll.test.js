@@ -1,14 +1,19 @@
 /**
- * Unit tests for auto-scroll functionality in content.js.
+ * Unit tests for auto-scroll functionality in content.js (v2.0).
  *
- * Tests lazy-loaded conversation handling where messages
- * are loaded dynamically as user scrolls.
+ * Tests MutationObserver-based lazy-loaded conversation handling
+ * where messages are loaded dynamically as user scrolls.
+ *
+ * LLD Reference: docs/lld-auto-scroll.md
  */
 
 const {
   SCROLL_CONFIG,
+  setScrollConfig,
+  resetScrollConfig,
   countMessages,
   findScrollContainer,
+  waitForLoadingComplete,
   scrollToLoadAllMessages
 } = require('../extension/src/content.js');
 
@@ -17,20 +22,41 @@ const { SELECTORS } = require('../extension/src/selectors.js');
 // Make SELECTORS available globally for content.js
 global.SELECTORS = SELECTORS;
 
-describe('SCROLL_CONFIG', () => {
+// Fast config for tests to avoid timeouts
+const FAST_SCROLL_CONFIG = {
+  scrollStep: 100,
+  scrollDelay: 10,
+  mutationTimeout: 50,
+  maxScrollAttempts: 20,
+  loadingCheckInterval: 10,
+  maxLoadingWait: 100,
+  progressUpdateInterval: 2
+};
+
+describe('SCROLL_CONFIG (v2.0)', () => {
+  // Test ID: SCROLL-CONFIG-001
   test('has required configuration values', () => {
     expect(SCROLL_CONFIG.scrollStep).toBeGreaterThan(0);
     expect(SCROLL_CONFIG.scrollDelay).toBeGreaterThan(0);
-    expect(SCROLL_CONFIG.stabilityDelay).toBeGreaterThan(0);
-    expect(SCROLL_CONFIG.stabilityChecks).toBeGreaterThan(0);
+    expect(SCROLL_CONFIG.mutationTimeout).toBeGreaterThan(0);
     expect(SCROLL_CONFIG.maxScrollAttempts).toBeGreaterThan(0);
+    expect(SCROLL_CONFIG.loadingCheckInterval).toBeGreaterThan(0);
+    expect(SCROLL_CONFIG.maxLoadingWait).toBeGreaterThan(0);
   });
 
-  test('has reasonable default values', () => {
-    expect(SCROLL_CONFIG.scrollStep).toBe(500);
-    expect(SCROLL_CONFIG.scrollDelay).toBe(150);
-    expect(SCROLL_CONFIG.stabilityChecks).toBe(3);
-    expect(SCROLL_CONFIG.maxScrollAttempts).toBe(1000);
+  // Test ID: SCROLL-CONFIG-002
+  test('has revised values for network latency', () => {
+    // v2.0: Longer delays to handle network latency
+    expect(SCROLL_CONFIG.scrollStep).toBe(800);
+    expect(SCROLL_CONFIG.scrollDelay).toBe(300);     // Was 150 in v1
+    expect(SCROLL_CONFIG.mutationTimeout).toBe(2000); // New in v2
+    expect(SCROLL_CONFIG.maxScrollAttempts).toBe(500);
+  });
+
+  // Test ID: SCROLL-CONFIG-003
+  test('has loading indicator configuration', () => {
+    expect(SCROLL_CONFIG.loadingCheckInterval).toBe(100);
+    expect(SCROLL_CONFIG.maxLoadingWait).toBe(10000);
   });
 });
 
@@ -39,6 +65,7 @@ describe('countMessages', () => {
     document.body.innerHTML = '';
   });
 
+  // Test ID: SCROLL-COUNT-001
   test('counts messages with data-message-author-role attribute', () => {
     document.body.innerHTML = `
       <main>
@@ -50,6 +77,7 @@ describe('countMessages', () => {
     expect(countMessages()).toBe(3);
   });
 
+  // Test ID: SCROLL-COUNT-002
   test('counts messages with conversation-turn class', () => {
     document.body.innerHTML = `
       <main>
@@ -60,6 +88,7 @@ describe('countMessages', () => {
     expect(countMessages()).toBe(2);
   });
 
+  // Test ID: SCROLL-COUNT-003
   test('falls back to user + assistant message selectors', () => {
     document.body.innerHTML = `
       <main>
@@ -71,6 +100,7 @@ describe('countMessages', () => {
     expect(countMessages()).toBe(3);
   });
 
+  // Test ID: SCROLL-COUNT-004
   test('returns 0 for empty page', () => {
     document.body.innerHTML = '<div>No messages</div>';
     expect(countMessages()).toBe(0);
@@ -82,6 +112,7 @@ describe('findScrollContainer', () => {
     document.body.innerHTML = '';
   });
 
+  // Test ID: SCROLL-FIND-001
   test('finds container with scroll selector when scrollable', () => {
     document.body.innerHTML = `
       <div data-scroll-container>
@@ -99,6 +130,7 @@ describe('findScrollContainer', () => {
     expect(container.hasAttribute('data-scroll-container')).toBe(true);
   });
 
+  // Test ID: SCROLL-FIND-002
   test('finds scrollable ancestor of conversation container', () => {
     document.body.innerHTML = `
       <div class="scroll-wrapper">
@@ -129,6 +161,7 @@ describe('findScrollContainer', () => {
     expect(container.classList.contains('scroll-wrapper')).toBe(true);
   });
 
+  // Test ID: SCROLL-FIND-003
   test('returns null when no conversation container exists', () => {
     document.body.innerHTML = '<div>Simple content, no conversation</div>';
 
@@ -138,6 +171,7 @@ describe('findScrollContainer', () => {
     expect(container).toBeNull();
   });
 
+  // Test ID: SCROLL-FIND-004
   test('returns body when conversation exists but no scrollable ancestor', () => {
     document.body.innerHTML = `
       <main data-conversation-id="test123">
@@ -155,18 +189,68 @@ describe('findScrollContainer', () => {
   });
 });
 
-describe('scrollToLoadAllMessages', () => {
+describe('waitForLoadingComplete', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  // Test ID: SCROLL-LOAD-001
+  test('returns immediately when no loading indicator exists', async () => {
+    document.body.innerHTML = '<div>No loading</div>';
+
+    const promise = waitForLoadingComplete();
+    jest.advanceTimersByTime(10);
+    await promise;
+
+    // Should complete without waiting
+    expect(true).toBe(true);
+  });
+
+  // Test ID: SCROLL-LOAD-002
+  test('waits for loading indicator to disappear', async () => {
+    document.body.innerHTML = '<div class="loading-spinner">Loading...</div>';
+    const spinner = document.querySelector('.loading-spinner');
+
+    // Make spinner visible
+    Object.defineProperty(spinner, 'offsetParent', { value: document.body, configurable: true });
+
+    let completed = false;
+    const promise = waitForLoadingComplete().then(() => { completed = true; });
+
+    // Advance some time - should still be waiting
+    jest.advanceTimersByTime(200);
+    expect(completed).toBe(false);
+
+    // Hide the spinner
+    Object.defineProperty(spinner, 'offsetParent', { value: null, configurable: true });
+
+    // Advance time for next check
+    jest.advanceTimersByTime(SCROLL_CONFIG.loadingCheckInterval);
+    await promise;
+
+    expect(completed).toBe(true);
+  });
+});
+
+describe('scrollToLoadAllMessages (v2.0 MutationObserver)', () => {
   let mockScrollContainer;
 
   beforeEach(() => {
     document.body.innerHTML = '';
+    // Use fast config for tests
+    setScrollConfig(FAST_SCROLL_CONFIG);
 
     // Create a mock scroll container with initial messages
     mockScrollContainer = document.createElement('div');
     mockScrollContainer.setAttribute('data-scroll-container', 'true');
     mockScrollContainer.style.cssText = 'height: 200px; overflow-y: auto;';
     mockScrollContainer.innerHTML = `
-      <div style="height: 1000px;">
+      <div class="messages" style="height: 1000px;">
         <div data-message-author-role="user">Message 1</div>
         <div data-message-author-role="model">Message 2</div>
       </div>
@@ -192,6 +276,7 @@ describe('scrollToLoadAllMessages', () => {
     });
   });
 
+  // Test ID: SCROLL-001
   test('returns success when conversation is already fully loaded', async () => {
     // Set scroll to top (already loaded)
     mockScrollContainer.scrollTop = 0;
@@ -202,6 +287,18 @@ describe('scrollToLoadAllMessages', () => {
     expect(result.messagesLoaded).toBeGreaterThan(0);
   });
 
+  // Test ID: SCROLL-002
+  test('dispatches scroll events during scrolling', async () => {
+    const scrollEventFired = jest.fn();
+    mockScrollContainer.addEventListener('scroll', scrollEventFired);
+
+    await scrollToLoadAllMessages();
+
+    // Should have dispatched scroll events
+    expect(scrollEventFired).toHaveBeenCalled();
+  });
+
+  // Test ID: SCROLL-003
   test('returns messagesLoaded count', async () => {
     const result = await scrollToLoadAllMessages();
 
@@ -209,6 +306,7 @@ describe('scrollToLoadAllMessages', () => {
     expect(result.scrollAttempts).toBeGreaterThan(0);
   });
 
+  // Test ID: SCROLL-005
   test('handles missing scroll container gracefully', async () => {
     document.body.innerHTML = '<div>No scroll container</div>';
 
@@ -219,6 +317,7 @@ describe('scrollToLoadAllMessages', () => {
     expect(typeof result.messagesLoaded).toBe('number');
   });
 
+  // Test ID: SCROLL-006
   test('calls progress callback when provided', async () => {
     const progressCallback = jest.fn();
 
@@ -234,18 +333,24 @@ describe('scrollToLoadAllMessages', () => {
   });
 });
 
-describe('scrollToLoadAllMessages with lazy loading simulation', () => {
+describe('scrollToLoadAllMessages MutationObserver detection', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    // Use fast config for tests
+    setScrollConfig(FAST_SCROLL_CONFIG);
   });
 
-  test('detects when new messages are loaded during scroll', async () => {
+  afterEach(() => {
+    resetScrollConfig();
+  });
+
+  // Test ID: SCROLL-MUT-001
+  test('detects DOM mutations during scroll', async () => {
     // Create container with initial messages
     const container = document.createElement('div');
     container.setAttribute('data-scroll-container', 'true');
-    container.style.cssText = 'height: 200px; overflow-y: auto;';
     container.innerHTML = `
-      <div class="messages" style="height: 1000px;">
+      <div class="messages">
         <div data-message-author-role="user">Message 1</div>
         <div data-message-author-role="model">Message 2</div>
       </div>
@@ -253,7 +358,6 @@ describe('scrollToLoadAllMessages with lazy loading simulation', () => {
     document.body.appendChild(container);
 
     let scrollTop = 500;
-    let messageCount = 2;
     let scrollCallCount = 0;
 
     Object.defineProperty(container, 'scrollTop', {
@@ -262,14 +366,13 @@ describe('scrollToLoadAllMessages with lazy loading simulation', () => {
         scrollTop = Math.max(0, value);
         scrollCallCount++;
 
-        // Simulate lazy loading: add new message after a few scrolls
-        if (scrollCallCount === 3 && messageCount < 4) {
+        // Simulate lazy loading: add new message after scroll
+        if (scrollCallCount === 2) {
           const messagesDiv = container.querySelector('.messages');
           const newMsg = document.createElement('div');
           newMsg.setAttribute('data-message-author-role', 'user');
-          newMsg.textContent = `Message ${messageCount + 1}`;
+          newMsg.textContent = 'Message 3';
           messagesDiv.insertBefore(newMsg, messagesDiv.firstChild);
-          messageCount++;
         }
       },
       configurable: true
@@ -288,8 +391,64 @@ describe('scrollToLoadAllMessages with lazy loading simulation', () => {
     const result = await scrollToLoadAllMessages();
 
     expect(result.success).toBe(true);
-    // Should have detected the new message that was added
-    expect(result.messagesLoaded).toBeGreaterThanOrEqual(2);
+    // Should have detected the mutation and continued scrolling
+    expect(result.scrollAttempts).toBeGreaterThan(1);
+  });
+
+  // Test ID: SCROLL-MUT-002
+  test('handles virtualized lists where count stays constant', async () => {
+    // Simulate virtualized list: elements are added AND removed
+    const container = document.createElement('div');
+    container.setAttribute('data-scroll-container', 'true');
+    container.innerHTML = `
+      <div class="messages">
+        <div data-message-author-role="user">Message 1</div>
+        <div data-message-author-role="model">Message 2</div>
+      </div>
+    `;
+    document.body.appendChild(container);
+
+    let scrollTop = 500;
+    let scrollCallCount = 0;
+
+    Object.defineProperty(container, 'scrollTop', {
+      get: () => scrollTop,
+      set: (value) => {
+        scrollTop = Math.max(0, value);
+        scrollCallCount++;
+
+        // Simulate virtualized scrolling: add one, remove one (count stays same)
+        if (scrollCallCount >= 2 && scrollCallCount <= 4) {
+          const messagesDiv = container.querySelector('.messages');
+          // Add new message at top
+          const newMsg = document.createElement('div');
+          newMsg.setAttribute('data-message-author-role', 'user');
+          newMsg.textContent = `New Message ${scrollCallCount}`;
+          messagesDiv.insertBefore(newMsg, messagesDiv.firstChild);
+          // Remove message at bottom (simulating virtualization)
+          if (messagesDiv.lastChild) {
+            messagesDiv.removeChild(messagesDiv.lastChild);
+          }
+        }
+      },
+      configurable: true
+    });
+
+    Object.defineProperty(container, 'scrollHeight', {
+      get: () => 1000,
+      configurable: true
+    });
+
+    Object.defineProperty(container, 'clientHeight', {
+      get: () => 200,
+      configurable: true
+    });
+
+    const result = await scrollToLoadAllMessages();
+
+    expect(result.success).toBe(true);
+    // MutationObserver should detect changes even though count stayed same
+    expect(result.scrollAttempts).toBeGreaterThan(2);
   });
 });
 
@@ -298,10 +457,17 @@ describe('auto-scroll integration with extractConversation', () => {
 
   beforeEach(() => {
     document.body.innerHTML = '';
+    // Use fast config for tests
+    setScrollConfig(FAST_SCROLL_CONFIG);
     // Set up a valid conversation page
     setFixture('gemini-conversation.html');
   });
 
+  afterEach(() => {
+    resetScrollConfig();
+  });
+
+  // Test ID: SCROLL-INT-001
   test('extractConversation includes scrollInfo in metadata', async () => {
     const result = await extractConversation();
 
@@ -311,6 +477,7 @@ describe('auto-scroll integration with extractConversation', () => {
     expect(typeof result.data.metadata.scrollInfo.scrollAttempts).toBe('number');
   });
 
+  // Test ID: SCROLL-INT-002
   test('extractConversation works with fully loaded conversation', async () => {
     const result = await extractConversation();
 
@@ -318,5 +485,36 @@ describe('auto-scroll integration with extractConversation', () => {
     expect(result.data.turns.length).toBeGreaterThan(0);
     // scrollInfo should reflect the messages found
     expect(result.data.metadata.scrollInfo.messagesLoaded).toBeGreaterThan(0);
+  });
+});
+
+describe('SELECTORS.loadingIndicator', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  // Test ID: SCROLL-SEL-001
+  test('loadingIndicator selector exists', () => {
+    expect(SELECTORS.loadingIndicator).toBeDefined();
+    expect(typeof SELECTORS.loadingIndicator).toBe('string');
+  });
+
+  // Test ID: SCROLL-SEL-002
+  test('loadingIndicator matches common loading patterns', () => {
+    // Test various loading indicator patterns
+    const patterns = [
+      '<div data-loading>Loading</div>',
+      '<div class="loading-spinner"></div>',
+      '<div aria-busy="true">Loading</div>',
+      '<mat-spinner></mat-spinner>',
+      '<div class="loading">Please wait</div>',
+      '<div role="progressbar"></div>'
+    ];
+
+    for (const pattern of patterns) {
+      document.body.innerHTML = pattern;
+      const el = document.querySelector(SELECTORS.loadingIndicator);
+      expect(el).toBeTruthy();
+    }
   });
 });

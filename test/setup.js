@@ -78,3 +78,28 @@ global.loadFixture = (name) => {
 global.setFixture = (name) => {
   document.body.innerHTML = loadFixture(name);
 };
+
+// Configure fast scroll settings for tests
+// This runs after content.js is loaded in tests
+afterEach(() => {
+  // Reset scroll config if it exists (for auto-scroll tests)
+  try {
+    const { resetScrollConfig } = require('../extension/src/content.js');
+    if (resetScrollConfig) {
+      resetScrollConfig();
+    }
+  } catch (e) {
+    // Ignore if content.js not loaded
+  }
+});
+
+// Global test scroll config - very fast for testing
+global.TEST_SCROLL_CONFIG = {
+  scrollStep: 100,
+  scrollDelay: 10,
+  mutationTimeout: 50,
+  maxScrollAttempts: 20,
+  loadingCheckInterval: 10,
+  maxLoadingWait: 100,
+  progressUpdateInterval: 2
+};

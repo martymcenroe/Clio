@@ -182,23 +182,52 @@ async function expandAllContent() {
 }
 
 // ============================================================================
-// Auto-Scroll to Load All Messages
+// Auto-Scroll to Load All Messages (v2.0 - MutationObserver based)
 // ============================================================================
 
 /**
  * Configuration for auto-scroll behavior.
+ * v2.0: Revised with longer delays and MutationObserver strategy.
+ *
+ * LLD Reference: docs/lld-auto-scroll.md
  */
-const SCROLL_CONFIG = {
-  scrollStep: 500,           // Pixels to scroll per step
-  scrollDelay: 150,          // Ms to wait between scroll steps
-  stabilityDelay: 500,       // Ms to wait for content to stabilize
-  stabilityChecks: 3,        // Number of stable checks before considering done
-  maxScrollAttempts: 1000,   // Safety limit to prevent infinite loops
-  progressUpdateInterval: 10 // Update progress every N scroll steps
+let SCROLL_CONFIG = {
+  scrollStep: 800,              // Pixels to scroll per step (larger for efficiency)
+  scrollDelay: 300,             // Ms to wait between scroll steps (more time for network)
+  mutationTimeout: 2000,        // Wait up to 2s for DOM changes after reaching top
+  maxScrollAttempts: 500,       // Safety limit to prevent infinite loops
+  loadingCheckInterval: 100,    // Check loading state every 100ms
+  maxLoadingWait: 10000,        // Max 10s waiting for a single loading state
+  progressUpdateInterval: 5     // Update progress every 5 scroll steps
 };
 
 /**
+ * Override scroll config (for testing).
+ * @param {Object} overrides - Config values to override
+ */
+function setScrollConfig(overrides) {
+  SCROLL_CONFIG = { ...SCROLL_CONFIG, ...overrides };
+}
+
+/**
+ * Reset scroll config to defaults (for testing).
+ */
+function resetScrollConfig() {
+  SCROLL_CONFIG = {
+    scrollStep: 800,
+    scrollDelay: 300,
+    mutationTimeout: 2000,
+    maxScrollAttempts: 500,
+    loadingCheckInterval: 100,
+    maxLoadingWait: 10000,
+    progressUpdateInterval: 5
+  };
+}
+
+/**
  * Count current messages in the DOM.
+ * Note: In virtualized lists, this count may stay constant even as content changes.
+ * Used for progress reporting, not for detecting scroll completion.
  * @returns {number} - Number of message elements
  */
 function countMessages() {
@@ -246,8 +275,29 @@ function findScrollContainer() {
 }
 
 /**
+ * Wait for any visible loading indicator to disappear.
+ * @returns {Promise<void>}
+ */
+async function waitForLoadingComplete() {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < SCROLL_CONFIG.maxLoadingWait) {
+    const loadingEl = document.querySelector(SELECTORS.loadingIndicator);
+    // Check if loading element exists and is visible (offsetParent !== null)
+    if (!loadingEl || loadingEl.offsetParent === null) {
+      return; // No loading indicator visible
+    }
+    await sleep(SCROLL_CONFIG.loadingCheckInterval);
+  }
+  // Timeout reached, continue anyway
+}
+
+/**
  * Scroll to load all messages in a lazy-loaded conversation.
- * Scrolls up from current position until no new messages appear.
+ * Uses MutationObserver to detect DOM changes instead of counting messages.
+ * Dispatches scroll events to ensure framework listeners are triggered.
+ *
+ * v2.0: Addresses virtualized list issues where message count stays constant.
  *
  * @param {function} onProgress - Callback for progress updates (optional)
  * @returns {Promise<{success: boolean, messagesLoaded: number, scrollAttempts: number}>}
@@ -263,10 +313,28 @@ async function scrollToLoadAllMessages(onProgress) {
     };
   }
 
-  let lastMessageCount = countMessages();
-  let stableCount = 0;
   let scrollAttempts = 0;
   let lastScrollTop = scrollContainer.scrollTop;
+  let consecutiveNoMovement = 0;
+
+  // Track DOM mutations to detect content loading (handles virtualized lists)
+  let mutationDetected = false;
+  const observer = new MutationObserver((mutations) => {
+    // Any childList mutation with added nodes indicates content is changing
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList' &&
+          (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)) {
+        mutationDetected = true;
+        break;
+      }
+    }
+  });
+
+  // Observe the scroll container and its descendants for DOM changes
+  observer.observe(scrollContainer, {
+    childList: true,
+    subtree: true
+  });
 
   // Progress callback helper
   const reportProgress = (message) => {
@@ -274,63 +342,70 @@ async function scrollToLoadAllMessages(onProgress) {
     if (onProgress) onProgress(message);
   };
 
-  reportProgress(`Loading conversation history... (${lastMessageCount} messages)`);
+  const initialCount = countMessages();
+  reportProgress(`Loading conversation history... (${initialCount} messages visible)`);
 
-  while (scrollAttempts < SCROLL_CONFIG.maxScrollAttempts) {
-    scrollAttempts++;
+  try {
+    while (scrollAttempts < SCROLL_CONFIG.maxScrollAttempts) {
+      scrollAttempts++;
+      mutationDetected = false;
 
-    // Scroll up
-    scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop - SCROLL_CONFIG.scrollStep);
+      // Scroll up
+      const targetScrollTop = Math.max(0, scrollContainer.scrollTop - SCROLL_CONFIG.scrollStep);
+      scrollContainer.scrollTop = targetScrollTop;
 
-    // Wait for content to potentially load
-    await sleep(SCROLL_CONFIG.scrollDelay);
+      // CRITICAL: Dispatch scroll event to trigger framework listeners
+      // Modern SPAs often only respond to events, not direct property changes
+      scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
 
-    // Check if we've reached the top
-    const currentScrollTop = scrollContainer.scrollTop;
-    const atTop = currentScrollTop === 0;
+      // Wait for potential network request and rendering
+      await sleep(SCROLL_CONFIG.scrollDelay);
 
-    // Count messages after scroll
-    const currentMessageCount = countMessages();
+      // Wait for any loading indicator to disappear
+      await waitForLoadingComplete();
 
-    // Check for new messages
-    if (currentMessageCount > lastMessageCount) {
-      // New messages loaded, reset stability counter
-      stableCount = 0;
-      lastMessageCount = currentMessageCount;
+      // Check current state
+      const currentScrollTop = scrollContainer.scrollTop;
+      const atTop = currentScrollTop === 0;
+      const noMovement = currentScrollTop === lastScrollTop;
 
-      if (scrollAttempts % SCROLL_CONFIG.progressUpdateInterval === 0) {
-        reportProgress(`Loading conversation history... (${currentMessageCount} messages)`);
-      }
-    } else if (atTop || currentScrollTop === lastScrollTop) {
-      // At top or can't scroll further, check stability
-      stableCount++;
+      if (atTop || noMovement) {
+        consecutiveNoMovement++;
 
-      if (stableCount >= SCROLL_CONFIG.stabilityChecks) {
-        // Wait a bit longer to make sure no more content is loading
-        await sleep(SCROLL_CONFIG.stabilityDelay);
+        // Give extra time for final content to load
+        await sleep(SCROLL_CONFIG.mutationTimeout);
 
-        // Final check
-        const finalCount = countMessages();
-        if (finalCount === lastMessageCount) {
-          // Conversation is fully loaded
+        // If we're at top/stuck AND no mutations detected, we're done
+        if (!mutationDetected && consecutiveNoMovement >= 2) {
+          const finalCount = countMessages();
           reportProgress(`Loaded ${finalCount} messages`);
           return {
             success: true,
             messagesLoaded: finalCount,
             scrollAttempts
           };
-        } else {
-          // More messages appeared during stability delay
-          lastMessageCount = finalCount;
-          stableCount = 0;
         }
-      }
-    } else {
-      // Still scrolling but no new messages yet
-      stableCount = 0;
-    }
 
-    lastScrollTop = currentScrollTop;
+        // Mutations detected or first time at top - keep trying
+        if (mutationDetected) {
+          consecutiveNoMovement = 0;
+        }
+      } else {
+        // Successfully scrolled, reset counter
+        consecutiveNoMovement = 0;
+      }
+
+      lastScrollTop = currentScrollTop;
+
+      // Progress update
+      if (scrollAttempts % SCROLL_CONFIG.progressUpdateInterval === 0) {
+        const currentCount = countMessages();
+        reportProgress(`Loading history... (${currentCount} messages, scroll ${scrollAttempts})`);
+      }
+    }
+  } finally {
+    // Always clean up the observer
+    observer.disconnect();
   }
 
   // Hit max attempts - return what we have
@@ -839,8 +914,11 @@ if (typeof module !== 'undefined' && module.exports) {
     extractConversation,
     // Auto-scroll exports
     SCROLL_CONFIG,
+    setScrollConfig,
+    resetScrollConfig,
     countMessages,
     findScrollContainer,
+    waitForLoadingComplete,
     scrollToLoadAllMessages
   };
 }

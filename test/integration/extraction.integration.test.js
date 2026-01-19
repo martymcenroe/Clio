@@ -14,7 +14,9 @@ const {
   validateSelectors,
   isStreaming,
   extractTurns,
-  extractConversation
+  extractConversation,
+  setScrollConfig,
+  resetScrollConfig
 } = require('../../extension/src/content.js');
 
 const { SELECTORS } = require('../../extension/src/selectors.js');
@@ -22,9 +24,25 @@ const { SELECTORS } = require('../../extension/src/selectors.js');
 // Make SELECTORS available globally for content.js
 global.SELECTORS = SELECTORS;
 
+// Fast config for tests to avoid timeouts
+const FAST_SCROLL_CONFIG = {
+  scrollStep: 100,
+  scrollDelay: 10,
+  mutationTimeout: 50,
+  maxScrollAttempts: 20,
+  loadingCheckInterval: 10,
+  maxLoadingWait: 100,
+  progressUpdateInterval: 2
+};
+
 describe('Full Extraction Integration', () => {
   beforeEach(() => {
+    setScrollConfig(FAST_SCROLL_CONFIG);
     setFixture('gemini-conversation.html');
+  });
+
+  afterEach(() => {
+    resetScrollConfig();
   });
 
   // Test ID: INT-010
@@ -145,7 +163,12 @@ describe('Full Extraction Integration', () => {
 
 describe('JSON Schema Compliance', () => {
   beforeEach(() => {
+    setScrollConfig(FAST_SCROLL_CONFIG);
     setFixture('gemini-conversation.html');
+  });
+
+  afterEach(() => {
+    resetScrollConfig();
   });
 
   // Test ID: INT-080
@@ -202,6 +225,14 @@ describe('JSON Schema Compliance', () => {
 });
 
 describe('Edge Cases and Error Handling', () => {
+  beforeEach(() => {
+    setScrollConfig(FAST_SCROLL_CONFIG);
+  });
+
+  afterEach(() => {
+    resetScrollConfig();
+  });
+
   // Test ID: INT-120
   test('handles page without messages as validation failure', async () => {
     // A page with no conversation messages should fail validation

@@ -135,6 +135,22 @@ describe('Content Expansion', () => {
 describe('Progress Indicator', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main></main>';
+    // Use fast scroll config for tests
+    const { setScrollConfig } = require('../extension/src/content.js');
+    setScrollConfig({
+      scrollStep: 100,
+      scrollDelay: 10,
+      mutationTimeout: 50,
+      maxScrollAttempts: 20,
+      loadingCheckInterval: 10,
+      maxLoadingWait: 100,
+      progressUpdateInterval: 2
+    });
+  });
+
+  afterEach(() => {
+    const { resetScrollConfig } = require('../extension/src/content.js');
+    resetScrollConfig();
   });
 
   test('progress element is created and removed correctly', async () => {

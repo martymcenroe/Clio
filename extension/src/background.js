@@ -18,3 +18,11 @@ chrome.downloads.onChanged.addListener((delta) => {
     console.log('Download completed:', delta.id);
   }
 });
+
+// ============================================================================
+// Exports for Testing
+// ============================================================================
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {};
+}

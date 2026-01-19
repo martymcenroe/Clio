@@ -8,44 +8,37 @@
 /* global chrome */
 
 // ============================================================================
-// UI Elements
-// ============================================================================
-
-const statusEl = document.getElementById('status');
-const extractBtn = document.getElementById('extractBtn');
-const progressEl = document.getElementById('progress');
-const progressText = document.getElementById('progressText');
-const resultEl = document.getElementById('result');
-const turnCountEl = document.getElementById('turnCount');
-const imageCountEl = document.getElementById('imageCount');
-const errorCountEl = document.getElementById('errorCount');
-
-// ============================================================================
 // UI Helpers
 // ============================================================================
 
 function setStatus(message, type = 'info') {
+  const statusEl = document.getElementById('status');
   statusEl.textContent = message;
   statusEl.className = `status ${type}`;
 }
 
 function showProgress(message) {
+  const progressEl = document.getElementById('progress');
+  const progressText = document.getElementById('progressText');
   progressEl.classList.add('visible');
   progressText.textContent = message;
 }
 
 function hideProgress() {
+  const progressEl = document.getElementById('progress');
   progressEl.classList.remove('visible');
 }
 
 function showResult(turns, images, errors) {
+  const resultEl = document.getElementById('result');
   resultEl.classList.add('visible');
-  turnCountEl.textContent = turns;
-  imageCountEl.textContent = images;
-  errorCountEl.textContent = errors;
+  document.getElementById('turnCount').textContent = turns;
+  document.getElementById('imageCount').textContent = images;
+  document.getElementById('errorCount').textContent = errors;
 }
 
 function setButtonState(enabled, text = 'Extract Conversation') {
+  const extractBtn = document.getElementById('extractBtn');
   extractBtn.disabled = !enabled;
   extractBtn.textContent = text;
 }
@@ -259,12 +252,36 @@ async function handleExtract() {
 // Event Listeners
 // ============================================================================
 
-extractBtn.addEventListener('click', handleExtract);
+// Only set up event listeners if DOM elements exist (not in test environment loading)
+const extractBtn = document.getElementById('extractBtn');
+if (extractBtn) {
+  extractBtn.addEventListener('click', handleExtract);
 
-// Check if we're on a Gemini page on load
-chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-  if (!tab || !tab.url || !tab.url.includes('gemini.google.com')) {
-    setStatus('Open a Gemini conversation to extract.', 'warning');
-    setButtonState(false);
-  }
-});
+  // Check if we're on a Gemini page on load
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (!tab || !tab.url || !tab.url.includes('gemini.google.com')) {
+      setStatus('Open a Gemini conversation to extract.', 'warning');
+      setButtonState(false);
+    }
+  });
+}
+
+// ============================================================================
+// Exports for Testing
+// ============================================================================
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    sanitizeFilename,
+    estimateExportSize,
+    formatBytes,
+    setStatus,
+    showProgress,
+    hideProgress,
+    showResult,
+    setButtonState,
+    createZip,
+    downloadBlob,
+    handleExtract
+  };
+}

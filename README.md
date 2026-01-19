@@ -36,6 +36,8 @@ A Chrome extension for extracting full Gemini conversations to structured JSON w
 4. Click "Extract Conversation"
 5. Save the downloaded zip file
 
+See the [User Guide](docs/USER_GUIDE.md) for detailed instructions and troubleshooting.
+
 ## Output Format
 
 The extension creates a zip file containing:
@@ -83,21 +85,19 @@ The extension creates a zip file containing:
 ### Prerequisites
 
 - Node.js 18+
-- Python 3.10+ with Pillow (for icon generation)
+- Python 3.10+ with Poetry (for icon generation)
 
 ### Running Tests
 
 ```bash
 npm install
-npm test
-npm run test:coverage  # With coverage report
+npm test                # Unit tests
+npm run test:coverage   # Unit tests with coverage
+npm run test:e2e        # E2E tests (Playwright)
+npm run test:all        # All tests
 ```
 
-### Generating Icons
-
-```bash
-poetry run python tools/generate_icons.py --transparent
-```
+See [RUNBOOK.md](RUNBOOK.md) for detailed development instructions.
 
 ## Privacy
 

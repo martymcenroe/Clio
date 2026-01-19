@@ -5,7 +5,7 @@
  * LLD Reference: docs/reports/1/lld-clio.md
  */
 
-/* global chrome */
+/* global chrome, JSZip */
 
 // ============================================================================
 // UI Helpers
@@ -67,11 +67,6 @@ function sanitizeFilename(filename) {
  * @returns {Promise<Blob>} - Zip file blob
  */
 async function createZip(data, images) {
-  // Dynamically import JSZip from CDN if not available
-  if (typeof JSZip === 'undefined') {
-    await loadJSZip();
-  }
-
   const zip = new JSZip();
 
   // Add conversation.json
@@ -95,19 +90,6 @@ async function createZip(data, images) {
     type: 'blob',
     compression: 'DEFLATE',
     compressionOptions: { level: 6 }
-  });
-}
-
-/**
- * Load JSZip library dynamically.
- */
-function loadJSZip() {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-    script.onload = resolve;
-    script.onerror = () => reject(new Error('Failed to load JSZip'));
-    document.head.appendChild(script);
   });
 }
 

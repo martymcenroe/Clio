@@ -139,13 +139,23 @@ function isStreaming() {
 /**
  * Expand all collapsed content (user inputs, thinking sections).
  * Shows progress indicator during expansion.
+ * IMPORTANT: Only expands content within the conversation container,
+ * not sidebar or other page elements.
  * @returns {Promise<number>} - Number of elements expanded
  */
 async function expandAllContent() {
   let expandedCount = 0;
 
-  // Find expand buttons
-  const expandButtons = document.querySelectorAll(SELECTORS.expandButton);
+  // Find the conversation container to scope our queries
+  // This prevents clicking buttons in the sidebar or other UI elements
+  const container = document.querySelector(SELECTORS.conversationContainer);
+  if (!container) {
+    console.warn('No conversation container found, skipping expansion');
+    return 0;
+  }
+
+  // Find expand buttons ONLY within the conversation container
+  const expandButtons = container.querySelectorAll(SELECTORS.expandButton);
   for (const button of expandButtons) {
     try {
       button.click();
@@ -156,8 +166,8 @@ async function expandAllContent() {
     }
   }
 
-  // Find thinking toggles
-  const thinkingToggles = document.querySelectorAll(SELECTORS.thinkingToggle);
+  // Find thinking toggles ONLY within the conversation container
+  const thinkingToggles = container.querySelectorAll(SELECTORS.thinkingToggle);
   for (const toggle of thinkingToggles) {
     try {
       toggle.click();

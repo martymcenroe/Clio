@@ -4,12 +4,12 @@
     "title": "Test Conversation for Viewer",
     "extractedAt": "2026-01-19T12:00:00.000Z",
     "url": "https://gemini.google.com/app/test-fixture-001",
-    "turnCount": 4,
+    "messageCount": 4,
     "imageCount": 0,
     "extractionErrors": [],
     "partialSuccess": false
   },
-  "turns": [
+  "messages": [
     {
       "index": 0,
       "role": "user",

@@ -52,19 +52,19 @@ describe('validateConversation', () => {
   });
 
   test('rejects non-object metadata', () => {
-    expect(() => validateConversation({ metadata: 'string', turns: [] }))
+    expect(() => validateConversation({ metadata: 'string', messages: [] }))
       .toThrow('Missing or invalid metadata');
   });
 
-  test('rejects non-array turns', () => {
+  test('rejects non-array messages', () => {
     expect(() => validateConversation(brokenFixture))
-      .toThrow('Missing or invalid turns array');
+      .toThrow('Missing or invalid messages array');
   });
 
   test('rejects invalid role', () => {
     const badRole = {
       metadata: { title: 'test' },
-      turns: [{ role: 'unknown', content: 'hello' }]
+      messages: [{ role: 'unknown', content: 'hello' }]
     };
     expect(() => validateConversation(badRole))
       .toThrow('Turn 0: invalid role "unknown"');
@@ -73,7 +73,7 @@ describe('validateConversation', () => {
   test('rejects missing role', () => {
     const noRole = {
       metadata: { title: 'test' },
-      turns: [{ content: 'hello' }]
+      messages: [{ content: 'hello' }]
     };
     expect(() => validateConversation(noRole))
       .toThrow('Turn 0: invalid role');
@@ -82,7 +82,7 @@ describe('validateConversation', () => {
   test('rejects missing content', () => {
     const noContent = {
       metadata: { title: 'test' },
-      turns: [{ role: 'user' }]
+      messages: [{ role: 'user' }]
     };
     expect(() => validateConversation(noContent))
       .toThrow('Turn 0: content must be string');
@@ -91,7 +91,7 @@ describe('validateConversation', () => {
   test('rejects non-string content', () => {
     const numContent = {
       metadata: { title: 'test' },
-      turns: [{ role: 'user', content: 123 }]
+      messages: [{ role: 'user', content: 123 }]
     };
     expect(() => validateConversation(numContent))
       .toThrow('Turn 0: content must be string');
@@ -100,7 +100,7 @@ describe('validateConversation', () => {
   test('reports correct turn index on error', () => {
     const badThirdTurn = {
       metadata: { title: 'test' },
-      turns: [
+      messages: [
         { role: 'user', content: 'first' },
         { role: 'assistant', content: 'second' },
         { role: 'invalid', content: 'third' }

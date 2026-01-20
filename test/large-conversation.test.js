@@ -145,8 +145,8 @@ describe('Large Conversation Support', () => {
       const result = await extractConversation();
 
       expect(result.success).toBe(true);
-      expect(result.data.turns.length).toBe(100);
-      expect(result.data.metadata.turnCount).toBe(100);
+      expect(result.data.messages.length).toBe(100);
+      expect(result.data.metadata.messageCount).toBe(100);
     });
 
     test('handles mixed content types in large conversation', async () => {
@@ -192,14 +192,14 @@ describe('Large Conversation Support', () => {
       const result = await extractConversation();
 
       expect(result.success).toBe(true);
-      expect(result.data.turns.length).toBe(50);
+      expect(result.data.messages.length).toBe(50);
 
       // Verify code blocks preserved
-      const turnsWithCode = result.data.turns.filter(t => t.content.includes('```python'));
+      const turnsWithCode = result.data.messages.filter(t => t.content.includes('```python'));
       expect(turnsWithCode.length).toBeGreaterThan(0);
 
       // Verify thinking sections captured
-      const turnsWithThinking = result.data.turns.filter(t => t.thinking !== null);
+      const turnsWithThinking = result.data.messages.filter(t => t.thinking !== null);
       expect(turnsWithThinking.length).toBeGreaterThan(0);
     });
   });

@@ -29,10 +29,10 @@ function hideProgress() {
   progressEl.classList.remove('visible');
 }
 
-function showResult(turns, images, errors, scrollInfo) {
+function showResult(messageCount, images, errors, scrollInfo) {
   const resultEl = document.getElementById('result');
   resultEl.classList.add('visible');
-  document.getElementById('turnCount').textContent = turns;
+  document.getElementById('messageCount').textContent = messageCount;
   document.getElementById('imageCount').textContent = images;
   document.getElementById('errorCount').textContent = errors;
 
@@ -195,7 +195,7 @@ async function handleExtract() {
     // Show extraction results
     const { data, images, warnings } = result;
     showResult(
-      data.metadata.turnCount,
+      data.metadata.messageCount,
       data.metadata.imageCount,
       data.metadata.extractionErrors.length,
       data.metadata.scrollInfo

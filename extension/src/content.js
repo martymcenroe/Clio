@@ -901,7 +901,7 @@ async function extractConversation() {
         title,
         extractedAt,
         url,
-        turnCount: turns.length,
+        messageCount: turns.length,
         imageCount: images.length,
         extractionErrors: errors,
         partialSuccess: errors.length > 0 || !!scrollResult.warning,
@@ -910,7 +910,7 @@ async function extractConversation() {
           scrollAttempts: scrollResult.scrollAttempts
         }
       },
-      turns
+      messages: turns
     };
 
     hideProgress();
@@ -918,7 +918,7 @@ async function extractConversation() {
     // Log extraction summary to console
     console.group('%c[Clio] Extraction Complete', 'color: #4CAF50; font-weight: bold; font-size: 14px;');
     console.log('%cConversation:', 'font-weight: bold;', title || 'Untitled');
-    console.log('%cTurns extracted:', 'font-weight: bold;', turns.length);
+    console.log('%cMessages extracted:', 'font-weight: bold;', turns.length);
     console.log('%cImages extracted:', 'font-weight: bold;', images.length);
     console.log('%cScroll attempts:', 'font-weight: bold;', scrollResult.scrollAttempts);
     console.log('%cMessages loaded:', 'font-weight: bold;', scrollResult.messagesLoaded);

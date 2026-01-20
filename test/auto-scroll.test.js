@@ -482,7 +482,7 @@ describe('auto-scroll integration with extractConversation', () => {
     const result = await extractConversation();
 
     expect(result.success).toBe(true);
-    expect(result.data.turns.length).toBeGreaterThan(0);
+    expect(result.data.messages.length).toBeGreaterThan(0);
     // scrollInfo should reflect the messages found
     expect(result.data.metadata.scrollInfo.messagesLoaded).toBeGreaterThan(0);
   });

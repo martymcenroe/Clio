@@ -254,10 +254,10 @@ describe('showResult', () => {
     expect(resultEl.classList.contains('visible')).toBe(true);
   });
 
-  test('sets turn count', () => {
+  test('sets message count', () => {
     showResult(10, 5, 2);
-    const turnCountEl = document.getElementById('turnCount');
-    expect(turnCountEl.textContent).toBe('10');
+    const messageCountEl = document.getElementById('messageCount');
+    expect(messageCountEl.textContent).toBe('10');
   });
 
   test('sets image count', () => {
@@ -274,7 +274,7 @@ describe('showResult', () => {
 
   test('handles zero values', () => {
     showResult(0, 0, 0);
-    expect(document.getElementById('turnCount').textContent).toBe('0');
+    expect(document.getElementById('messageCount').textContent).toBe('0');
     expect(document.getElementById('imageCount').textContent).toBe('0');
     expect(document.getElementById('errorCount').textContent).toBe('0');
   });
@@ -318,7 +318,7 @@ describe('createZip', () => {
   test('creates zip with conversation.json', async () => {
     const data = {
       metadata: { title: 'Test Conversation' },
-      turns: []
+      messages: []
     };
     const images = [];
 
@@ -330,7 +330,7 @@ describe('createZip', () => {
   test('creates zip with images', async () => {
     const data = {
       metadata: { title: 'Test Conversation' },
-      turns: []
+      messages: []
     };
     const images = [
       { dataUrl: 'data:image/png;base64,iVBORw0KGgo=', filename: 'images/img1.png' },
@@ -344,7 +344,7 @@ describe('createZip', () => {
   test('handles images without dataUrl', async () => {
     const data = {
       metadata: { title: 'Test' },
-      turns: []
+      messages: []
     };
     const images = [
       { filename: 'images/img1.png' } // no dataUrl
@@ -358,7 +358,7 @@ describe('createZip', () => {
   test('handles empty images array', async () => {
     const data = {
       metadata: { title: 'Test' },
-      turns: []
+      messages: []
     };
 
     const blob = await createZip(data, []);
@@ -483,11 +483,11 @@ describe('handleExtract', () => {
           metadata: {
             title: 'Test Chat',
             conversationId: 'abc123',
-            turnCount: 4,
+            messageCount: 4,
             imageCount: 2,
             extractionErrors: []
           },
-          turns: []
+          messages: []
         },
         images: [],
         warnings: []
@@ -499,7 +499,7 @@ describe('handleExtract', () => {
     // Result should be visible
     const resultEl = document.getElementById('result');
     expect(resultEl.classList.contains('visible')).toBe(true);
-    expect(document.getElementById('turnCount').textContent).toBe('4');
+    expect(document.getElementById('messageCount').textContent).toBe('4');
     expect(document.getElementById('imageCount').textContent).toBe('2');
 
     // Download should be triggered
@@ -515,11 +515,11 @@ describe('handleExtract', () => {
           metadata: {
             title: 'Test Chat',
             conversationId: 'abc123',
-            turnCount: 4,
+            messageCount: 4,
             imageCount: 2,
             extractionErrors: []
           },
-          turns: []
+          messages: []
         },
         images: [],
         warnings: ['Some images failed to load']
@@ -542,11 +542,11 @@ describe('handleExtract', () => {
           metadata: {
             title: 'Test',
             conversationId: 'abc123',
-            turnCount: 1,
+            messageCount: 1,
             imageCount: 0,
             extractionErrors: []
           },
-          turns: []
+          messages: []
         },
         images: [],
         warnings: []

@@ -51,11 +51,11 @@ function validateConversation(json) {
   if (!json.metadata || typeof json.metadata !== 'object') {
     throw new Error('Missing or invalid metadata');
   }
-  if (!Array.isArray(json.turns)) {
-    throw new Error('Missing or invalid turns array');
+  if (!Array.isArray(json.messages)) {
+    throw new Error('Missing or invalid messages array');
   }
-  for (let i = 0; i < json.turns.length; i++) {
-    const turn = json.turns[i];
+  for (let i = 0; i < json.messages.length; i++) {
+    const turn = json.messages[i];
     if (!turn.role || !['user', 'assistant'].includes(turn.role)) {
       throw new Error(`Turn ${i}: invalid role "${turn.role}"`);
     }

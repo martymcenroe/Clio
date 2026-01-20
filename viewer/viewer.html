@@ -521,11 +521,11 @@ function validateConversation(json) {
   if (!json.metadata || typeof json.metadata !== 'object') {
     throw new Error('Missing or invalid metadata');
   }
-  if (!Array.isArray(json.turns)) {
-    throw new Error('Missing or invalid turns array');
+  if (!Array.isArray(json.messages)) {
+    throw new Error('Missing or invalid messages array');
   }
-  for (let i = 0; i < json.turns.length; i++) {
-    const turn = json.turns[i];
+  for (let i = 0; i < json.messages.length; i++) {
+    const turn = json.messages[i];
     if (!turn.role || !['user', 'assistant'].includes(turn.role)) {
       throw new Error(`Turn ${i}: invalid role "${turn.role}"`);
     }
@@ -729,9 +729,9 @@ function checkFilename(filename) {
 
       document.getElementById('conv-title').textContent = conv.metadata.title || 'Untitled';
       document.getElementById('conv-meta').textContent =
-        `${conv.turns.length} turns · Extracted ${formatDate(conv.metadata.extractedAt)}`;
+        `${conv.messages.length} messages · Extracted ${formatDate(conv.metadata.extractedAt)}`;
 
-      conv.turns.forEach((turn, index) => {
+      conv.messages.forEach((turn, index) => {
         const bubble = createBubble(turn, index);
         container.appendChild(bubble);
       });

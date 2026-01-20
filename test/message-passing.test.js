@@ -141,7 +141,7 @@ describe('Message Response Format', () => {
 
       if (response.success) {
         expect(response.data).toHaveProperty('metadata');
-        expect(response.data).toHaveProperty('turns');
+        expect(response.data).toHaveProperty('messages');
       }
       done();
     };

@@ -4,10 +4,10 @@
     "title": "Empty Conversation",
     "extractedAt": "2026-01-19T12:00:00.000Z",
     "url": "https://gemini.google.com/app/empty-001",
-    "turnCount": 0,
+    "messageCount": 0,
     "imageCount": 0,
     "extractionErrors": [],
     "partialSuccess": false
   },
-  "turns": []
+  "messages": []
 }

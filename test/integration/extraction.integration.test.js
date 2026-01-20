@@ -153,7 +153,7 @@ describe('Full Extraction Integration', () => {
     expect(result.data.metadata.url).toBeDefined();
 
     // Verify turns
-    expect(result.data.turns.length).toBe(4);
+    expect(result.data.messages.length).toBe(4);
 
     // Verify images array exists
     expect(result.images).toBeDefined();
@@ -188,7 +188,7 @@ describe('JSON Schema Compliance', () => {
     expect(result.success).toBe(true);
 
     const requiredTurnFields = ['index', 'role', 'content', 'attachments'];
-    for (const turn of result.data.turns) {
+    for (const turn of result.data.messages) {
       for (const field of requiredTurnFields) {
         expect(turn).toHaveProperty(field);
       }
@@ -200,7 +200,7 @@ describe('JSON Schema Compliance', () => {
     const result = await extractConversation();
     expect(result.success).toBe(true);
 
-    const assistantTurns = result.data.turns.filter(t => t.role === 'assistant');
+    const assistantTurns = result.data.messages.filter(t => t.role === 'assistant');
     expect(assistantTurns.length).toBe(2);
 
     // Second assistant turn has thinking
@@ -214,7 +214,7 @@ describe('JSON Schema Compliance', () => {
     expect(result.success).toBe(true);
 
     // Find turn with image attachment
-    const turnWithImage = result.data.turns.find(t => t.attachments.length > 0);
+    const turnWithImage = result.data.messages.find(t => t.attachments.length > 0);
     expect(turnWithImage).toBeDefined();
 
     const attachment = turnWithImage.attachments[0];

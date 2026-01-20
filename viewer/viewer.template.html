@@ -618,9 +618,9 @@
 
       document.getElementById('conv-title').textContent = conv.metadata.title || 'Untitled';
       document.getElementById('conv-meta').textContent =
-        `${conv.turns.length} turns · Extracted ${formatDate(conv.metadata.extractedAt)}`;
+        `${conv.messages.length} messages · Extracted ${formatDate(conv.metadata.extractedAt)}`;
 
-      conv.turns.forEach((turn, index) => {
+      conv.messages.forEach((turn, index) => {
         const bubble = createBubble(turn, index);
         container.appendChild(bubble);
       });

@@ -118,6 +118,52 @@ Selectors were verified using fixture-driven development:
 - [x] Playwright browser tests confirm selectors work
 - [ ] Manual tests pending user authentication to Gemini
 
+## Update: v2.1 - Bug Fixes and Terminology Update
+
+### Bug Fix: Turn Extraction Logic (2026-01-20)
+
+**Problem:** All messages were labeled as "assistant" in exported JSON. User prompts were being merged with assistant responses.
+
+**Root Cause:** The `extractTurns()` function treated each `.conversation-container` as a single turn, when it actually contains both `user-query` and `model-response` children.
+
+**Fix:** Rewrote `extractTurns()` to:
+1. Find `.conversation-container` elements
+2. Query for `user-query` and `model-response` separately within each container
+3. Create correctly labeled alternating user/assistant messages
+
+**Verification:**
+- Manual test: 169 messages extracted with correct user/assistant alternation
+- All 207 automated tests pass
+
+### Terminology Change: "turns" → "messages"
+
+Changed JSON schema terminology to match Claude/OpenAI API conventions:
+
+| Before | After | Rationale |
+|--------|-------|-----------|
+| `turns` | `messages` | Matches API conventions |
+| `turnCount` | `messageCount` | Consistency |
+| "Turn" (UI) | "Message" (UI) | User clarity |
+
+**Files Updated:**
+- `extension/src/content.js` - JSON schema output
+- `extension/src/popup.html` - UI text
+- `extension/src/popup.js` - Property references
+- `viewer/viewer.html` - JSON parsing
+- `viewer/viewer-logic.js` - JSON parsing
+- All fixture JSON files
+- All test files referencing `turns`
+
+### Configuration Update: Increased Wait Times
+
+Based on manual testing with slow Gemini responses:
+
+| Parameter | v2.0 | v2.1 | Reason |
+|-----------|------|------|--------|
+| `scrollDelay` | 300ms | 500ms | Network latency |
+| `mutationTimeout` | 2000ms | 3000ms | Slow responses |
+| `maxLoadingWait` | 10000ms | 15000ms | Large conversations |
+
 ## Rollback Plan
 
 If issues arise, revert to v1.0 by reverting this PR's commit.

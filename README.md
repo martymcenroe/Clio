@@ -22,7 +22,7 @@ A Chrome extension for extracting full Gemini conversations to structured JSON w
 3. Open `chrome://extensions` (or `edge://extensions`)
 4. Enable "Developer mode"
 5. Click "Load unpacked"
-6. Select the `extension/` folder
+6. Select the `extensions/` folder
 
 ### From Chrome Web Store
 

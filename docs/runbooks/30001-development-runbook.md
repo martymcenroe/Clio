@@ -32,13 +32,13 @@ npx playwright install  # For E2E tests
 1. Open `chrome://extensions`
 2. Enable "Developer mode"
 3. Click "Load unpacked"
-4. Select the `extension/` folder
+4. Select the `extensions/` folder
 
 **Edge:**
 1. Open `edge://extensions`
 2. Enable "Developer mode"
 3. Click "Load unpacked"
-4. Select the `extension/` folder
+4. Select the `extensions/` folder
 
 ## Testing
 
@@ -51,13 +51,13 @@ npm run test:watch          # Run in watch mode
 ```
 
 **Test files:**
-- `test/content.test.js` - Content script extraction tests
-- `test/popup.test.js` - Popup UI and download tests
-- `test/background.test.js` - Service worker tests
-- `test/viewer.test.js` - Viewer component tests
-- `test/image-extraction.test.js` - Image handling tests
-- `test/message-passing.test.js` - Chrome messaging tests
-- `test/integration/` - Integration tests
+- `tests/content.test.js` - Content script extraction tests
+- `tests/popup.test.js` - Popup UI and download tests
+- `tests/background.test.js` - Service worker tests
+- `tests/viewer.test.js` - Viewer component tests
+- `tests/image-extraction.test.js` - Image handling tests
+- `tests/message-passing.test.js` - Chrome messaging tests
+- `tests/integration/` - Integration tests
 
 **Coverage thresholds:** 80% for branches, functions, lines, and statements.
 
@@ -82,7 +82,7 @@ npm run test:all            # Unit tests + E2E tests
 
 ```
 Clio/
-├── extension/
+├── extensions/
 │   ├── manifest.json       # Chrome extension manifest (MV3)
 │   ├── src/
 │   │   ├── content.js      # DOM extraction logic
@@ -96,7 +96,7 @@ Clio/
 │   ├── viewer.template.html
 │   ├── viewer-logic.js
 │   └── build.js
-├── test/
+├── tests/
 │   ├── fixtures/           # Test HTML/JSON fixtures
 │   ├── setup.js            # Jest setup with Chrome mocks
 │   └── *.test.js           # Test files
@@ -108,10 +108,10 @@ Clio/
 
 ### Adding New DOM Selectors
 
-1. Add selector to `extension/src/selectors.js`
-2. Update extraction logic in `extension/src/content.js`
-3. Add test fixture to `test/fixtures/`
-4. Write tests in `test/content.test.js`
+1. Add selector to `extensions/src/selectors.js`
+2. Update extraction logic in `extensions/src/content.js`
+3. Add test fixture to `tests/fixtures/`
+4. Write tests in `tests/content.test.js`
 
 ### Updating the Viewer
 

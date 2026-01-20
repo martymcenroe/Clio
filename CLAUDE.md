@@ -105,18 +105,18 @@ Named after the Greek Muse of History - appropriate for preserving conversation 
 
 | Component | Tech | Location |
 |-----------|------|----------|
-| Chrome Extension | JS (WebExtension MV3) | `extension/` |
-| Tests | Jest + jsdom | `test/` |
+| Chrome Extension | JS (WebExtension MV3) | `extensions/` |
+| Tests | Jest + jsdom | `tests/` |
 | Tools | Python scripts | `tools/` |
 
 ### Key Files
 
-- `extension/manifest.json` - Chrome extension config (Manifest V3)
-- `extension/src/content.js` - DOM extraction logic
-- `extension/src/selectors.js` - Centralized DOM selectors
-- `extension/src/popup.html` - Extension popup UI
-- `extension/src/popup.js` - Popup logic, zip creation
-- `extension/src/background.js` - Service worker
+- `extensions/manifest.json` - Chrome extension config (Manifest V3)
+- `extensions/src/content.js` - DOM extraction logic
+- `extensions/src/selectors.js` - Centralized DOM selectors
+- `extensions/src/popup.html` - Extension popup UI
+- `extensions/src/popup.js` - Popup logic, zip creation
+- `extensions/src/background.js` - Service worker
 
 ---
 

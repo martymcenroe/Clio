@@ -47,10 +47,10 @@ describe('SCROLL_CONFIG (v2.0)', () => {
 
   // Test ID: SCROLL-CONFIG-002
   test('has revised values for network latency', () => {
-    // v2.5: 1s scrolling - multiple scrolls to hit buffer edge
+    // v2.6: 500ms scrolling - multiple scrolls to hit buffer edge
     expect(SCROLL_CONFIG.scrollStep).toBe(5000);       // Large scroll to trigger batch loading
-    expect(SCROLL_CONFIG.scrollDelay).toBe(1000);      // 1s between scrolls
-    expect(SCROLL_CONFIG.mutationTimeout).toBe(3000);
+    expect(SCROLL_CONFIG.scrollDelay).toBe(500);       // 500ms between scrolls
+    expect(SCROLL_CONFIG.mutationTimeout).toBe(2000);  // 2s wait at top for mutations
     expect(SCROLL_CONFIG.maxScrollAttempts).toBe(500); // Multiple scrolls to hit buffer
   });
 

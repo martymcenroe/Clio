@@ -200,9 +200,9 @@ async function expandAllContent() {
  */
 let SCROLL_CONFIG = {
   scrollStep: 5000,             // Large scroll to trigger batch loading
-  scrollDelay: 1000,            // 1s between scrolls (looks busy)
-  loadingAppearDelay: 1000,     // 1s wait for loading indicator to appear
-  mutationTimeout: 3000,        // Wait up to 3s for DOM changes after reaching top
+  scrollDelay: 500,             // 500ms between scrolls
+  loadingAppearDelay: 500,      // 500ms wait for loading indicator to appear
+  mutationTimeout: 2000,        // Wait up to 2s for DOM changes after reaching top
   maxScrollAttempts: 500,       // Multiple scrolls needed to hit buffer edge
   loadingCheckInterval: 100,    // Check loading state every 100ms
   maxLoadingWait: 15000,        // Max 15s waiting for a single loading state

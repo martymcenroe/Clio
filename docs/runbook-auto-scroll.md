@@ -116,7 +116,7 @@ allMessages: '[data-message-author-role], .message-container, .conversation-turn
 2. Open DevTools Elements panel
 3. Find the scrollable conversation container
 4. Note its identifying attributes
-5. Update `SELECTORS.scrollContainer` in `extension/src/selectors.js`
+5. Update `SELECTORS.scrollContainer` in `extensions/src/selectors.js`
 6. Run tests: `npm test`
 7. Test manually on Gemini
 
@@ -164,9 +164,9 @@ resetScrollConfig();
 
 | File | Purpose |
 |------|---------|
-| `extension/src/content.js` | Auto-scroll implementation |
-| `extension/src/selectors.js` | DOM selectors |
-| `test/auto-scroll.test.js` | Unit tests |
+| `extensions/src/content.js` | Auto-scroll implementation |
+| `extensions/src/selectors.js` | DOM selectors |
+| `tests/auto-scroll.test.js` | Unit tests |
 | `docs/lld-auto-scroll.md` | Design document |
 | `docs/implementation-report-auto-scroll.md` | Implementation details |
 | `docs/test-report-auto-scroll.md` | Test results |

@@ -20,12 +20,12 @@ Gemini conversations use lazy loading with DOM virtualization. The v1.0 implemen
 
 | File | Lines Changed | Description |
 |------|---------------|-------------|
-| `extension/src/content.js` | +180, -100 | Complete rewrite of scroll logic with MutationObserver |
-| `extension/src/selectors.js` | +3 | Added `loadingIndicator` selector |
-| `extension/src/popup.js` | +8 | Updated `showResult()` to accept scrollInfo |
-| `test/auto-scroll.test.js` | +493 (rewritten) | Comprehensive tests for v2.0 |
-| `test/setup.js` | +25 | Fast scroll config for tests |
-| `test/*.test.js` | ~+100 | Added fast scroll config to integration tests |
+| `extensions/src/content.js` | +180, -100 | Complete rewrite of scroll logic with MutationObserver |
+| `extensions/src/selectors.js` | +3 | Added `loadingIndicator` selector |
+| `extensions/src/popup.js` | +8 | Updated `showResult()` to accept scrollInfo |
+| `tests/auto-scroll.test.js` | +493 (rewritten) | Comprehensive tests for v2.0 |
+| `tests/setup.js` | +25 | Fast scroll config for tests |
+| `tests/*.test.js` | ~+100 | Added fast scroll config to integration tests |
 | `docs/lld-auto-scroll.md` | +324 (rewritten) | v2.0 design document |
 
 ## Implementation Details
@@ -97,7 +97,7 @@ if (!loadingEl || loadingEl.offsetParent === null) return;
 Selectors were verified using fixture-driven development:
 1. User saved Gemini page as HTML (standard browser action)
 2. Developer parsed HTML to extract actual DOM structure
-3. Created test fixture `test/fixtures/real-gemini-snapshot.html`
+3. Created test fixture `tests/fixtures/real-gemini-snapshot.html`
 4. Verified selectors using Playwright browser automation
 
 ### Selector Verification Results
@@ -146,9 +146,9 @@ Changed JSON schema terminology to match Claude/OpenAI API conventions:
 | "Turn" (UI) | "Message" (UI) | User clarity |
 
 **Files Updated:**
-- `extension/src/content.js` - JSON schema output
-- `extension/src/popup.html` - UI text
-- `extension/src/popup.js` - Property references
+- `extensions/src/content.js` - JSON schema output
+- `extensions/src/popup.html` - UI text
+- `extensions/src/popup.js` - Property references
 - `viewer/viewer.html` - JSON parsing
 - `viewer/viewer-logic.js` - JSON parsing
 - All fixture JSON files

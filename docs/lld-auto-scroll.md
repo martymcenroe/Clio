@@ -50,10 +50,10 @@ Gemini conversations use lazy loading/virtualization. When you open a long conve
 
 | File | Purpose |
 |------|---------|
-| `extension/src/content.js` | Auto-scroll logic, extraction |
-| `extension/src/selectors.js` | DOM selectors for Gemini UI |
-| `extension/src/popup.js` | UI, triggers extraction |
-| `test/auto-scroll.test.js` | Unit tests for scroll logic |
+| `extensions/src/content.js` | Auto-scroll logic, extraction |
+| `extensions/src/selectors.js` | DOM selectors for Gemini UI |
+| `extensions/src/popup.js` | UI, triggers extraction |
+| `tests/auto-scroll.test.js` | Unit tests for scroll logic |
 
 ---
 
@@ -234,7 +234,7 @@ async function waitForLoadingComplete() {
 
 ## Test Plan
 
-### Unit Tests (test/auto-scroll.test.js)
+### Unit Tests (tests/auto-scroll.test.js)
 
 | Test ID | Description | Expected Result |
 |---------|-------------|-----------------|
@@ -284,9 +284,9 @@ async function waitForLoadingComplete() {
 
 | File | Changes |
 |------|---------|
-| `extension/src/selectors.js` | Add `loadingIndicator` selector |
-| `extension/src/content.js` | Rewrite scroll logic with MutationObserver |
-| `test/auto-scroll.test.js` | Update tests for new implementation |
+| `extensions/src/selectors.js` | Add `loadingIndicator` selector |
+| `extensions/src/content.js` | Rewrite scroll logic with MutationObserver |
+| `tests/auto-scroll.test.js` | Update tests for new implementation |
 | `docs/lld-auto-scroll.md` | This document |
 | `docs/runbook-auto-scroll.md` | Operational runbook |
 

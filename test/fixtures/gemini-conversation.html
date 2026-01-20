@@ -8,16 +8,12 @@
   <main data-conversation-id="test123abc">
     <h1 data-conversation-title>Test Conversation Title</h1>
 
-    <!-- User message 1 -->
-    <div class="conversation-turn" data-message-author-role="user">
-      <div class="user-query-container">
+    <!-- Conversation container 1: User message + Assistant response -->
+    <div class="conversation-container">
+      <user-query data-message-author-role="user">
         Hello, this is my first message. Can you help me with something?
-      </div>
-    </div>
-
-    <!-- Assistant message 1 -->
-    <div class="conversation-turn" data-message-author-role="model">
-      <div class="model-response-container">
+      </user-query>
+      <model-response data-message-author-role="model">
         <div class="response-container">
           Of course! I'd be happy to help. Here's a code example:
           <pre><code data-language="python">def hello_world():
@@ -26,29 +22,27 @@
 hello_world()</code></pre>
           Let me know if you need anything else.
         </div>
-      </div>
+      </model-response>
     </div>
 
-    <!-- User message 2 -->
-    <div class="conversation-turn" data-message-author-role="user">
-      <div class="user-query-container">
+    <!-- Conversation container 2: User message with image + Assistant response with thinking -->
+    <div class="conversation-container">
+      <user-query data-message-author-role="user">
         Thanks! Here's an image:
         <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="test image">
-      </div>
-    </div>
-
-    <!-- Assistant message 2 with thinking -->
-    <div class="conversation-turn" data-message-author-role="model">
-      <div class="model-response-container">
-        <div class="thinking-content" data-thinking-content>
-          Let me analyze this image. It appears to be a single pixel PNG.
-          I should provide a helpful response about what I observe.
-        </div>
+      </user-query>
+      <model-response data-message-author-role="model">
+        <model-thoughts data-test-id="model-thoughts">
+          <div class="thinking-content" data-thinking-content>
+            Let me analyze this image. It appears to be a single pixel PNG.
+            I should provide a helpful response about what I observe.
+          </div>
+        </model-thoughts>
         <div class="response-container">
           I can see you've shared a small test image. It appears to be a 1x1 pixel PNG.
           Is there something specific you'd like me to help you with regarding images?
         </div>
-      </div>
+      </model-response>
     </div>
 
   </main>

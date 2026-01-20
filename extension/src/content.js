@@ -598,49 +598,78 @@ function extractAssistantTurn(element, index) {
 
 /**
  * Find and extract all conversation turns in DOM order.
- * Processes in chunks for large conversations.
+ * Handles Gemini's DOM structure where each .conversation-container
+ * contains both user-query and model-response elements.
  * @returns {Promise<Array>} - Array of turn objects
  */
 async function extractTurns() {
   const turns = [];
+  let turnIndex = 0;
 
-  // Try to find messages using various selectors
-  let messageElements = document.querySelectorAll(SELECTORS.allMessages);
+  // Strategy 1: Find conversation containers (Gemini's structure)
+  // Each container has a user-query and model-response inside
+  const containers = document.querySelectorAll('.conversation-container');
 
-  // Fallback: combine user and assistant messages
-  if (messageElements.length === 0) {
-    const userMsgs = Array.from(document.querySelectorAll(SELECTORS.userMessage));
-    const assistantMsgs = Array.from(document.querySelectorAll(SELECTORS.assistantMessage));
+  if (containers.length > 0) {
+    console.log(`[Clio] Found ${containers.length} conversation containers`);
 
-    // Interleave based on DOM position
-    const allMsgs = [...userMsgs, ...assistantMsgs].sort((a, b) => {
-      const position = a.compareDocumentPosition(b);
-      return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-    });
+    for (const container of containers) {
+      // Extract user message from within this container
+      const userEl = container.querySelector('user-query, [data-message-author-role="user"]');
+      if (userEl) {
+        turns.push(extractUserTurn(userEl, turnIndex++));
+      }
 
-    messageElements = allMsgs;
+      // Extract assistant message from within this container
+      const assistantEl = container.querySelector('model-response, [data-message-author-role="model"]');
+      if (assistantEl) {
+        turns.push(extractAssistantTurn(assistantEl, turnIndex++));
+      }
+
+      // Progress update
+      if (turnIndex % 20 === 0) {
+        showProgress(`Extracting turn ${turnIndex}...`);
+        await sleep(0);
+      }
+    }
+
+    return turns;
   }
 
-  const totalMessages = messageElements.length;
+  // Strategy 2: Fallback - find user and assistant messages directly
+  // and sort them by DOM position
+  console.log('[Clio] No conversation containers, using fallback extraction');
+
+  const userMsgs = Array.from(document.querySelectorAll(SELECTORS.userMessage));
+  const assistantMsgs = Array.from(document.querySelectorAll(SELECTORS.assistantMessage));
+
+  // Combine and sort by DOM position
+  const allMsgs = [...userMsgs, ...assistantMsgs].sort((a, b) => {
+    const position = a.compareDocumentPosition(b);
+    return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  });
+
+  console.log(`[Clio] Found ${userMsgs.length} user messages, ${assistantMsgs.length} assistant messages`);
+
   const BATCH_SIZE = 20;
 
-  for (let i = 0; i < messageElements.length; i++) {
-    const element = messageElements[i];
+  for (let i = 0; i < allMsgs.length; i++) {
+    const element = allMsgs[i];
 
     // Determine role
-    const isUser = element.matches(SELECTORS.userMessage) ||
-                   element.getAttribute('data-message-author-role') === 'user' ||
-                   element.classList.contains('user-query-container');
+    const isUser = element.matches('user-query') ||
+                   element.matches(SELECTORS.userMessage) ||
+                   element.getAttribute('data-message-author-role') === 'user';
 
     if (isUser) {
-      turns.push(extractUserTurn(element, i));
+      turns.push(extractUserTurn(element, turnIndex++));
     } else {
-      turns.push(extractAssistantTurn(element, i));
+      turns.push(extractAssistantTurn(element, turnIndex++));
     }
 
     // Yield to event loop every BATCH_SIZE messages
     if (i > 0 && i % BATCH_SIZE === 0) {
-      showProgress(`Extracting turn ${i}/${totalMessages}...`);
+      showProgress(`Extracting turn ${i}/${allMsgs.length}...`);
       await sleep(0);
     }
   }

@@ -79,14 +79,21 @@ describe('countMessages', () => {
   });
 
   // Test ID: SCROLL-COUNT-002
-  test('counts messages with conversation-turn class', () => {
+  test('counts user-query and model-response custom elements', () => {
     document.body.innerHTML = `
       <main>
-        <div class="conversation-turn">Message 1</div>
-        <div class="conversation-turn">Message 2</div>
+        <div class="conversation-container">
+          <user-query>User message 1</user-query>
+          <model-response>Assistant message 1</model-response>
+        </div>
+        <div class="conversation-container">
+          <user-query>User message 2</user-query>
+          <model-response>Assistant message 2</model-response>
+        </div>
       </main>
     `;
-    expect(countMessages()).toBe(2);
+    // Counts individual messages (2 user + 2 assistant = 4), not containers
+    expect(countMessages()).toBe(4);
   });
 
   // Test ID: SCROLL-COUNT-003

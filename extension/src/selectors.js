@@ -26,9 +26,10 @@ const SELECTORS = {
   // VERIFIED: <model-response> custom element with nested .response-container
   assistantMessage: 'model-response, [data-message-author-role="model"], .model-response-container',
 
-  // All messages (conversation turns)
-  // VERIFIED: <div class="conversation-container"> contains both user-query and model-response
-  allMessages: '.conversation-container, [data-message-author-role], .conversation-turn',
+  // All messages (individual messages, not containers)
+  // NOTE: .conversation-container contains BOTH user+assistant, so don't count it
+  // Use userMessage + assistantMessage selectors for accurate count
+  allMessages: 'user-query, model-response, [data-message-author-role], .conversation-turn',
 
   // Expandable content - SCOPED TO MESSAGE CONTENT ONLY
   // FIXED: Was 'button[aria-expanded="false"]' which clicked menus, settings, etc.

@@ -205,7 +205,7 @@ async function expandAllContent() {
 let SCROLL_CONFIG = {
   scrollStep: 5000,             // Large scroll to trigger batch loading
   scrollDelay: 2000,            // Fallback wait when no loading indicator
-  loadingAppearDelay: 300,      // Wait for loading indicator to appear after scroll
+  loadingAppearDelay: 500,      // Wait 500ms for loading indicator to appear
   mutationTimeout: 3000,        // Wait up to 3s for DOM changes after reaching top
   maxScrollAttempts: 100,       // Reduced - should need far fewer scrolls now
   loadingCheckInterval: 100,    // Check loading state every 100ms
@@ -243,10 +243,7 @@ function resetScrollConfig() {
  * @returns {number} - Number of message elements
  */
 function countMessages() {
-  const messages = document.querySelectorAll(SELECTORS.allMessages);
-  if (messages.length > 0) return messages.length;
-
-  // Fallback: count user + assistant messages
+  // Count individual messages (user + assistant), not containers
   const userMsgs = document.querySelectorAll(SELECTORS.userMessage);
   const assistantMsgs = document.querySelectorAll(SELECTORS.assistantMessage);
   return userMsgs.length + assistantMsgs.length;
@@ -382,12 +379,24 @@ async function scrollToLoadAllMessages(onProgress) {
       await sleep(SCROLL_CONFIG.loadingAppearDelay);
 
       // Check if loading indicator appeared
-      const loadingBefore = !!document.querySelector(SELECTORS.loadingIndicator);
+      const loadingEl = document.querySelector(SELECTORS.loadingIndicator);
+      const loadingBefore = !!loadingEl;
+
+      // Log loading indicator status for debugging
+      if (scrollAttempts <= 5 || scrollAttempts % 10 === 0) {
+        logScroll('Loading check', {
+          found: loadingBefore,
+          selector: SELECTORS.loadingIndicator,
+          element: loadingEl ? loadingEl.tagName : 'none'
+        });
+      }
 
       // If loading indicator is visible, wait for it to disappear
       // This ensures we wait for the full batch to load
       if (loadingBefore) {
+        logScroll('Waiting for loading to complete...');
         await waitForLoadingComplete();
+        logScroll('Loading complete!');
       } else {
         // No loading indicator - wait a bit in case content is loading without indicator
         await sleep(SCROLL_CONFIG.scrollDelay);

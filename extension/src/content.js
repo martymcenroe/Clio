@@ -358,7 +358,7 @@ async function scrollToLoadAllMessages(onProgress) {
 
   // Logging helper
   const logScroll = (msg, data = {}) => {
-    console.log(`%c[Clio Scroll #${scrollAttempts}]`, 'color: #2196F3; font-weight: bold;', msg, data);
+    console.log(`[Clio Scroll #${scrollAttempts}]`, msg, data);
   };
 
   try {
@@ -934,21 +934,19 @@ async function extractConversation() {
     hideProgress();
 
     // Log extraction summary to console
-    console.group('%c[Clio] Extraction Complete', 'color: #4CAF50; font-weight: bold; font-size: 14px;');
-    console.log('%cConversation:', 'font-weight: bold;', title || 'Untitled');
-    console.log('%cMessages extracted:', 'font-weight: bold;', turns.length);
-    console.log('%cImages extracted:', 'font-weight: bold;', images.length);
-    console.log('%cScroll attempts:', 'font-weight: bold;', scrollResult.scrollAttempts);
-    console.log('%cMessages loaded:', 'font-weight: bold;', scrollResult.messagesLoaded);
-    console.log('%cExpanded elements:', 'font-weight: bold;', expandedCount);
+    console.group('[Clio] Extraction Complete');
+    console.log('Conversation:', title || 'Untitled');
+    console.log('Messages extracted:', turns.length);
+    console.log('Images extracted:', images.length);
+    console.log('Scroll attempts:', scrollResult.scrollAttempts);
+    console.log('Messages loaded:', scrollResult.messagesLoaded);
+    console.log('Expanded elements:', expandedCount);
     if (errors.length > 0) {
-      console.warn('%cImage errors:', 'font-weight: bold; color: #FF9800;', errors.length);
-      console.table(errors.map((e, i) => ({ index: i + 1, error: e })));
+      console.warn('Image errors:', errors.length);
     }
     if (warnings.length > 0) {
-      console.warn('%cWarnings:', 'font-weight: bold; color: #FF9800;', warnings);
+      console.warn('Warnings:', warnings);
     }
-    console.log('%cScroll config used:', 'font-weight: bold;', SCROLL_CONFIG);
     console.groupEnd();
 
     return {
@@ -960,7 +958,7 @@ async function extractConversation() {
 
   } catch (error) {
     hideProgress();
-    console.error('%c[Clio] Extraction Failed', 'color: #F44336; font-weight: bold; font-size: 14px;', error);
+    console.error('[Clio] Extraction Failed', error);
     return {
       success: false,
       error: `Extraction failed: ${error.message}`

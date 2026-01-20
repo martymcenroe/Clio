@@ -24,3 +24,9 @@ tmp/
 # Playwright
 test-results/
 playwright-report/
+
+# HTML input files (may contain sensitive data from saved pages)
+docs/html-input/
+
+# Session logs (may contain sensitive info)
+docs/session-logs/

@@ -150,7 +150,6 @@ async function expandAllContent() {
   // This prevents clicking buttons in the sidebar or other UI elements
   const container = document.querySelector(SELECTORS.conversationContainer);
   if (!container) {
-    console.warn('No conversation container found, skipping expansion');
     return 0;
   }
 
@@ -158,17 +157,15 @@ async function expandAllContent() {
   const expandButtons = container.querySelectorAll(SELECTORS.expandButton);
   for (const button of expandButtons) {
     // Safety check: skip menu triggers and global UI buttons
-    // These have aria-haspopup or specific menu classes
     if (button.matches('[aria-haspopup="true"], [aria-haspopup="menu"], .mat-menu-trigger, .mat-mdc-menu-trigger')) {
-      console.log('Skipping menu button:', button);
       continue;
     }
     try {
       button.click();
       expandedCount++;
-      await sleep(300); // Wait for content to expand
+      await sleep(300);
     } catch (e) {
-      console.warn('Failed to expand element:', e);
+      // Silently ignore expansion failures
     }
   }
 
@@ -177,15 +174,14 @@ async function expandAllContent() {
   for (const toggle of thinkingToggles) {
     // Safety check: skip if it's a menu trigger
     if (toggle.matches('[aria-haspopup="true"], [aria-haspopup="menu"], .mat-menu-trigger, .mat-mdc-menu-trigger')) {
-      console.log('Skipping menu in thinking area:', toggle);
       continue;
     }
     try {
       toggle.click();
       expandedCount++;
-      await sleep(300); // Wait for content to expand
+      await sleep(300);
     } catch (e) {
-      console.warn('Failed to expand thinking:', e);
+      // Silently ignore expansion failures
     }
   }
 
@@ -356,9 +352,9 @@ async function scrollToLoadAllMessages(onProgress) {
   const initialCount = countMessages();
   reportProgress(`Loading conversation history... (${initialCount} messages visible)`);
 
-  // Logging helper
+  // Logging helper (disabled - enable for debugging)
   const logScroll = (msg, data = {}) => {
-    console.log(`[Clio Scroll #${scrollAttempts}]`, msg, data);
+    // console.log(`[Clio Scroll #${scrollAttempts}]`, msg, data);
   };
 
   try {
@@ -629,7 +625,6 @@ async function extractTurns() {
   const containers = document.querySelectorAll('.conversation-container');
 
   if (containers.length > 0) {
-    console.log(`[Clio] Found ${containers.length} conversation containers`);
 
     for (const container of containers) {
       // Extract user message from within this container
@@ -656,8 +651,6 @@ async function extractTurns() {
 
   // Strategy 2: Fallback - find user and assistant messages directly
   // and sort them by DOM position
-  console.log('[Clio] No conversation containers, using fallback extraction');
-
   const userMsgs = Array.from(document.querySelectorAll(SELECTORS.userMessage));
   const assistantMsgs = Array.from(document.querySelectorAll(SELECTORS.assistantMessage));
 
@@ -666,8 +659,6 @@ async function extractTurns() {
     const position = a.compareDocumentPosition(b);
     return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
   });
-
-  console.log(`[Clio] Found ${userMsgs.length} user messages, ${assistantMsgs.length} assistant messages`);
 
   const BATCH_SIZE = 20;
 
@@ -933,21 +924,7 @@ async function extractConversation() {
 
     hideProgress();
 
-    // Log extraction summary to console
-    console.group('[Clio] Extraction Complete');
-    console.log('Conversation:', title || 'Untitled');
-    console.log('Messages extracted:', turns.length);
-    console.log('Images extracted:', images.length);
-    console.log('Scroll attempts:', scrollResult.scrollAttempts);
-    console.log('Messages loaded:', scrollResult.messagesLoaded);
-    console.log('Expanded elements:', expandedCount);
-    if (errors.length > 0) {
-      console.warn('Image errors:', errors.length);
-    }
-    if (warnings.length > 0) {
-      console.warn('Warnings:', warnings);
-    }
-    console.groupEnd();
+    // Extraction complete - all info available in metadata, no console output
 
     return {
       success: true,
@@ -958,7 +935,6 @@ async function extractConversation() {
 
   } catch (error) {
     hideProgress();
-    console.error('[Clio] Extraction Failed', error);
     return {
       success: false,
       error: `Extraction failed: ${error.message}`

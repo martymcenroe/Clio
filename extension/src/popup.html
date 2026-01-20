@@ -148,6 +148,31 @@
       font-weight: 500;
     }
 
+    .scroll-info {
+      font-size: 10px;
+      color: #80868b;
+      display: none;
+      margin-left: 4px;
+    }
+
+    .scroll-info.visible {
+      display: inline;
+    }
+
+    .last-indicator {
+      font-size: 10px;
+      color: #80868b;
+      text-align: center;
+      padding-top: 8px;
+      border-top: 1px solid #e0e0e0;
+      margin-top: 8px;
+      display: none;
+    }
+
+    .last-indicator.visible {
+      display: block;
+    }
+
     .footer {
       margin-top: 16px;
       font-size: 11px;
@@ -175,7 +200,7 @@
   <div id="result" class="result">
     <div class="result-row">
       <span>Messages:</span>
-      <span id="messageCount">-</span>
+      <span><span id="messageCount">-</span><span id="scrollInfo" class="scroll-info"></span></span>
     </div>
     <div class="result-row">
       <span>Images:</span>
@@ -184,6 +209,9 @@
     <div class="result-row">
       <span>Errors:</span>
       <span id="errorCount">-</span>
+    </div>
+    <div id="lastExtractionIndicator" class="last-indicator">
+      (from previous extraction)
     </div>
   </div>
 

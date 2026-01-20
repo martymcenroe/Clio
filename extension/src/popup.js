@@ -29,7 +29,7 @@ function hideProgress() {
   progressEl.classList.remove('visible');
 }
 
-function showResult(messageCount, images, errors, scrollInfo) {
+function showResult(messageCount, images, errors, scrollInfo, isLastResult = false) {
   const resultEl = document.getElementById('result');
   resultEl.classList.add('visible');
   document.getElementById('messageCount').textContent = messageCount;
@@ -39,9 +39,66 @@ function showResult(messageCount, images, errors, scrollInfo) {
   // Show scroll info if available
   const scrollInfoEl = document.getElementById('scrollInfo');
   if (scrollInfoEl && scrollInfo) {
-    scrollInfoEl.textContent = `(${scrollInfo.messagesLoaded} loaded)`;
+    scrollInfoEl.textContent = `(${scrollInfo.messagesLoaded} loaded, ${scrollInfo.scrollAttempts} scrolls)`;
     scrollInfoEl.classList.add('visible');
   }
+
+  // Show "last extraction" indicator if restoring from localStorage
+  const lastIndicator = document.getElementById('lastExtractionIndicator');
+  if (lastIndicator) {
+    if (isLastResult) {
+      lastIndicator.classList.add('visible');
+    } else {
+      lastIndicator.classList.remove('visible');
+    }
+  }
+}
+
+/**
+ * Save extraction results to localStorage for persistence.
+ */
+function saveLastResult(data) {
+  try {
+    const lastResult = {
+      messageCount: data.metadata.messageCount,
+      imageCount: data.metadata.imageCount,
+      errorCount: data.metadata.extractionErrors.length,
+      scrollInfo: data.metadata.scrollInfo,
+      title: data.metadata.title,
+      timestamp: new Date().toISOString()
+    };
+    localStorage.setItem('clio_lastResult', JSON.stringify(lastResult));
+  } catch (e) {
+    // Ignore localStorage errors
+  }
+}
+
+/**
+ * Restore last extraction result from localStorage if available.
+ */
+function restoreLastResult() {
+  try {
+    const saved = localStorage.getItem('clio_lastResult');
+    if (saved) {
+      const lastResult = JSON.parse(saved);
+      // Only show if less than 1 hour old
+      const age = Date.now() - new Date(lastResult.timestamp).getTime();
+      if (age < 60 * 60 * 1000) {
+        showResult(
+          lastResult.messageCount,
+          lastResult.imageCount,
+          lastResult.errorCount,
+          lastResult.scrollInfo,
+          true // isLastResult
+        );
+        setStatus(`Last: ${lastResult.title || 'Untitled'}`, 'info');
+        return true;
+      }
+    }
+  } catch (e) {
+    // Ignore localStorage errors
+  }
+  return false;
 }
 
 function setButtonState(enabled, text = 'Extract Conversation') {
@@ -201,6 +258,9 @@ async function handleExtract() {
       data.metadata.scrollInfo
     );
 
+    // Save to localStorage for persistence (popup may close during download)
+    saveLastResult(data);
+
     // Check size
     const estimatedSize = estimateExportSize(images || []);
     if (estimatedSize > 500 * 1024 * 1024) { // 500MB
@@ -247,6 +307,9 @@ const extractBtn = document.getElementById('extractBtn');
 if (extractBtn) {
   extractBtn.addEventListener('click', handleExtract);
 
+  // Restore last extraction results if available (for when popup was closed during save)
+  restoreLastResult();
+
   // Check if we're on a Gemini page on load
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (!tab || !tab.url || !tab.url.includes('gemini.google.com')) {
@@ -272,6 +335,8 @@ if (typeof module !== 'undefined' && module.exports) {
     setButtonState,
     createZip,
     downloadBlob,
-    handleExtract
+    handleExtract,
+    saveLastResult,
+    restoreLastResult
   };
 }

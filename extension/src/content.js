@@ -243,9 +243,11 @@ function resetScrollConfig() {
  * @returns {number} - Number of message elements
  */
 function countMessages() {
-  // Count individual messages (user + assistant), not containers
-  const userMsgs = document.querySelectorAll(SELECTORS.userMessage);
-  const assistantMsgs = document.querySelectorAll(SELECTORS.assistantMessage);
+  // Count ONLY primary Gemini elements (user-query, model-response)
+  // Don't use composite SELECTORS which include fallbacks that may be nested
+  // This prevents double-counting when .user-query-container is inside user-query
+  const userMsgs = document.querySelectorAll('user-query, [data-message-author-role="user"]');
+  const assistantMsgs = document.querySelectorAll('model-response, [data-message-author-role="model"]');
   return userMsgs.length + assistantMsgs.length;
 }
 

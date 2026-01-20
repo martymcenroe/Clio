@@ -97,12 +97,13 @@ describe('countMessages', () => {
   });
 
   // Test ID: SCROLL-COUNT-003
-  test('falls back to user + assistant message selectors', () => {
+  test('counts data-message-author-role elements (alternate DOM structure)', () => {
+    // Some conversations may use attribute-based markers instead of custom elements
     document.body.innerHTML = `
       <main>
-        <div class="user-query-container">User message</div>
-        <div class="model-response-container">Model response</div>
-        <div class="user-query-container">User message 2</div>
+        <div data-message-author-role="user">User message</div>
+        <div data-message-author-role="model">Model response</div>
+        <div data-message-author-role="user">User message 2</div>
       </main>
     `;
     expect(countMessages()).toBe(3);

@@ -47,17 +47,17 @@ describe('SCROLL_CONFIG (v2.0)', () => {
 
   // Test ID: SCROLL-CONFIG-002
   test('has revised values for network latency', () => {
-    // v2.3: Large scrolls with longer waits for batch loading
-    expect(SCROLL_CONFIG.scrollStep).toBe(5000);      // Large scroll to trigger batch loading
-    expect(SCROLL_CONFIG.scrollDelay).toBe(2000);     // 2s wait for content to load
+    // v2.4: 10x slower scrolling for reliable batch loading
+    expect(SCROLL_CONFIG.scrollStep).toBe(5000);       // Large scroll to trigger batch loading
+    expect(SCROLL_CONFIG.scrollDelay).toBe(20000);     // 20s fallback wait (10x slower)
     expect(SCROLL_CONFIG.mutationTimeout).toBe(3000);
-    expect(SCROLL_CONFIG.maxScrollAttempts).toBe(100); // Far fewer scrolls needed now
+    expect(SCROLL_CONFIG.maxScrollAttempts).toBe(100); // Should need ~10-20 scrolls now
   });
 
   // Test ID: SCROLL-CONFIG-003
   test('has loading indicator configuration', () => {
     expect(SCROLL_CONFIG.loadingCheckInterval).toBe(100);
-    expect(SCROLL_CONFIG.maxLoadingWait).toBe(15000); // Increased from 10000 for slow responses
+    expect(SCROLL_CONFIG.maxLoadingWait).toBe(30000);  // 30s max wait for loading
   });
 });
 

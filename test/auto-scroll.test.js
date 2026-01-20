@@ -26,6 +26,7 @@ global.SELECTORS = SELECTORS;
 const FAST_SCROLL_CONFIG = {
   scrollStep: 100,
   scrollDelay: 10,
+  loadingAppearDelay: 5,
   mutationTimeout: 50,
   maxScrollAttempts: 20,
   loadingCheckInterval: 10,
@@ -46,11 +47,11 @@ describe('SCROLL_CONFIG (v2.0)', () => {
 
   // Test ID: SCROLL-CONFIG-002
   test('has revised values for network latency', () => {
-    // v2.2: 1.5s delay to wait for Gemini content loading
-    expect(SCROLL_CONFIG.scrollStep).toBe(800);
-    expect(SCROLL_CONFIG.scrollDelay).toBe(1500);     // 1.5s per scroll for Gemini latency
-    expect(SCROLL_CONFIG.mutationTimeout).toBe(3000); // Increased from 2000 for slow responses
-    expect(SCROLL_CONFIG.maxScrollAttempts).toBe(500);
+    // v2.3: Large scrolls with longer waits for batch loading
+    expect(SCROLL_CONFIG.scrollStep).toBe(5000);      // Large scroll to trigger batch loading
+    expect(SCROLL_CONFIG.scrollDelay).toBe(2000);     // 2s wait for content to load
+    expect(SCROLL_CONFIG.mutationTimeout).toBe(3000);
+    expect(SCROLL_CONFIG.maxScrollAttempts).toBe(100); // Far fewer scrolls needed now
   });
 
   // Test ID: SCROLL-CONFIG-003

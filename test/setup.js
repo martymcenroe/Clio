@@ -97,6 +97,7 @@ afterEach(() => {
 global.TEST_SCROLL_CONFIG = {
   scrollStep: 100,
   scrollDelay: 10,
+  loadingAppearDelay: 5,        // Fast for tests
   mutationTimeout: 50,
   maxScrollAttempts: 20,
   loadingCheckInterval: 10,

@@ -322,6 +322,7 @@ describe('extractConversation with image errors', () => {
     setScrollConfig({
       scrollStep: 100,
       scrollDelay: 10,
+      loadingAppearDelay: 5,
       mutationTimeout: 50,
       maxScrollAttempts: 20,
       loadingCheckInterval: 10,

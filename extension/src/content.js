@@ -203,13 +203,14 @@ async function expandAllContent() {
  * LLD Reference: docs/lld-auto-scroll.md
  */
 let SCROLL_CONFIG = {
-  scrollStep: 800,              // Pixels to scroll per step (larger for efficiency)
-  scrollDelay: 1500,            // Ms to wait between scroll steps (1.5s for Gemini latency)
+  scrollStep: 5000,             // Large scroll to trigger batch loading
+  scrollDelay: 2000,            // Fallback wait when no loading indicator
+  loadingAppearDelay: 300,      // Wait for loading indicator to appear after scroll
   mutationTimeout: 3000,        // Wait up to 3s for DOM changes after reaching top
-  maxScrollAttempts: 500,       // Safety limit to prevent infinite loops
+  maxScrollAttempts: 100,       // Reduced - should need far fewer scrolls now
   loadingCheckInterval: 100,    // Check loading state every 100ms
   maxLoadingWait: 15000,        // Max 15s waiting for a single loading state
-  progressUpdateInterval: 5     // Update progress every 5 scroll steps
+  progressUpdateInterval: 2     // Update progress more frequently
 };
 
 /**
@@ -377,14 +378,20 @@ async function scrollToLoadAllMessages(onProgress) {
       // Modern SPAs often only respond to events, not direct property changes
       scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
 
-      // Wait for potential network request and rendering
-      await sleep(SCROLL_CONFIG.scrollDelay);
+      // Short wait for loading indicator to APPEAR
+      await sleep(SCROLL_CONFIG.loadingAppearDelay);
 
-      // Check for loading indicator BEFORE waiting
+      // Check if loading indicator appeared
       const loadingBefore = !!document.querySelector(SELECTORS.loadingIndicator);
 
-      // Wait for any loading indicator to disappear
-      await waitForLoadingComplete();
+      // If loading indicator is visible, wait for it to disappear
+      // This ensures we wait for the full batch to load
+      if (loadingBefore) {
+        await waitForLoadingComplete();
+      } else {
+        // No loading indicator - wait a bit in case content is loading without indicator
+        await sleep(SCROLL_CONFIG.scrollDelay);
+      }
 
       const loadingAfter = !!document.querySelector(SELECTORS.loadingIndicator);
       const afterCount = countMessages();

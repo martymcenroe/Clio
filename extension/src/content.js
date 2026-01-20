@@ -157,6 +157,12 @@ async function expandAllContent() {
   // Find expand buttons ONLY within the conversation container
   const expandButtons = container.querySelectorAll(SELECTORS.expandButton);
   for (const button of expandButtons) {
+    // Safety check: skip menu triggers and global UI buttons
+    // These have aria-haspopup or specific menu classes
+    if (button.matches('[aria-haspopup="true"], [aria-haspopup="menu"], .mat-menu-trigger, .mat-mdc-menu-trigger')) {
+      console.log('Skipping menu button:', button);
+      continue;
+    }
     try {
       button.click();
       expandedCount++;
@@ -169,6 +175,11 @@ async function expandAllContent() {
   // Find thinking toggles ONLY within the conversation container
   const thinkingToggles = container.querySelectorAll(SELECTORS.thinkingToggle);
   for (const toggle of thinkingToggles) {
+    // Safety check: skip if it's a menu trigger
+    if (toggle.matches('[aria-haspopup="true"], [aria-haspopup="menu"], .mat-menu-trigger, .mat-mdc-menu-trigger')) {
+      console.log('Skipping menu in thinking area:', toggle);
+      continue;
+    }
     try {
       toggle.click();
       expandedCount++;

@@ -11,26 +11,30 @@
 const SELECTORS = {
   // Conversation structure
   // VERIFIED: <div class="conversation-container message-actions-hover-boundary" id="...">
-  conversationContainer: '.conversation-container, [data-conversation-id], main',
+  // FIXED: Removed 'main' - too broad, causes clicking of global UI elements
+  conversationContainer: '.conversation-container, [data-conversation-id]',
   // VERIFIED: <span class="conversation-title gds-title-m">
   sessionTitle: '.conversation-title, h1[data-conversation-title], h1',
 
   // Scroll container (for lazy-loaded conversations)
   // VERIFIED: <div id="chat-history" class="chat-history-scroll-container">
-  scrollContainer: '#chat-history, .chat-history-scroll-container, [data-scroll-container], main',
+  scrollContainer: '#chat-history, .chat-history-scroll-container, [data-scroll-container]',
 
   // Message elements
   // VERIFIED: <user-query> custom element with nested .query-text
   userMessage: 'user-query, [data-message-author-role="user"], .user-query-container',
   // VERIFIED: <model-response> custom element with nested .response-container
-  assistantMessage: 'model-response, [data-message-author-role="model"], .model-response-container, .response-container',
+  assistantMessage: 'model-response, [data-message-author-role="model"], .model-response-container',
 
   // All messages (conversation turns)
   // VERIFIED: <div class="conversation-container"> contains both user-query and model-response
   allMessages: '.conversation-container, [data-message-author-role], .conversation-turn',
 
-  // Expandable content
-  expandButton: 'button[aria-expanded="false"], [data-expand-button], .expand-button',
+  // Expandable content - SCOPED TO MESSAGE CONTENT ONLY
+  // FIXED: Was 'button[aria-expanded="false"]' which clicked menus, settings, etc.
+  // Now scoped to only buttons inside message elements
+  expandButton: 'user-query button[aria-expanded="false"], model-response button[aria-expanded="false"], .conversation-container button[aria-expanded="false"]:not([aria-haspopup])',
+
   // VERIFIED: <model-thoughts data-test-id="model-thoughts">
   thinkingToggle: '[data-test-id="model-thoughts"] button, model-thoughts button, [data-thinking-toggle], button[aria-label*="thinking"]',
   // VERIFIED: .thoughts-body inside model-thoughts

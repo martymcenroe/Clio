@@ -27,11 +27,17 @@ describe('Content Expansion', () => {
   describe('expandAllContent', () => {
     test('clicks expand buttons', async () => {
       const clickHandler = jest.fn();
-      document.body.innerHTML = `
-        <main data-conversation-id="test">
-          <button aria-expanded="false" class="expand-btn">Expand</button>
-        </main>
-      `;
+      // FIXED: Use .conversation-container and scope button to model-response
+      const container = document.createElement('div');
+      container.classList.add('conversation-container');
+      const modelResponse = document.createElement('model-response');
+      const btn = document.createElement('button');
+      btn.setAttribute('aria-expanded', 'false');
+      btn.classList.add('expand-btn');
+      btn.textContent = 'Expand';
+      modelResponse.appendChild(btn);
+      container.appendChild(modelResponse);
+      document.body.appendChild(container);
 
       const button = document.querySelector('button');
       button.addEventListener('click', clickHandler);
@@ -120,12 +126,27 @@ describe('Content Expansion', () => {
       // Test that the try/catch in expandAllContent handles errors gracefully
       // Note: We can't easily simulate a click throwing in jsdom without it
       // also reporting the error, so we test the happy path coverage instead
-      document.body.innerHTML = `
-        <main data-conversation-id="test">
-          <button aria-expanded="false" id="btn1">Button 1</button>
-          <button aria-expanded="false" id="btn2">Button 2</button>
-        </main>
-      `;
+      // FIXED: Use .conversation-container and scope buttons to user-query
+      const container = document.createElement('div');
+      container.classList.add('conversation-container');
+
+      const userQuery = document.createElement('user-query');
+      const btn1 = document.createElement('button');
+      btn1.setAttribute('aria-expanded', 'false');
+      btn1.id = 'btn1';
+      btn1.textContent = 'Button 1';
+      userQuery.appendChild(btn1);
+
+      const modelResponse = document.createElement('model-response');
+      const btn2 = document.createElement('button');
+      btn2.setAttribute('aria-expanded', 'false');
+      btn2.id = 'btn2';
+      btn2.textContent = 'Button 2';
+      modelResponse.appendChild(btn2);
+
+      container.appendChild(userQuery);
+      container.appendChild(modelResponse);
+      document.body.appendChild(container);
 
       const clicks = [];
       document.querySelectorAll('button').forEach(btn => {

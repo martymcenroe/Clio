@@ -204,7 +204,7 @@ async function expandAllContent() {
  */
 let SCROLL_CONFIG = {
   scrollStep: 800,              // Pixels to scroll per step (larger for efficiency)
-  scrollDelay: 500,             // Ms to wait between scroll steps (increased for network latency)
+  scrollDelay: 1500,            // Ms to wait between scroll steps (1.5s for Gemini latency)
   mutationTimeout: 3000,        // Wait up to 3s for DOM changes after reaching top
   maxScrollAttempts: 500,       // Safety limit to prevent infinite loops
   loadingCheckInterval: 100,    // Check loading state every 100ms

@@ -46,9 +46,9 @@ describe('SCROLL_CONFIG (v2.0)', () => {
 
   // Test ID: SCROLL-CONFIG-002
   test('has revised values for network latency', () => {
-    // v2.1: Increased delays for slow Gemini responses
+    // v2.2: 1.5s delay to wait for Gemini content loading
     expect(SCROLL_CONFIG.scrollStep).toBe(800);
-    expect(SCROLL_CONFIG.scrollDelay).toBe(500);      // Increased from 300 for network latency
+    expect(SCROLL_CONFIG.scrollDelay).toBe(1500);     // 1.5s per scroll for Gemini latency
     expect(SCROLL_CONFIG.mutationTimeout).toBe(3000); // Increased from 2000 for slow responses
     expect(SCROLL_CONFIG.maxScrollAttempts).toBe(500);
   });

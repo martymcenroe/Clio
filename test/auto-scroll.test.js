@@ -46,17 +46,17 @@ describe('SCROLL_CONFIG (v2.0)', () => {
 
   // Test ID: SCROLL-CONFIG-002
   test('has revised values for network latency', () => {
-    // v2.0: Longer delays to handle network latency
+    // v2.1: Increased delays for slow Gemini responses
     expect(SCROLL_CONFIG.scrollStep).toBe(800);
-    expect(SCROLL_CONFIG.scrollDelay).toBe(300);     // Was 150 in v1
-    expect(SCROLL_CONFIG.mutationTimeout).toBe(2000); // New in v2
+    expect(SCROLL_CONFIG.scrollDelay).toBe(500);      // Increased from 300 for network latency
+    expect(SCROLL_CONFIG.mutationTimeout).toBe(3000); // Increased from 2000 for slow responses
     expect(SCROLL_CONFIG.maxScrollAttempts).toBe(500);
   });
 
   // Test ID: SCROLL-CONFIG-003
   test('has loading indicator configuration', () => {
     expect(SCROLL_CONFIG.loadingCheckInterval).toBe(100);
-    expect(SCROLL_CONFIG.maxLoadingWait).toBe(10000);
+    expect(SCROLL_CONFIG.maxLoadingWait).toBe(15000); // Increased from 10000 for slow responses
   });
 });
 

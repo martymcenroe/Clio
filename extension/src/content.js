@@ -204,11 +204,11 @@ async function expandAllContent() {
  */
 let SCROLL_CONFIG = {
   scrollStep: 800,              // Pixels to scroll per step (larger for efficiency)
-  scrollDelay: 300,             // Ms to wait between scroll steps (more time for network)
-  mutationTimeout: 2000,        // Wait up to 2s for DOM changes after reaching top
+  scrollDelay: 500,             // Ms to wait between scroll steps (increased for network latency)
+  mutationTimeout: 3000,        // Wait up to 3s for DOM changes after reaching top
   maxScrollAttempts: 500,       // Safety limit to prevent infinite loops
   loadingCheckInterval: 100,    // Check loading state every 100ms
-  maxLoadingWait: 10000,        // Max 10s waiting for a single loading state
+  maxLoadingWait: 15000,        // Max 15s waiting for a single loading state
   progressUpdateInterval: 5     // Update progress every 5 scroll steps
 };
 
@@ -226,11 +226,11 @@ function setScrollConfig(overrides) {
 function resetScrollConfig() {
   SCROLL_CONFIG = {
     scrollStep: 800,
-    scrollDelay: 300,
-    mutationTimeout: 2000,
+    scrollDelay: 500,
+    mutationTimeout: 3000,
     maxScrollAttempts: 500,
     loadingCheckInterval: 100,
-    maxLoadingWait: 10000,
+    maxLoadingWait: 15000,
     progressUpdateInterval: 5
   };
 }
@@ -858,6 +858,24 @@ async function extractConversation() {
 
     hideProgress();
 
+    // Log extraction summary to console
+    console.group('%c[Clio] Extraction Complete', 'color: #4CAF50; font-weight: bold; font-size: 14px;');
+    console.log('%cConversation:', 'font-weight: bold;', title || 'Untitled');
+    console.log('%cTurns extracted:', 'font-weight: bold;', turns.length);
+    console.log('%cImages extracted:', 'font-weight: bold;', images.length);
+    console.log('%cScroll attempts:', 'font-weight: bold;', scrollResult.scrollAttempts);
+    console.log('%cMessages loaded:', 'font-weight: bold;', scrollResult.messagesLoaded);
+    console.log('%cExpanded elements:', 'font-weight: bold;', expandedCount);
+    if (errors.length > 0) {
+      console.warn('%cImage errors:', 'font-weight: bold; color: #FF9800;', errors.length);
+      console.table(errors.map((e, i) => ({ index: i + 1, error: e })));
+    }
+    if (warnings.length > 0) {
+      console.warn('%cWarnings:', 'font-weight: bold; color: #FF9800;', warnings);
+    }
+    console.log('%cScroll config used:', 'font-weight: bold;', SCROLL_CONFIG);
+    console.groupEnd();
+
     return {
       success: true,
       data,
@@ -867,6 +885,7 @@ async function extractConversation() {
 
   } catch (error) {
     hideProgress();
+    console.error('%c[Clio] Extraction Failed', 'color: #F44336; font-weight: bold; font-size: 14px;', error);
     return {
       success: false,
       error: `Extraction failed: ${error.message}`

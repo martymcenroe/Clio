@@ -356,10 +356,18 @@ async function scrollToLoadAllMessages(onProgress) {
   const initialCount = countMessages();
   reportProgress(`Loading conversation history... (${initialCount} messages visible)`);
 
+  // Logging helper
+  const logScroll = (msg, data = {}) => {
+    console.log(`%c[Clio Scroll #${scrollAttempts}]`, 'color: #2196F3; font-weight: bold;', msg, data);
+  };
+
   try {
     while (scrollAttempts < SCROLL_CONFIG.maxScrollAttempts) {
       scrollAttempts++;
       mutationDetected = false;
+
+      const beforeCount = countMessages();
+      const beforeScroll = scrollContainer.scrollTop;
 
       // Scroll up
       const targetScrollTop = Math.max(0, scrollContainer.scrollTop - SCROLL_CONFIG.scrollStep);
@@ -372,16 +380,35 @@ async function scrollToLoadAllMessages(onProgress) {
       // Wait for potential network request and rendering
       await sleep(SCROLL_CONFIG.scrollDelay);
 
+      // Check for loading indicator BEFORE waiting
+      const loadingBefore = !!document.querySelector(SELECTORS.loadingIndicator);
+
       // Wait for any loading indicator to disappear
       await waitForLoadingComplete();
+
+      const loadingAfter = !!document.querySelector(SELECTORS.loadingIndicator);
+      const afterCount = countMessages();
 
       // Check current state
       const currentScrollTop = scrollContainer.scrollTop;
       const atTop = currentScrollTop === 0;
       const noMovement = currentScrollTop === lastScrollTop;
 
+      // Log every 10 scrolls or on significant events
+      if (scrollAttempts % 10 === 0 || loadingBefore || mutationDetected || afterCount !== beforeCount) {
+        logScroll('Status', {
+          messages: `${beforeCount} → ${afterCount}`,
+          scroll: `${Math.round(beforeScroll)} → ${Math.round(currentScrollTop)}`,
+          loading: loadingBefore ? (loadingAfter ? 'STILL LOADING' : 'loaded') : 'none',
+          mutation: mutationDetected,
+          atTop,
+          noMovement
+        });
+      }
+
       if (atTop || noMovement) {
         consecutiveNoMovement++;
+        logScroll('At top/stuck', { consecutiveNoMovement, mutationDetected });
 
         // Give extra time for final content to load
         await sleep(SCROLL_CONFIG.mutationTimeout);
@@ -389,6 +416,7 @@ async function scrollToLoadAllMessages(onProgress) {
         // If we're at top/stuck AND no mutations detected, we're done
         if (!mutationDetected && consecutiveNoMovement >= 2) {
           const finalCount = countMessages();
+          logScroll('COMPLETE', { finalMessages: finalCount, totalScrolls: scrollAttempts });
           reportProgress(`Loaded ${finalCount} messages`);
           return {
             success: true,
@@ -408,7 +436,7 @@ async function scrollToLoadAllMessages(onProgress) {
 
       lastScrollTop = currentScrollTop;
 
-      // Progress update
+      // Progress update (to UI)
       if (scrollAttempts % SCROLL_CONFIG.progressUpdateInterval === 0) {
         const currentCount = countMessages();
         reportProgress(`Loading history... (${currentCount} messages, scroll ${scrollAttempts})`);

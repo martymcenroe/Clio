@@ -84,7 +84,7 @@ global.setFixture = (name) => {
 afterEach(() => {
   // Reset scroll config if it exists (for auto-scroll tests)
   try {
-    const { resetScrollConfig } = require('../extension/src/content.js');
+    const { resetScrollConfig } = require('../extensions/src/content.js');
     if (resetScrollConfig) {
       resetScrollConfig();
     }

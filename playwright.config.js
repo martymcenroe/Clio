@@ -6,7 +6,7 @@ const { defineConfig } = require('@playwright/test');
  * @see https://playwright.dev/docs/test-configuration
  */
 module.exports = defineConfig({
-  testDir: './test',
+  testDir: './tests',
   testMatch: '**/*.e2e.test.js',
 
   /* Run tests in parallel */

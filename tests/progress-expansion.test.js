@@ -7,9 +7,9 @@
 
 const {
   expandAllContent
-} = require('../extension/src/content.js');
+} = require('../extensions/src/content.js');
 
-const { SELECTORS } = require('../extension/src/selectors.js');
+const { SELECTORS } = require('../extensions/src/selectors.js');
 
 global.SELECTORS = SELECTORS;
 
@@ -183,7 +183,7 @@ describe('Progress Indicator', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main></main>';
     // Use fast scroll config for tests
-    const { setScrollConfig } = require('../extension/src/content.js');
+    const { setScrollConfig } = require('../extensions/src/content.js');
     setScrollConfig({
       scrollStep: 100,
       scrollDelay: 10,
@@ -197,7 +197,7 @@ describe('Progress Indicator', () => {
   });
 
   afterEach(() => {
-    const { resetScrollConfig } = require('../extension/src/content.js');
+    const { resetScrollConfig } = require('../extensions/src/content.js');
     resetScrollConfig();
   });
 
@@ -206,7 +206,7 @@ describe('Progress Indicator', () => {
     // We can verify it doesn't leave artifacts after completion
     setFixture('gemini-conversation.html');
 
-    const { extractConversation } = require('../extension/src/content.js');
+    const { extractConversation } = require('../extensions/src/content.js');
 
     await extractConversation();
 

@@ -5,7 +5,7 @@
  * Covers: Content script <-> Popup communication
  */
 
-const { SELECTORS } = require('../extension/src/selectors.js');
+const { SELECTORS } = require('../extensions/src/selectors.js');
 
 global.SELECTORS = SELECTORS;
 
@@ -39,27 +39,27 @@ describe('Chrome Message Passing', () => {
     setFixture('gemini-conversation.html');
 
     // Use fast scroll config
-    const { setScrollConfig } = require('../extension/src/content.js');
+    const { setScrollConfig } = require('../extensions/src/content.js');
     setScrollConfig(FAST_SCROLL_CONFIG);
   });
 
   afterEach(() => {
     chrome.runtime.onMessage.addListener = originalAddListener;
     messageHandler = null;
-    const { resetScrollConfig } = require('../extension/src/content.js');
+    const { resetScrollConfig } = require('../extensions/src/content.js');
     resetScrollConfig();
   });
 
   test('registers message listener on load', () => {
     // Re-require content.js to trigger listener registration
-    require('../extension/src/content.js');
+    require('../extensions/src/content.js');
 
     expect(chrome.runtime.onMessage.addListener).toHaveBeenCalled();
     expect(messageHandler).not.toBeNull();
   });
 
   test('responds to extract action', (done) => {
-    require('../extension/src/content.js');
+    require('../extensions/src/content.js');
 
     expect(messageHandler).not.toBeNull();
 
@@ -76,7 +76,7 @@ describe('Chrome Message Passing', () => {
   });
 
   test('ignores non-extract actions', () => {
-    require('../extension/src/content.js');
+    require('../extensions/src/content.js');
 
     const sendResponse = jest.fn();
 
@@ -88,7 +88,7 @@ describe('Chrome Message Passing', () => {
   });
 
   test('converts image blobs to base64 in response', (done) => {
-    require('../extension/src/content.js');
+    require('../extensions/src/content.js');
 
     const sendResponse = jest.fn((response) => {
       if (response.success && response.images) {
@@ -110,7 +110,7 @@ describe('Chrome Message Passing', () => {
     // Set up invalid DOM to trigger failure
     document.body.innerHTML = '<div>No conversation here</div>';
 
-    require('../extension/src/content.js');
+    require('../extensions/src/content.js');
 
     const sendResponse = jest.fn((response) => {
       expect(response.success).toBe(false);
@@ -131,7 +131,7 @@ describe('Message Response Format', () => {
     chrome.runtime.onMessage.addListener = jest.fn((h) => { handler = h; });
 
     // Load content.js - this registers the handler and sets up exports
-    const { setScrollConfig } = require('../extension/src/content.js');
+    const { setScrollConfig } = require('../extensions/src/content.js');
     setScrollConfig(FAST_SCROLL_CONFIG);
 
     const sendResponse = (response) => {
@@ -158,7 +158,7 @@ describe('Message Response Format', () => {
     chrome.runtime.onMessage.addListener = jest.fn((h) => { handler = h; });
 
     // Load content.js - this registers the handler
-    const { setScrollConfig } = require('../extension/src/content.js');
+    const { setScrollConfig } = require('../extensions/src/content.js');
     setScrollConfig(FAST_SCROLL_CONFIG);
 
     const sendResponse = (response) => {

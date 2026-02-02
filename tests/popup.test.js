@@ -17,7 +17,7 @@ const {
   createZip,
   downloadBlob,
   handleExtract
-} = require('../extension/src/popup.js');
+} = require('../extensions/src/popup.js');
 
 // Set up DOM before each test
 beforeEach(() => {

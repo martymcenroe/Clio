@@ -17,9 +17,9 @@ const {
   extractConversation,
   setScrollConfig,
   resetScrollConfig
-} = require('../../extension/src/content.js');
+} = require('../../extensions/src/content.js');
 
-const { SELECTORS } = require('../../extension/src/selectors.js');
+const { SELECTORS } = require('../../extensions/src/selectors.js');
 
 // Make SELECTORS available globally for content.js
 global.SELECTORS = SELECTORS;

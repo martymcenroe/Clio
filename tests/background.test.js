@@ -29,7 +29,7 @@ describe('background.js', () => {
     });
 
     // Load the module
-    require('../extension/src/background.js');
+    require('../extensions/src/background.js');
   });
 
   afterEach(() => {

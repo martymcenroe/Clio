@@ -15,9 +15,9 @@ const {
   findScrollContainer,
   waitForLoadingComplete,
   scrollToLoadAllMessages
-} = require('../extension/src/content.js');
+} = require('../extensions/src/content.js');
 
-const { SELECTORS } = require('../extension/src/selectors.js');
+const { SELECTORS } = require('../extensions/src/selectors.js');
 
 // Make SELECTORS available globally for content.js
 global.SELECTORS = SELECTORS;
@@ -462,7 +462,7 @@ describe('scrollToLoadAllMessages MutationObserver detection', () => {
 });
 
 describe('auto-scroll integration with extractConversation', () => {
-  const { extractConversation } = require('../extension/src/content.js');
+  const { extractConversation } = require('../extensions/src/content.js');
 
   beforeEach(() => {
     document.body.innerHTML = '';

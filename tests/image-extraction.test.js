@@ -8,9 +8,9 @@
 const {
   extractImages,
   extractConversation
-} = require('../extension/src/content.js');
+} = require('../extensions/src/content.js');
 
-const { SELECTORS } = require('../extension/src/selectors.js');
+const { SELECTORS } = require('../extensions/src/selectors.js');
 
 global.SELECTORS = SELECTORS;
 
@@ -318,7 +318,7 @@ describe('Image Extraction - Fail Open Logic', () => {
 describe('extractConversation with image errors', () => {
   beforeEach(() => {
     // Use fast scroll config for tests
-    const { setScrollConfig } = require('../extension/src/content.js');
+    const { setScrollConfig } = require('../extensions/src/content.js');
     setScrollConfig({
       scrollStep: 100,
       scrollDelay: 10,
@@ -348,7 +348,7 @@ describe('extractConversation with image errors', () => {
   });
 
   afterEach(() => {
-    const { resetScrollConfig } = require('../extension/src/content.js');
+    const { resetScrollConfig } = require('../extensions/src/content.js');
     resetScrollConfig();
   });
 

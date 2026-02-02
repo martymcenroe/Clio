@@ -214,10 +214,9 @@ describe('waitForLoadingComplete', () => {
 
     const promise = waitForLoadingComplete();
     jest.advanceTimersByTime(10);
-    await promise;
 
-    // Should complete without waiting
-    expect(true).toBe(true);
+    // Should resolve without error when no loading indicator exists
+    await expect(promise).resolves.toBeUndefined();
   });
 
   // Test ID: SCROLL-LOAD-002

@@ -1,32 +1,19 @@
 # CLAUDE.md - Clio Project
 
-You are a team member on the Clio project, not a tool.
-
-**Workflow:** This project uses the full AssemblyZero workflow. Read `C:\Users\mcwiz\Projects\AssemblyZero\WORKFLOW.md`.
-
----
-
-## Full AssemblyZero Reference
-
-For complete rules (Gemini gates, destructive command constraints, etc.):
-`C:\Users\mcwiz\Projects\AssemblyZero\CLAUDE.md`
+**Workflow:** Full AssemblyZero workflow. Read `C:\Users\mcwiz\Projects\AssemblyZero\WORKFLOW.md`.
 
 ---
 
 ## Project Identifiers
 
 - **Repository:** `martymcenroe/Clio`
-- **Project Root (Windows):** `C:\Users\mcwiz\Projects\Clio`
-- **Project Root (Unix):** `/c/Users/mcwiz/Projects/Clio`
-- **Worktree Pattern:** `Clio-{IssueID}` (e.g., `Clio-42`)
+- **Worktree Pattern:** `Clio-{IssueID}`
 
 ---
 
 ## Project Overview
 
-**Clio** is a Chrome extension for extracting full Gemini conversations to structured JSON with images.
-
-Named after the Greek Muse of History - appropriate for preserving conversation history. Also sounds like "clip" for copy-paste.
+Chrome extension for extracting full Gemini conversations to structured JSON with images. Named after the Greek Muse of History.
 
 ### Architecture
 
@@ -38,87 +25,22 @@ Named after the Greek Muse of History - appropriate for preserving conversation 
 
 ### Key Files
 
-- `extensions/manifest.json` - Chrome extension config (Manifest V3)
-- `extensions/src/content.js` - DOM extraction logic
-- `extensions/src/selectors.js` - Centralized DOM selectors
-- `extensions/src/popup.html` - Extension popup UI
-- `extensions/src/popup.js` - Popup logic, zip creation
-- `extensions/src/background.js` - Service worker
+- `extensions/manifest.json` — Chrome extension config (Manifest V3)
+- `extensions/src/content.js` — DOM extraction logic
+- `extensions/src/selectors.js` — Centralized DOM selectors
+- `extensions/src/popup.html` / `popup.js` — Extension popup UI
 
 ---
 
-## Development Workflow
-
-### Running Tests
+## Development
 
 ```bash
 npm test
 npm run test:coverage
 ```
 
-### Generating Icons
+### Design Principles
 
-```bash
-poetry run --directory /c/Users/mcwiz/Projects/AssemblyZero python /c/Users/mcwiz/Projects/Clio/tools/generate_icons.py --transparent
-```
-
-### Loading the Extension (Developer Mode)
-
-**Chrome:**
-1. Open `chrome://extensions`
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select `C:\Users\mcwiz\Projects\Clio\extension\`
-
-**Edge:**
-1. Open `edge://extensions`
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select `C:\Users\mcwiz\Projects\Clio\extension\`
-
----
-
-## Chrome Web Store Considerations
-
-This extension may be published to the Chrome Web Store.
-
-### Required Icon Sizes
-
-| Size | Required For |
-|------|--------------|
-| 16px | Favicon |
-| 32px | Windows |
-| 48px | Extensions page |
-| 128px | Chrome Web Store, installation |
-
-### Store Listing Requirements
-
-- Detailed description
-- Privacy policy (all data stays local)
-- Screenshots
-- Promotional images (optional)
-
----
-
-## Design Principles
-
-### Fail Open for Images
-
-Image extraction errors are logged but do not fail the overall extraction. The JSON transcript is always generated, even if some images fail to download.
-
-### Fail Closed for Text
-
-If no conversation messages can be found, extraction fails with a clear error. Text extraction must succeed.
-
-### Local Processing Only
-
-All data processing happens in the browser. No data is sent to external servers.
-
----
-
-## GitHub CLI
-
-Always use explicit repo flag:
-```bash
-gh issue create --repo martymcenroe/Clio --title "..." --body "..."
-```
+- **Fail Open for Images:** Image errors logged, don't fail extraction
+- **Fail Closed for Text:** No messages found = extraction fails
+- **Local Processing Only:** No data sent to external servers

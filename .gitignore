@@ -30,3 +30,6 @@ docs/html-input/
 
 # Session logs (may contain sensitive info)
 docs/session-logs/
+
+# Unleashed session transcripts (auto-generated, untracked)
+data/unleashed/

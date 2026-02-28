@@ -13,7 +13,7 @@
 
 /**
  * Get the current site identifier from SELECTORS.
- * @returns {string} - 'gemini', 'claude', or 'unknown'
+ * @returns {string} - 'gemini', 'claude', 'chatgpt', or 'unknown'
  */
 function getSite() {
   return (typeof SELECTORS !== 'undefined' && SELECTORS.site) || 'unknown';
@@ -260,6 +260,9 @@ function countMessages() {
     const userMsgs = document.querySelectorAll('[data-testid="user-message"]');
     const assistantMsgs = document.querySelectorAll('[data-testid="action-bar-copy"]');
     return userMsgs.length + assistantMsgs.length;
+  }
+  if (site === 'chatgpt') {
+    return document.querySelectorAll('article[data-turn="user"], article[data-turn="assistant"]').length;
   }
   // Gemini: Count ONLY primary elements (user-query, model-response)
   // Don't use composite SELECTORS which include fallbacks that may be nested
@@ -513,9 +516,10 @@ function extractTitle() {
   let title = document.title;
   if (site === 'claude') {
     title = title.replace(/ - Claude$/, '');
-  } else {
+  } else if (site === 'gemini') {
     title = title.replace(/ - Gemini$/, '');
   }
+  // ChatGPT: title is already clean (no suffix)
   return title.trim() || 'Untitled Conversation';
 }
 
@@ -528,6 +532,11 @@ function extractConversationId() {
   if (site === 'claude') {
     // Claude URL: /chat/{uuid}
     const match = window.location.pathname.match(/\/chat\/([a-f0-9-]+)/i);
+    return match ? match[1] : 'unknown';
+  }
+  if (site === 'chatgpt') {
+    // ChatGPT URL: /c/{uuid}
+    const match = window.location.pathname.match(/\/c\/([a-f0-9-]+)/i);
     return match ? match[1] : 'unknown';
   }
   // Gemini URL: /app/{hex}
@@ -745,6 +754,89 @@ async function extractTurnsClaude() {
 }
 
 /**
+ * Extract a single ChatGPT assistant turn.
+ * ChatGPT uses article[data-turn="assistant"] with data-message-author-role inside.
+ * Reasoning is shown as "Reasoned about X for Y seconds" label (not expandable content).
+ * @param {Element} article - The article element for this assistant turn
+ * @param {number} index - Turn index
+ * @returns {Object} - Turn object
+ */
+function extractAssistantTurnChatGPT(article, index) {
+  const images = findImages(article, index);
+
+  // Extract reasoning label if present (e.g. "Reasoned about X for Y seconds")
+  let thinking = null;
+  if (SELECTORS.reasoningLabel) {
+    const reasoningEl = article.querySelector(SELECTORS.reasoningLabel);
+    if (reasoningEl) {
+      const reasonText = reasoningEl.textContent.trim();
+      if (reasonText.toLowerCase().includes('reason') || reasonText.toLowerCase().includes('thought')) {
+        thinking = reasonText;
+      }
+    }
+  }
+
+  // Extract response content from .markdown container
+  const contentSelector = SELECTORS.assistantContent || '.markdown';
+  const contentEl = article.querySelector(contentSelector);
+  const content = contentEl ? extractTextContent(contentEl) : extractTextContent(article);
+
+  // Extract model slug if available
+  let modelSlug = null;
+  const modelEl = article.querySelector('[data-message-model-slug]');
+  if (modelEl) {
+    modelSlug = modelEl.getAttribute('data-message-model-slug');
+  }
+
+  return {
+    index,
+    role: 'assistant',
+    content,
+    thinking,
+    modelSlug,
+    attachments: images.map(img => ({
+      type: 'image',
+      filename: null,
+      originalSrc: img.src
+    }))
+  };
+}
+
+/**
+ * Extract turns from a ChatGPT conversation.
+ * ChatGPT uses <article data-turn="user|assistant"> elements.
+ * @returns {Promise<Array>} - Array of turn objects
+ */
+async function extractTurnsChatGPT() {
+  const turns = [];
+  let turnIndex = 0;
+
+  const articles = document.querySelectorAll(SELECTORS.allMessages);
+
+  for (let i = 0; i < articles.length; i++) {
+    const article = articles[i];
+    const turnType = article.getAttribute('data-turn');
+
+    if (turnType === 'user') {
+      // Extract user content from .whitespace-pre-wrap or the message element
+      const contentSelector = SELECTORS.userContent || '.whitespace-pre-wrap';
+      const contentEl = article.querySelector(contentSelector);
+      const element = contentEl || article;
+      turns.push(extractUserTurn(element, turnIndex++));
+    } else if (turnType === 'assistant') {
+      turns.push(extractAssistantTurnChatGPT(article, turnIndex++));
+    }
+
+    if (i > 0 && i % 20 === 0) {
+      showProgress(`Extracting turn ${i}/${articles.length}...`);
+      await sleep(0);
+    }
+  }
+
+  return turns;
+}
+
+/**
  * Extract turns from a Gemini conversation.
  * Gemini uses .conversation-container elements with user-query and model-response inside.
  * @returns {Promise<Array>} - Array of turn objects
@@ -819,6 +911,9 @@ async function extractTurns() {
   const site = getSite();
   if (site === 'claude') {
     return extractTurnsClaude();
+  }
+  if (site === 'chatgpt') {
+    return extractTurnsChatGPT();
   }
   return extractTurnsGemini();
 }
@@ -993,7 +1088,8 @@ async function extractImages(turns) {
 async function extractConversation() {
   try {
     // Phase 0: Pre-flight checks
-    const siteName = getSite() === 'claude' ? 'Claude' : 'Gemini';
+    const siteNames = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini' };
+    const siteName = siteNames[getSite()] || 'Unknown';
 
     if (isStreaming()) {
       return {
@@ -1126,9 +1222,11 @@ if (typeof module !== 'undefined' && module.exports) {
     extractUserTurn,
     extractAssistantTurn,
     extractAssistantTurnClaude,
+    extractAssistantTurnChatGPT,
     extractTurns,
     extractTurnsClaude,
     extractTurnsGemini,
+    extractTurnsChatGPT,
     validateSelectors,
     isStreaming,
     expandAllContent,

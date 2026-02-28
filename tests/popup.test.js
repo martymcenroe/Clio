@@ -39,6 +39,10 @@ describe('isSupportedSite', () => {
     expect(isSupportedSite('https://claude.ai/chat/b5b2d739-81b0-4ee7-aa1a-3209c66c25d0')).toBe(true);
   });
 
+  test('returns true for ChatGPT URL', () => {
+    expect(isSupportedSite('https://chatgpt.com/c/67bd8097-de20-8013-82de-4fb74629b1b3')).toBe(true);
+  });
+
   test('returns false for unrelated URL', () => {
     expect(isSupportedSite('https://google.com')).toBe(false);
   });
@@ -57,6 +61,10 @@ describe('getSitePrefix', () => {
 
   test('returns claude for Claude URL', () => {
     expect(getSitePrefix('https://claude.ai/chat/abc')).toBe('claude');
+  });
+
+  test('returns chatgpt for ChatGPT URL', () => {
+    expect(getSitePrefix('https://chatgpt.com/c/abc')).toBe('chatgpt');
   });
 
   test('defaults to gemini for unknown URL', () => {
@@ -448,7 +456,7 @@ describe('handleExtract', () => {
     await handleExtract();
 
     const statusEl = document.getElementById('status');
-    expect(statusEl.textContent).toBe('Please open a Gemini or Claude conversation first.');
+    expect(statusEl.textContent).toBe('Please open a Gemini, Claude, or ChatGPT conversation first.');
     expect(statusEl.className).toBe('status error');
   });
 
@@ -458,7 +466,7 @@ describe('handleExtract', () => {
     await handleExtract();
 
     const statusEl = document.getElementById('status');
-    expect(statusEl.textContent).toBe('Please open a Gemini or Claude conversation first.');
+    expect(statusEl.textContent).toBe('Please open a Gemini, Claude, or ChatGPT conversation first.');
   });
 
   test('shows error when tab has no URL', async () => {
@@ -467,7 +475,7 @@ describe('handleExtract', () => {
     await handleExtract();
 
     const statusEl = document.getElementById('status');
-    expect(statusEl.textContent).toBe('Please open a Gemini or Claude conversation first.');
+    expect(statusEl.textContent).toBe('Please open a Gemini, Claude, or ChatGPT conversation first.');
   });
 
   test('disables button during extraction', async () => {

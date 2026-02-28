@@ -108,6 +108,30 @@ function setButtonState(enabled, text = 'Extract Conversation') {
 }
 
 // ============================================================================
+// Site Detection Helpers
+// ============================================================================
+
+/**
+ * Check if a URL is a supported conversation site.
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isSupportedSite(url) {
+  if (!url) return false;
+  return url.includes('gemini.google.com') || url.includes('claude.ai');
+}
+
+/**
+ * Get filename prefix based on site URL.
+ * @param {string} url
+ * @returns {string}
+ */
+function getSitePrefix(url) {
+  if (url && url.includes('claude.ai')) return 'claude';
+  return 'gemini';
+}
+
+// ============================================================================
 // Filename Sanitization
 // ============================================================================
 
@@ -222,8 +246,8 @@ async function handleExtract() {
     // Get active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-    if (!tab || !tab.url || !tab.url.includes('gemini.google.com')) {
-      setStatus('Please open a Gemini conversation first.', 'error');
+    if (!tab || !tab.url || !isSupportedSite(tab.url)) {
+      setStatus('Please open a Gemini or Claude conversation first.', 'error');
       setButtonState(true);
       hideProgress();
       return;
@@ -274,7 +298,8 @@ async function handleExtract() {
     // Generate filename
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
     const title = sanitizeFilename(data.metadata.title);
-    const filename = `gemini-${data.metadata.conversationId}-${title}-${timestamp}.zip`;
+    const sitePrefix = getSitePrefix(tab.url);
+    const filename = `${sitePrefix}-${data.metadata.conversationId}-${title}-${timestamp}.zip`;
 
     // Download
     showProgress('Starting download...');
@@ -312,8 +337,8 @@ if (extractBtn) {
 
   // Check if we're on a Gemini page on load
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    if (!tab || !tab.url || !tab.url.includes('gemini.google.com')) {
-      setStatus('Open a Gemini conversation to extract.', 'warning');
+    if (!tab || !tab.url || !isSupportedSite(tab.url)) {
+      setStatus('Open a Gemini or Claude conversation to extract.', 'warning');
       setButtonState(false);
     }
   });
@@ -325,6 +350,8 @@ if (extractBtn) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    isSupportedSite,
+    getSitePrefix,
     sanitizeFilename,
     estimateExportSize,
     formatBytes,

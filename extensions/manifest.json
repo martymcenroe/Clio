@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Clio",
-  "version": "1.1.0",
-  "description": "Extract full Gemini and Claude conversations to JSON with images",
+  "version": "1.2.0",
+  "description": "Extract full Gemini, Claude, and ChatGPT conversations to JSON with images",
   "permissions": [
     "activeTab",
     "downloads"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",
-    "https://claude.ai/*"
+    "https://claude.ai/*",
+    "https://chatgpt.com/*"
   ],
   "action": {
     "default_popup": "src/popup.html",
@@ -31,6 +32,11 @@
     {
       "matches": ["https://claude.ai/*"],
       "js": ["src/selectors-claude.js", "src/content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["src/selectors-chatgpt.js", "src/content.js"],
       "run_at": "document_idle"
     }
   ],

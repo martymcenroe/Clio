@@ -118,7 +118,7 @@ function setButtonState(enabled, text = 'Extract Conversation') {
  */
 function isSupportedSite(url) {
   if (!url) return false;
-  return url.includes('gemini.google.com') || url.includes('claude.ai');
+  return url.includes('gemini.google.com') || url.includes('claude.ai') || url.includes('chatgpt.com');
 }
 
 /**
@@ -128,6 +128,7 @@ function isSupportedSite(url) {
  */
 function getSitePrefix(url) {
   if (url && url.includes('claude.ai')) return 'claude';
+  if (url && url.includes('chatgpt.com')) return 'chatgpt';
   return 'gemini';
 }
 
@@ -247,7 +248,7 @@ async function handleExtract() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab || !tab.url || !isSupportedSite(tab.url)) {
-      setStatus('Please open a Gemini or Claude conversation first.', 'error');
+      setStatus('Please open a Gemini, Claude, or ChatGPT conversation first.', 'error');
       setButtonState(true);
       hideProgress();
       return;
@@ -338,7 +339,7 @@ if (extractBtn) {
   // Check if we're on a Gemini page on load
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (!tab || !tab.url || !isSupportedSite(tab.url)) {
-      setStatus('Open a Gemini or Claude conversation to extract.', 'warning');
+      setStatus('Open a Gemini, Claude, or ChatGPT conversation to extract.', 'warning');
       setButtonState(false);
     }
   });

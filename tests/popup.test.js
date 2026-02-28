@@ -6,6 +6,8 @@
  */
 
 const {
+  isSupportedSite,
+  getSitePrefix,
   sanitizeFilename,
   estimateExportSize,
   formatBytes,
@@ -27,6 +29,40 @@ beforeEach(() => {
 // ============================================================================
 // Pure Functions
 // ============================================================================
+
+describe('isSupportedSite', () => {
+  test('returns true for Gemini URL', () => {
+    expect(isSupportedSite('https://gemini.google.com/app/abc123')).toBe(true);
+  });
+
+  test('returns true for Claude URL', () => {
+    expect(isSupportedSite('https://claude.ai/chat/b5b2d739-81b0-4ee7-aa1a-3209c66c25d0')).toBe(true);
+  });
+
+  test('returns false for unrelated URL', () => {
+    expect(isSupportedSite('https://google.com')).toBe(false);
+  });
+
+  test('returns false for null/undefined', () => {
+    expect(isSupportedSite(null)).toBe(false);
+    expect(isSupportedSite(undefined)).toBe(false);
+    expect(isSupportedSite('')).toBe(false);
+  });
+});
+
+describe('getSitePrefix', () => {
+  test('returns gemini for Gemini URL', () => {
+    expect(getSitePrefix('https://gemini.google.com/app/abc123')).toBe('gemini');
+  });
+
+  test('returns claude for Claude URL', () => {
+    expect(getSitePrefix('https://claude.ai/chat/abc')).toBe('claude');
+  });
+
+  test('defaults to gemini for unknown URL', () => {
+    expect(getSitePrefix('https://example.com')).toBe('gemini');
+  });
+});
 
 describe('sanitizeFilename', () => {
   test('removes illegal filesystem characters', () => {
@@ -412,7 +448,7 @@ describe('handleExtract', () => {
     await handleExtract();
 
     const statusEl = document.getElementById('status');
-    expect(statusEl.textContent).toBe('Please open a Gemini conversation first.');
+    expect(statusEl.textContent).toBe('Please open a Gemini or Claude conversation first.');
     expect(statusEl.className).toBe('status error');
   });
 
@@ -422,7 +458,7 @@ describe('handleExtract', () => {
     await handleExtract();
 
     const statusEl = document.getElementById('status');
-    expect(statusEl.textContent).toBe('Please open a Gemini conversation first.');
+    expect(statusEl.textContent).toBe('Please open a Gemini or Claude conversation first.');
   });
 
   test('shows error when tab has no URL', async () => {
@@ -431,7 +467,7 @@ describe('handleExtract', () => {
     await handleExtract();
 
     const statusEl = document.getElementById('status');
-    expect(statusEl.textContent).toBe('Please open a Gemini conversation first.');
+    expect(statusEl.textContent).toBe('Please open a Gemini or Claude conversation first.');
   });
 
   test('disables button during extraction', async () => {

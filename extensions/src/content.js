@@ -8,6 +8,18 @@
 /* global SELECTORS, chrome */
 
 // ============================================================================
+// Site Detection
+// ============================================================================
+
+/**
+ * Get the current site identifier from SELECTORS.
+ * @returns {string} - 'gemini', 'claude', or 'unknown'
+ */
+function getSite() {
+  return (typeof SELECTORS !== 'undefined' && SELECTORS.site) || 'unknown';
+}
+
+// ============================================================================
 // Utility Functions
 // ============================================================================
 
@@ -153,35 +165,39 @@ async function expandAllContent() {
     return 0;
   }
 
-  // Find expand buttons ONLY within the conversation container
-  const expandButtons = container.querySelectorAll(SELECTORS.expandButton);
-  for (const button of expandButtons) {
-    // Safety check: skip menu triggers and global UI buttons
-    if (button.matches('[aria-haspopup="true"], [aria-haspopup="menu"], .mat-menu-trigger, .mat-mdc-menu-trigger')) {
-      continue;
-    }
-    try {
-      button.click();
-      expandedCount++;
-      await sleep(300);
-    } catch (e) {
-      // Silently ignore expansion failures
+  // Find expand buttons ONLY within the conversation container (Gemini only)
+  if (SELECTORS.expandButton) {
+    const expandButtons = container.querySelectorAll(SELECTORS.expandButton);
+    for (const button of expandButtons) {
+      // Safety check: skip menu triggers and global UI buttons
+      if (button.matches('[aria-haspopup="true"], [aria-haspopup="menu"], .mat-menu-trigger, .mat-mdc-menu-trigger')) {
+        continue;
+      }
+      try {
+        button.click();
+        expandedCount++;
+        await sleep(300);
+      } catch (e) {
+        // Silently ignore expansion failures
+      }
     }
   }
 
   // Find thinking toggles ONLY within the conversation container
-  const thinkingToggles = container.querySelectorAll(SELECTORS.thinkingToggle);
-  for (const toggle of thinkingToggles) {
-    // Safety check: skip if it's a menu trigger
-    if (toggle.matches('[aria-haspopup="true"], [aria-haspopup="menu"], .mat-menu-trigger, .mat-mdc-menu-trigger')) {
-      continue;
-    }
-    try {
-      toggle.click();
-      expandedCount++;
-      await sleep(300);
-    } catch (e) {
-      // Silently ignore expansion failures
+  if (SELECTORS.thinkingToggle) {
+    const thinkingToggles = container.querySelectorAll(SELECTORS.thinkingToggle);
+    for (const toggle of thinkingToggles) {
+      // Safety check: skip if it's a menu trigger
+      if (toggle.matches('[aria-haspopup="true"], [aria-haspopup="menu"], .mat-menu-trigger, .mat-mdc-menu-trigger')) {
+        continue;
+      }
+      try {
+        toggle.click();
+        expandedCount++;
+        await sleep(300);
+      } catch (e) {
+        // Silently ignore expansion failures
+      }
     }
   }
 
@@ -239,7 +255,13 @@ function resetScrollConfig() {
  * @returns {number} - Number of message elements
  */
 function countMessages() {
-  // Count ONLY primary Gemini elements (user-query, model-response)
+  const site = getSite();
+  if (site === 'claude') {
+    const userMsgs = document.querySelectorAll('[data-testid="user-message"]');
+    const assistantMsgs = document.querySelectorAll('[data-testid="action-bar-copy"]');
+    return userMsgs.length + assistantMsgs.length;
+  }
+  // Gemini: Count ONLY primary elements (user-query, model-response)
   // Don't use composite SELECTORS which include fallbacks that may be nested
   // This prevents double-counting when .user-query-container is inside user-query
   const userMsgs = document.querySelectorAll('user-query, [data-message-author-role="user"]');
@@ -480,12 +502,21 @@ async function scrollToLoadAllMessages(onProgress) {
  * @returns {string}
  */
 function extractTitle() {
-  const titleEl = document.querySelector(SELECTORS.sessionTitle);
-  if (titleEl) {
-    return titleEl.textContent.trim();
+  if (SELECTORS.sessionTitle) {
+    const titleEl = document.querySelector(SELECTORS.sessionTitle);
+    if (titleEl) {
+      return titleEl.textContent.trim();
+    }
   }
-  // Fallback: use document title
-  return document.title.replace(' - Gemini', '').trim() || 'Untitled Conversation';
+  // Fallback: use document title, stripping site suffix
+  const site = getSite();
+  let title = document.title;
+  if (site === 'claude') {
+    title = title.replace(/ - Claude$/, '');
+  } else {
+    title = title.replace(/ - Gemini$/, '');
+  }
+  return title.trim() || 'Untitled Conversation';
 }
 
 /**
@@ -493,6 +524,13 @@ function extractTitle() {
  * @returns {string}
  */
 function extractConversationId() {
+  const site = getSite();
+  if (site === 'claude') {
+    // Claude URL: /chat/{uuid}
+    const match = window.location.pathname.match(/\/chat\/([a-f0-9-]+)/i);
+    return match ? match[1] : 'unknown';
+  }
+  // Gemini URL: /app/{hex}
   const match = window.location.pathname.match(/\/app\/([a-f0-9]+)/i);
   return match ? match[1] : 'unknown';
 }
@@ -611,12 +649,107 @@ function extractAssistantTurn(element, index) {
 }
 
 /**
- * Find and extract all conversation turns in DOM order.
- * Handles Gemini's DOM structure where each .conversation-container
- * contains both user-query and model-response elements.
+ * Extract a single Claude assistant turn.
+ * Claude uses .row-start-1 for thinking and .row-start-2 for response content.
+ * Tool use is indicated by buttons with group/row class inside .row-start-1.
+ * @param {Element} element - DOM element containing assistant message (the action-bar-copy ancestor)
+ * @param {number} index - Turn index
+ * @returns {Object} - Turn object
+ */
+function extractAssistantTurnClaude(element, index) {
+  const images = findImages(element, index);
+
+  // Extract thinking from .row-start-1
+  let thinking = null;
+  const thinkingEl = element.querySelector(SELECTORS.thinkingContent);
+  if (thinkingEl) {
+    thinking = extractTextContent(thinkingEl);
+  }
+
+  // Extract tool use labels from buttons inside thinking row
+  let toolUse = null;
+  if (SELECTORS.toolUseButton) {
+    const toolButtons = element.querySelectorAll(SELECTORS.toolUseButton);
+    if (toolButtons.length > 0) {
+      toolUse = Array.from(toolButtons).map(btn => btn.textContent.trim());
+    }
+  }
+
+  // Extract response from .row-start-2 (preferred) or fall back to removing thinking
+  let content = '';
+  const responseEl = element.querySelector(SELECTORS.responseContent);
+  if (responseEl) {
+    content = extractTextContent(responseEl);
+  } else {
+    // Fallback: clone and remove thinking
+    const contentClone = element.cloneNode(true);
+    const thinkingClone = contentClone.querySelector(SELECTORS.thinkingContent);
+    if (thinkingClone) {
+      thinkingClone.remove();
+    }
+    content = extractTextContent(contentClone);
+  }
+
+  return {
+    index,
+    role: 'assistant',
+    content,
+    thinking,
+    toolUse,
+    attachments: images.map(img => ({
+      type: 'image',
+      filename: null,
+      originalSrc: img.src
+    }))
+  };
+}
+
+/**
+ * Extract turns from a Claude conversation.
+ * Claude uses a flat container with data-testid attributes to identify messages.
  * @returns {Promise<Array>} - Array of turn objects
  */
-async function extractTurns() {
+async function extractTurnsClaude() {
+  const turns = [];
+  let turnIndex = 0;
+
+  // Find all user and assistant messages and sort by DOM position
+  const userMsgs = Array.from(document.querySelectorAll(SELECTORS.userMessage));
+  const assistantMsgs = Array.from(document.querySelectorAll(SELECTORS.assistantMessage));
+
+  const allMsgs = [...userMsgs, ...assistantMsgs].sort((a, b) => {
+    const position = a.compareDocumentPosition(b);
+    return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  });
+
+  for (let i = 0; i < allMsgs.length; i++) {
+    const element = allMsgs[i];
+    const isUser = element.matches(SELECTORS.userMessage);
+
+    if (isUser) {
+      turns.push(extractUserTurn(element, turnIndex++));
+    } else {
+      // For Claude assistant messages, find the closest parent that contains
+      // both thinking and response content
+      const turnContainer = element.closest('[class*="grid"]') || element.parentElement || element;
+      turns.push(extractAssistantTurnClaude(turnContainer, turnIndex++));
+    }
+
+    if (i > 0 && i % 20 === 0) {
+      showProgress(`Extracting turn ${i}/${allMsgs.length}...`);
+      await sleep(0);
+    }
+  }
+
+  return turns;
+}
+
+/**
+ * Extract turns from a Gemini conversation.
+ * Gemini uses .conversation-container elements with user-query and model-response inside.
+ * @returns {Promise<Array>} - Array of turn objects
+ */
+async function extractTurnsGemini() {
   const turns = [];
   let turnIndex = 0;
 
@@ -625,21 +758,17 @@ async function extractTurns() {
   const containers = document.querySelectorAll('.conversation-container');
 
   if (containers.length > 0) {
-
     for (const container of containers) {
-      // Extract user message from within this container
       const userEl = container.querySelector('user-query, [data-message-author-role="user"]');
       if (userEl) {
         turns.push(extractUserTurn(userEl, turnIndex++));
       }
 
-      // Extract assistant message from within this container
       const assistantEl = container.querySelector('model-response, [data-message-author-role="model"]');
       if (assistantEl) {
         turns.push(extractAssistantTurn(assistantEl, turnIndex++));
       }
 
-      // Progress update
       if (turnIndex % 20 === 0) {
         showProgress(`Extracting turn ${turnIndex}...`);
         await sleep(0);
@@ -650,11 +779,9 @@ async function extractTurns() {
   }
 
   // Strategy 2: Fallback - find user and assistant messages directly
-  // and sort them by DOM position
   const userMsgs = Array.from(document.querySelectorAll(SELECTORS.userMessage));
   const assistantMsgs = Array.from(document.querySelectorAll(SELECTORS.assistantMessage));
 
-  // Combine and sort by DOM position
   const allMsgs = [...userMsgs, ...assistantMsgs].sort((a, b) => {
     const position = a.compareDocumentPosition(b);
     return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
@@ -664,8 +791,6 @@ async function extractTurns() {
 
   for (let i = 0; i < allMsgs.length; i++) {
     const element = allMsgs[i];
-
-    // Determine role
     const isUser = element.matches('user-query') ||
                    element.matches(SELECTORS.userMessage) ||
                    element.getAttribute('data-message-author-role') === 'user';
@@ -676,7 +801,6 @@ async function extractTurns() {
       turns.push(extractAssistantTurn(element, turnIndex++));
     }
 
-    // Yield to event loop every BATCH_SIZE messages
     if (i > 0 && i % BATCH_SIZE === 0) {
       showProgress(`Extracting turn ${i}/${allMsgs.length}...`);
       await sleep(0);
@@ -684,6 +808,19 @@ async function extractTurns() {
   }
 
   return turns;
+}
+
+/**
+ * Find and extract all conversation turns in DOM order.
+ * Dispatches to site-specific extraction based on SELECTORS.site.
+ * @returns {Promise<Array>} - Array of turn objects
+ */
+async function extractTurns() {
+  const site = getSite();
+  if (site === 'claude') {
+    return extractTurnsClaude();
+  }
+  return extractTurnsGemini();
 }
 
 // ============================================================================
@@ -856,10 +993,12 @@ async function extractImages(turns) {
 async function extractConversation() {
   try {
     // Phase 0: Pre-flight checks
+    const siteName = getSite() === 'claude' ? 'Claude' : 'Gemini';
+
     if (isStreaming()) {
       return {
         success: false,
-        error: 'Gemini is currently generating a response. Please wait for completion before extracting.'
+        error: `${siteName} is currently generating a response. Please wait for completion before extracting.`
       };
     }
 
@@ -867,7 +1006,7 @@ async function extractConversation() {
     if (!validation.valid) {
       return {
         success: false,
-        error: `Gemini UI may have changed. Missing selectors: ${validation.missing.join(', ')}. Please report this issue.`
+        error: `${siteName} UI may have changed. Missing selectors: ${validation.missing.join(', ')}. Please report this issue.`
       };
     }
 
@@ -979,13 +1118,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    getSite,
     sanitizeFilename,
     extractTitle,
     extractConversationId,
     extractTextContent,
     extractUserTurn,
     extractAssistantTurn,
+    extractAssistantTurnClaude,
     extractTurns,
+    extractTurnsClaude,
+    extractTurnsGemini,
     validateSelectors,
     isStreaming,
     expandAllContent,

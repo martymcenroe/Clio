@@ -9,6 +9,8 @@
  */
 
 const SELECTORS = {
+  site: 'gemini',
+
   // Conversation structure
   // VERIFIED: <div class="conversation-container message-actions-hover-boundary" id="...">
   // FIXED: Removed 'main' - too broad, causes clicking of global UI elements

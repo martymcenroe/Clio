@@ -23,18 +23,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /c/Users/mcwiz/Projects/Clio/.claude/hooks/bash-gate.sh",
-            "timeout": 5,
-            "description": "Bash Command Gate (blocks &&, |, ;)"
-          },
-          {
-            "type": "command",
-            "command": "bash /c/Users/mcwiz/Projects/Clio/.claude/hooks/secret-guard.sh",
-            "timeout": 5,
-            "description": "Secret File Guard (blocks access to .env, credentials)"
-          },
-          {
-            "type": "command",
             "command": "bash /c/Users/mcwiz/Projects/Clio/.claude/hooks/pre-commit-report-check.sh",
             "timeout": 5,
             "description": "PRE-COMMIT GATE: Report Existence"

@@ -51,6 +51,18 @@ After you change code under `extensions/`, reload the extension so Chrome picks 
 
 If the popup still shows stale behavior after a reload, inspect the service worker logs via the "Inspect views: service worker" link on the Clio card.
 
+### Versioning policy
+
+Any commit that changes files under `extensions/` MUST bump `extensions/manifest.json` `version`:
+
+- Bugfix → patch bump (e.g. 1.2.0 → 1.2.1)
+- New feature (new site, new extraction field, new UI) → minor bump (e.g. 1.2.x → 1.3.0)
+- Breaking change to output schema → major bump (e.g. 1.x.x → 2.0.0)
+
+Rationale: Chrome's `chrome://extensions` card displays this version. Without a bump, a user cannot visually confirm that a reload actually picked up the new code, which makes "did my fix land?" debugging much harder (see issue #35 for the incident that motivated this rule).
+
+Docs-only PRs (no `extensions/` changes) do NOT bump the version.
+
 ## Testing
 
 ### Unit Tests (Jest)

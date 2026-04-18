@@ -701,7 +701,7 @@ function extractAssistantTurnClaude(element, index) {
     content = extractTextContent(contentClone);
   }
 
-  return {
+  const turn = {
     index,
     role: 'assistant',
     content,
@@ -713,6 +713,18 @@ function extractAssistantTurnClaude(element, index) {
       originalSrc: img.src
     }))
   };
+
+  // Mark turns whose entire response lived inside the expandable thinking
+  // section (empty .row-start-2, non-empty .row-start-1). Lets downstream
+  // consumers distinguish "assistant had nothing to say" from "assistant
+  // responded only inside the thinking panel".
+  const hasContent = !!(content && content.trim());
+  const hasThinking = !!(thinking && thinking.trim());
+  if (!hasContent && hasThinking) {
+    turn.type = 'thinking-only';
+  }
+
+  return turn;
 }
 
 /**

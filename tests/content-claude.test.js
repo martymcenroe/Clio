@@ -209,6 +209,71 @@ describe('extractAssistantTurnClaude', () => {
     expect(turn.attachments).toHaveLength(1);
     expect(turn.attachments[0].type).toBe('image');
   });
+
+  test('marks turn as thinking-only when content empty but thinking present (issue #37)', () => {
+    const div = document.createElement('div');
+    const thinking = document.createElement('div');
+    thinking.className = 'row-start-1';
+    thinking.textContent = 'Refined email structure and incorporated confidentiality safeguards';
+    const response = document.createElement('div');
+    response.className = 'row-start-2';
+    response.textContent = '';
+    div.appendChild(thinking);
+    div.appendChild(response);
+
+    const turn = extractAssistantTurnClaude(div, 7);
+
+    expect(turn.content).toBe('');
+    expect(turn.thinking).toContain('Refined email structure');
+    expect(turn.type).toBe('thinking-only');
+  });
+
+  test('omits type field on normal turns with real content', () => {
+    const div = document.createElement('div');
+    const thinking = document.createElement('div');
+    thinking.className = 'row-start-1';
+    thinking.textContent = 'Quick thought';
+    const response = document.createElement('div');
+    response.className = 'row-start-2';
+    response.textContent = 'Here is a real answer.';
+    div.appendChild(thinking);
+    div.appendChild(response);
+
+    const turn = extractAssistantTurnClaude(div, 0);
+
+    expect(turn.content).toBe('Here is a real answer.');
+    expect(turn.type).toBeUndefined();
+  });
+
+  test('omits type field when both content and thinking are empty', () => {
+    const div = document.createElement('div');
+    const response = document.createElement('div');
+    response.className = 'row-start-2';
+    response.textContent = '';
+    div.appendChild(response);
+
+    const turn = extractAssistantTurnClaude(div, 0);
+
+    expect(turn.content).toBe('');
+    expect(turn.thinking).toBeNull();
+    expect(turn.type).toBeUndefined();
+  });
+
+  test('whitespace-only content still triggers thinking-only marker', () => {
+    const div = document.createElement('div');
+    const thinking = document.createElement('div');
+    thinking.className = 'row-start-1';
+    thinking.textContent = 'reasoning text';
+    const response = document.createElement('div');
+    response.className = 'row-start-2';
+    response.textContent = '   \n\t  ';
+    div.appendChild(thinking);
+    div.appendChild(response);
+
+    const turn = extractAssistantTurnClaude(div, 0);
+
+    expect(turn.type).toBe('thinking-only');
+  });
 });
 
 describe('extractTurnsClaude', () => {

@@ -251,6 +251,77 @@ describe('extractTurnsClaude', () => {
   });
 });
 
+describe('extractTurnsClaude with shared grid ancestor (regression #25)', () => {
+  // Reproduces the reported bug where a macro grid ancestor wraps the
+  // entire conversation. The previous implementation used
+  // element.closest('[class*="grid"]') which resolved to the macro grid for
+  // every assistant turn, causing every turn's .querySelector('.row-start-2')
+  // to return the first turn's content. Verify each assistant content and
+  // thinking field is now unique to its turn.
+  test('extracts distinct content per assistant turn when ancestors share a grid class', async () => {
+    const macroGrid = document.createElement('div');
+    macroGrid.className = 'conversation grid grid-rows-auto';
+
+    function appendUser(text) {
+      const u = document.createElement('div');
+      u.setAttribute('data-testid', 'user-message');
+      u.textContent = text;
+      macroGrid.appendChild(u);
+    }
+
+    function appendAssistant(thinkingText, responseText) {
+      const perTurn = document.createElement('div');
+      perTurn.className = 'message-layout';
+
+      const thinking = document.createElement('div');
+      thinking.className = 'row-start-1';
+      thinking.textContent = thinkingText;
+      perTurn.appendChild(thinking);
+
+      const response = document.createElement('div');
+      response.className = 'row-start-2';
+      response.textContent = responseText;
+      perTurn.appendChild(response);
+
+      const actionBar = document.createElement('div');
+      actionBar.className = 'action-bar';
+      const copy = document.createElement('button');
+      copy.setAttribute('data-testid', 'action-bar-copy');
+      actionBar.appendChild(copy);
+      perTurn.appendChild(actionBar);
+
+      macroGrid.appendChild(perTurn);
+    }
+
+    appendUser('first user message');
+    appendAssistant('first turn thinking', 'first turn response');
+    appendUser('second user message');
+    appendAssistant('second turn thinking', 'second turn response');
+    appendUser('third user message');
+    appendAssistant('third turn thinking', 'third turn response');
+
+    document.body.appendChild(macroGrid);
+
+    const turns = await extractTurnsClaude();
+
+    expect(turns).toHaveLength(6);
+
+    const assistantTurns = turns.filter(t => t.role === 'assistant');
+    expect(assistantTurns).toHaveLength(3);
+
+    expect(assistantTurns[0].content).toBe('first turn response');
+    expect(assistantTurns[1].content).toBe('second turn response');
+    expect(assistantTurns[2].content).toBe('third turn response');
+
+    expect(assistantTurns[0].thinking).toBe('first turn thinking');
+    expect(assistantTurns[1].thinking).toBe('second turn thinking');
+    expect(assistantTurns[2].thinking).toBe('third turn thinking');
+
+    const contents = new Set(assistantTurns.map(t => t.content));
+    expect(contents.size).toBe(3);
+  });
+});
+
 describe('extractTurns dispatches by site', () => {
   test('uses Claude extraction when site is claude', async () => {
     useClaude();

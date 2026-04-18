@@ -714,6 +714,37 @@ function extractAssistantTurnClaude(element, index) {
 }
 
 /**
+ * Resolve the per-turn container for a Claude assistant message from its
+ * action-bar-copy button. Walks up until it finds the tightest ancestor that
+ * contains the response content (.row-start-1 or .row-start-2) for THIS turn,
+ * and refuses any ancestor that contains more than one action-bar-copy button
+ * (which would indicate the ancestor wraps multiple turns).
+ *
+ * The previous implementation used element.closest('[class*="grid"]') which
+ * matched any grid-layout ancestor — on real Claude.ai DOM this often resolved
+ * to a macro container wrapping the entire conversation, causing every
+ * assistant turn to yield the first turn's content and thinking.
+ *
+ * @param {Element} copyButton - The [data-testid="action-bar-copy"] element
+ * @returns {Element} - The per-turn container
+ */
+function findClaudeAssistantContainer(copyButton) {
+  let current = copyButton.parentElement;
+  while (current && current !== document.body) {
+    const copyButtons = current.querySelectorAll(SELECTORS.assistantMessage);
+    if (copyButtons.length > 1) {
+      break;
+    }
+    if (current.querySelector(SELECTORS.responseContent) ||
+        current.querySelector(SELECTORS.thinkingContent)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return copyButton.parentElement || copyButton;
+}
+
+/**
  * Extract turns from a Claude conversation.
  * Claude uses a flat container with data-testid attributes to identify messages.
  * @returns {Promise<Array>} - Array of turn objects
@@ -738,9 +769,7 @@ async function extractTurnsClaude() {
     if (isUser) {
       turns.push(extractUserTurn(element, turnIndex++));
     } else {
-      // For Claude assistant messages, find the closest parent that contains
-      // both thinking and response content
-      const turnContainer = element.closest('[class*="grid"]') || element.parentElement || element;
+      const turnContainer = findClaudeAssistantContainer(element);
       turns.push(extractAssistantTurnClaude(turnContainer, turnIndex++));
     }
 

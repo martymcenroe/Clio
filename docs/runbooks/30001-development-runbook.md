@@ -154,6 +154,16 @@ If extraction fails with "Content script not loaded":
 2. Refresh the conversation page (Gemini, Claude, or ChatGPT)
 3. Try extraction again
 
+### "Could not establish connection. Receiving end does not exist."
+
+This Chrome runtime error appears in the popup when it calls `chrome.tabs.sendMessage` but no content script is listening in the active tab. Almost always it means the extension was reloaded but the conversation tab wasn't — the tab still holds the stale, now-orphaned content script.
+
+Try the steps in order; stop when the error clears:
+
+1. **Hard-refresh the conversation tab** (Ctrl+Shift+R). The content script only injects on navigation, so a refresh pulls in the current version. Fixes this ~90% of the time.
+2. On `chrome://extensions`, confirm Clio is **enabled** and the version shown matches `extensions/manifest.json`. Click the reload icon on the Clio card, then hard-refresh the tab again.
+3. Still failing? Open DevTools on the conversation tab (F12) → Console. Look for red errors mentioning `content.js`, `selectors.js`, `selectors-claude.js`, or `selectors-chatgpt.js`. A thrown error during content-script injection silently prevents the message listener from registering — fix the underlying error and reload.
+
 ### Streaming Response Detection
 
 The extension waits for streaming to complete. If it detects streaming:

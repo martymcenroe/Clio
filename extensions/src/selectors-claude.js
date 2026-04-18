@@ -2,8 +2,12 @@
  * Centralized DOM selectors for Claude.ai UI elements.
  * Isolated here for easy maintenance when Claude updates their UI.
  *
- * VERIFIED: 2026-02-27 from real Claude DOM snapshot via Playwright
- * Source: data/claude-b5b2d739_Engineering-first-AI-solution-for-ATT_2026-02-27.json
+ * VERIFIED: 2026-04-18 from real Claude DOM via DevTools ancestor-path dump (issue #32).
+ *
+ * assistantMessage uses `.row-start-2` (response-content row) because Claude
+ * places `[data-testid="action-bar-copy"]` on BOTH user and assistant messages,
+ * so the copy-button selector would double-count. `.row-start-2` appears
+ * exactly once per assistant turn and never inside a user-message subtree.
  */
 
 const SELECTORS = {
@@ -20,10 +24,13 @@ const SELECTORS = {
 
   // Message elements
   userMessage: '[data-testid="user-message"]',
-  assistantMessage: '[data-testid="action-bar-copy"]',
+  // One .row-start-2 per assistant turn (the response-content row).
+  // Do NOT use [data-testid="action-bar-copy"] — Claude renders that on user
+  // messages too, which caused duplicate assistant entries (issue #32).
+  assistantMessage: '.row-start-2',
 
   // All messages (union of user + assistant)
-  allMessages: '[data-testid="user-message"], [data-testid="action-bar-copy"]',
+  allMessages: '[data-testid="user-message"], .row-start-2',
 
   // Expandable content — thinking toggles in Claude
   expandButton: null, // Claude doesn't use generic expand buttons

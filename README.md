@@ -1,15 +1,16 @@
 # Clio
 
-A Chrome extension for extracting full Gemini conversations to structured JSON with images.
+A Chrome extension for extracting full Gemini, Claude, and ChatGPT conversations to structured JSON with images.
 
 **Clio** - Named after the Greek Muse of History.
 
 ## Features
 
-- Extracts all user inputs and Gemini responses in DOM order
+- Extracts all user inputs and assistant responses in DOM order
+- Supports Gemini (`gemini.google.com`), Claude (`claude.ai`), and ChatGPT (`chatgpt.com`)
 - Preserves code blocks with language labels
 - Captures images (screenshots, generated images)
-- Includes "Show thinking" sections when present
+- Includes thinking / reasoning sections when present
 - Handles large conversations (100+ turns) with batched processing
 - **Fail Open for images**: logs errors but continues extraction
 
@@ -30,7 +31,10 @@ A Chrome extension for extracting full Gemini conversations to structured JSON w
 
 ## Usage
 
-1. Navigate to a Gemini conversation (`https://gemini.google.com/app/...`)
+1. Navigate to a supported conversation:
+   - Gemini: `https://gemini.google.com/app/...`
+   - Claude: `https://claude.ai/chat/...`
+   - ChatGPT: `https://chatgpt.com/c/...`
 2. Wait for any streaming response to complete
 3. Click the Clio extension icon in the toolbar
 4. Click "Extract Conversation"
@@ -97,7 +101,7 @@ npm run test:e2e        # E2E tests (Playwright)
 npm run test:all        # All tests
 ```
 
-See [RUNBOOK.md](RUNBOOK.md) for detailed development instructions.
+See the [development runbook](docs/runbooks/30001-development-runbook.md) for detailed development instructions, including how to reload the extension after code changes.
 
 ## Privacy
 

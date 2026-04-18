@@ -40,6 +40,17 @@ npx playwright install  # For E2E tests
 3. Click "Load unpacked"
 4. Select the `extensions/` folder
 
+### Dev Reload Loop
+
+After you change code under `extensions/`, reload the extension so Chrome picks up the new source:
+
+1. Open `chrome://extensions`
+2. Click the reload icon on the Clio card (circular arrow)
+3. Refresh the open conversation tab (`gemini.google.com`, `claude.ai`, or `chatgpt.com`) — the content script re-injects on navigation
+4. Re-run the extraction
+
+If the popup still shows stale behavior after a reload, inspect the service worker logs via the "Inspect views: service worker" link on the Clio card.
+
 ## Testing
 
 ### Unit Tests (Jest)
@@ -51,12 +62,17 @@ npm run test:watch          # Run in watch mode
 ```
 
 **Test files:**
-- `tests/content.test.js` - Content script extraction tests
+- `tests/content.test.js` - Gemini content script extraction tests
+- `tests/content-claude.test.js` - Claude content script extraction tests
+- `tests/content-chatgpt.test.js` - ChatGPT content script extraction tests
 - `tests/popup.test.js` - Popup UI and download tests
 - `tests/background.test.js` - Service worker tests
 - `tests/viewer.test.js` - Viewer component tests
 - `tests/image-extraction.test.js` - Image handling tests
 - `tests/message-passing.test.js` - Chrome messaging tests
+- `tests/auto-scroll.test.js` - Auto-scroll / lazy-load tests
+- `tests/large-conversation.test.js` - Large-conversation handling tests
+- `tests/progress-expansion.test.js` - Thinking / reasoning expansion tests
 - `tests/integration/` - Integration tests
 
 **Coverage thresholds:** 80% for branches, functions, lines, and statements.
@@ -135,7 +151,7 @@ Required sizes: 16px, 32px, 48px, 128px
 
 If extraction fails with "Content script not loaded":
 1. Reload the extension in `chrome://extensions`
-2. Refresh the Gemini page
+2. Refresh the conversation page (Gemini, Claude, or ChatGPT)
 3. Try extraction again
 
 ### Streaming Response Detection

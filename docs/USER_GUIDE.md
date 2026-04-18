@@ -1,6 +1,6 @@
 # Clio User Guide
 
-Clio is a Chrome extension for extracting Gemini conversations to structured JSON files with images.
+Clio is a Chrome extension for extracting Gemini, Claude, and ChatGPT conversations to structured JSON files with images.
 
 ## Installation
 
@@ -14,20 +14,23 @@ Clio is a Chrome extension for extracting Gemini conversations to structured JSO
 2. Open Chrome and go to `chrome://extensions`
 3. Enable **Developer mode** (toggle in top right)
 4. Click **Load unpacked**
-5. Select the `extension` folder inside the Clio directory
+5. Select the `extensions` folder inside the Clio directory
 6. The Clio icon will appear in your toolbar
 
 **Edge users:** Use `edge://extensions` instead.
 
 ## Basic Usage
 
-### Step 1: Open a Gemini Conversation
+### Step 1: Open a Supported Conversation
 
-Navigate to any Gemini conversation at `https://gemini.google.com/app/...`
+Navigate to any conversation on a supported site:
+- Gemini: `https://gemini.google.com/app/...`
+- Claude: `https://claude.ai/chat/...`
+- ChatGPT: `https://chatgpt.com/c/...`
 
 ### Step 2: Wait for Streaming to Complete
 
-If Gemini is still generating a response, wait for it to finish. You'll know it's done when:
+If the assistant is still generating a response, wait for it to finish. You'll know it's done when:
 - The "Stop" button disappears
 - The response text stops appearing
 
@@ -115,25 +118,28 @@ Clio includes a standalone viewer for browsing exported conversations.
 - **Bubbles**: Messages displayed in chat format
 - **Compact Mode**: Long messages are truncated (click to expand)
 - **Click to Copy**: Click any message to copy its content
-- **Thinking Sections**: Click "Show thinking" to reveal Gemini's reasoning
+- **Thinking Sections**: Click to reveal the assistant's reasoning
 
 ## Troubleshooting
 
-### "Please open a Gemini conversation first"
+### "Please open a Gemini, Claude, or ChatGPT conversation first"
 
-You're not on a Gemini page. Navigate to `https://gemini.google.com/app/...`
+You're not on a supported conversation page. Navigate to one of:
+- `https://gemini.google.com/app/...`
+- `https://claude.ai/chat/...`
+- `https://chatgpt.com/c/...`
 
 ### "Failed to load JSZip"
 
 The extension couldn't load the zip library. Try:
 1. Reload the extension in `chrome://extensions`
-2. Refresh the Gemini page
+2. Refresh the conversation page
 3. Try extraction again
 
 ### "Content script not loaded"
 
 The extension's content script didn't inject properly. Try:
-1. Refresh the Gemini page
+1. Refresh the conversation page
 2. If that doesn't work, reload the extension
 
 ### Extraction shows errors but still works
@@ -146,7 +152,7 @@ Cross-origin images or very large images may fail to extract. The conversation t
 
 ### Streaming detection issues
 
-If Clio thinks Gemini is still streaming when it's not:
+If Clio thinks the assistant is still streaming when it's not:
 1. Wait a few seconds
 2. Try extraction again
 
@@ -156,11 +162,11 @@ If Clio thinks Gemini is still streaming when it's not:
 
 - No data is sent to external servers
 - Your conversations never leave your computer
-- The extension only activates on Gemini pages
+- The extension only activates on supported assistant pages
 
 ## Tips
 
-1. **Expand "Show thinking"** before extracting if you want to capture Gemini's reasoning
+1. **Expand thinking / reasoning sections** before extracting if you want to capture the assistant's reasoning
 2. **Wait for all images to load** on the page before extracting
 3. **Large conversations** (100+ turns) may take longer to process
 4. **Use the viewer** for easier reading of exported conversations

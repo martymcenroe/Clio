@@ -13,7 +13,7 @@
 
 ## Project Overview
 
-Chrome extension for extracting full Gemini conversations to structured JSON with images. Named after the Greek Muse of History.
+Chrome extension for extracting full Gemini, Claude, and ChatGPT conversations to structured JSON with images. Named after the Greek Muse of History.
 
 ### Architecture
 

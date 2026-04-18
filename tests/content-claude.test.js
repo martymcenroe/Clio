@@ -94,14 +94,25 @@ describe('extractConversationId (Claude)', () => {
 });
 
 describe('countMessages (Claude)', () => {
-  test('counts user and assistant messages', () => {
+  test('counts user and assistant messages (row-start-2)', () => {
     document.body.innerHTML = [
       '<div data-testid="user-message">Hello</div>',
-      '<div data-testid="action-bar-copy"></div>',
+      '<div class="row-start-2">First response</div>',
       '<div data-testid="user-message">Follow up</div>',
-      '<div data-testid="action-bar-copy"></div>'
+      '<div class="row-start-2">Second response</div>'
     ].join('');
     expect(countMessages()).toBe(4);
+  });
+
+  test('does NOT count action-bar-copy buttons (user messages have them too)', () => {
+    // Regression for #32: copy buttons appear on both user and assistant
+    // messages. Only .row-start-2 identifies an assistant turn.
+    document.body.innerHTML = [
+      '<div data-testid="user-message">Hello</div>',
+      '<button data-testid="action-bar-copy"></button>',
+      '<button data-testid="action-bar-copy"></button>'
+    ].join('');
+    expect(countMessages()).toBe(1);
   });
 
   test('returns 0 when no messages', () => {
@@ -319,6 +330,159 @@ describe('extractTurnsClaude with shared grid ancestor (regression #25)', () => 
 
     const contents = new Set(assistantTurns.map(t => t.content));
     expect(contents.size).toBe(3);
+  });
+});
+
+describe('extractTurnsClaude with real Claude DOM shape (regression #32)', () => {
+  // Reproduces the real Claude DOM structure captured via DevTools on a
+  // 19-turn live conversation:
+  //   - Conversation column <div class="flex-1 flex flex-col..."> contains
+  //     alternating user-turn and assistant-turn wrappers.
+  //   - Each user-turn wrapper holds <div data-testid="user-message"> AND
+  //     its own [data-testid="action-bar-copy"] button.
+  //   - Each assistant-turn wrapper holds .row-start-1 (thinking/toolUse)
+  //     + .row-start-2 (response) + its own [data-testid="action-bar-copy"].
+  //
+  // The previous selector (action-bar-copy) matched BOTH user and assistant
+  // copy buttons, producing 2 entries per turn with duplicated content.
+  // Fix: enumerate by .row-start-2 (one per assistant turn).
+
+  function buildRealClaudeDOM(turns) {
+    const conversationColumn = document.createElement('div');
+    conversationColumn.className = 'flex-1 flex flex-col px-4 max-w-3xl mx-auto w-full pt-1';
+
+    function actionBar() {
+      const outer = document.createElement('div');
+      outer.className = 'flex justify-start opacity-0 group-hover:opacity-100';
+      const wrap1 = document.createElement('div');
+      wrap1.className = 'text-text-300';
+      const wrap2 = document.createElement('div');
+      wrap2.className = 'text-text-300 flex items-stretch justify-between';
+      const wFit = document.createElement('div');
+      wFit.className = 'w-fit';
+      const copy = document.createElement('button');
+      copy.setAttribute('data-testid', 'action-bar-copy');
+      wFit.appendChild(copy);
+      wrap2.appendChild(wFit);
+      wrap1.appendChild(wrap2);
+      outer.appendChild(wrap1);
+      return outer;
+    }
+
+    for (const turn of turns) {
+      if (turn.role === 'user') {
+        const outer = document.createElement('div');
+        const group = document.createElement('div');
+        group.className = 'mb-1 mt-6 group';
+        const flexCol = document.createElement('div');
+        flexCol.className = 'flex flex-col items-end gap-1';
+        const userMsg = document.createElement('div');
+        userMsg.setAttribute('data-testid', 'user-message');
+        userMsg.textContent = turn.content;
+        flexCol.appendChild(userMsg);
+        flexCol.appendChild(actionBar());
+        group.appendChild(flexCol);
+        outer.appendChild(group);
+        conversationColumn.appendChild(outer);
+      } else {
+        const outer = document.createElement('div');
+        const group = document.createElement('div');
+        group.className = 'group';
+        if (turn.thinking) {
+          const think = document.createElement('div');
+          think.className = 'row-start-1';
+          think.textContent = turn.thinking;
+          group.appendChild(think);
+        }
+        if (turn.toolUse) {
+          const toolRow = document.createElement('div');
+          toolRow.className = 'row-start-1';
+          const btn = document.createElement('button');
+          btn.className = 'group/row';
+          btn.textContent = turn.toolUse;
+          toolRow.appendChild(btn);
+          group.appendChild(toolRow);
+        }
+        const resp = document.createElement('div');
+        resp.className = 'row-start-2';
+        resp.textContent = turn.content;
+        group.appendChild(resp);
+        group.appendChild(actionBar());
+        outer.appendChild(group);
+        conversationColumn.appendChild(outer);
+      }
+    }
+
+    document.body.appendChild(conversationColumn);
+  }
+
+  test('19-turn conversation yields 19 user + 19 assistant with unique content', async () => {
+    const turnSpecs = [];
+    for (let i = 1; i <= 19; i++) {
+      turnSpecs.push({ role: 'user', content: `user message ${i}` });
+      turnSpecs.push({
+        role: 'assistant',
+        content: `assistant response ${i}`,
+        thinking: `thinking for turn ${i}`,
+        toolUse: i % 3 === 0 ? `tool-call-${i}` : null
+      });
+    }
+    buildRealClaudeDOM(turnSpecs);
+
+    const turns = await extractTurnsClaude();
+
+    expect(turns).toHaveLength(38);
+
+    const userTurns = turns.filter(t => t.role === 'user');
+    const assistantTurns = turns.filter(t => t.role === 'assistant');
+    expect(userTurns).toHaveLength(19);
+    expect(assistantTurns).toHaveLength(19);
+
+    const contents = new Set(assistantTurns.map(t => t.content));
+    expect(contents.size).toBe(19);
+
+    const thinkings = new Set(assistantTurns.map(t => t.thinking));
+    expect(thinkings.size).toBe(19);
+
+    for (let i = 0; i < 19; i++) {
+      expect(assistantTurns[i].content).toBe(`assistant response ${i + 1}`);
+      expect(assistantTurns[i].thinking).toContain(`thinking for turn ${i + 1}`);
+    }
+
+    const toolUses = assistantTurns.filter(t => t.toolUse && t.toolUse.length > 0);
+    expect(toolUses.length).toBe(6);
+  });
+
+  test('user copy buttons do NOT inflate assistant count', async () => {
+    buildRealClaudeDOM([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello', thinking: 'greeting' },
+      { role: 'user', content: 'how are you' },
+      { role: 'assistant', content: 'fine', thinking: 'status' }
+    ]);
+
+    const copyBtns = document.querySelectorAll('[data-testid="action-bar-copy"]');
+    expect(copyBtns.length).toBe(4);
+
+    const turns = await extractTurnsClaude();
+    expect(turns).toHaveLength(4);
+    expect(turns.filter(t => t.role === 'assistant')).toHaveLength(2);
+    expect(countMessages()).toBe(4);
+  });
+
+  test('role alternation is correct (no consecutive duplicates)', async () => {
+    buildRealClaudeDOM([
+      { role: 'user', content: 'U1' },
+      { role: 'assistant', content: 'A1', thinking: 'T1' },
+      { role: 'user', content: 'U2' },
+      { role: 'assistant', content: 'A2', thinking: 'T2' },
+      { role: 'user', content: 'U3' },
+      { role: 'assistant', content: 'A3', thinking: 'T3' }
+    ]);
+
+    const turns = await extractTurnsClaude();
+    const roles = turns.map(t => t.role);
+    expect(roles).toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant']);
   });
 });
 

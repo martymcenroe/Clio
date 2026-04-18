@@ -257,8 +257,10 @@ function resetScrollConfig() {
 function countMessages() {
   const site = getSite();
   if (site === 'claude') {
+    // Assistant turns: one .row-start-2 per turn. Do not use action-bar-copy
+    // (appears on user messages too, inflated the count — issue #32).
     const userMsgs = document.querySelectorAll('[data-testid="user-message"]');
-    const assistantMsgs = document.querySelectorAll('[data-testid="action-bar-copy"]');
+    const assistantMsgs = document.querySelectorAll('.row-start-2');
     return userMsgs.length + assistantMsgs.length;
   }
   if (site === 'chatgpt') {
@@ -714,50 +716,50 @@ function extractAssistantTurnClaude(element, index) {
 }
 
 /**
- * Resolve the per-turn container for a Claude assistant message from its
- * action-bar-copy button. Walks up until it finds the tightest ancestor that
- * contains the response content (.row-start-1 or .row-start-2) for THIS turn,
- * and refuses any ancestor that contains more than one action-bar-copy button
- * (which would indicate the ancestor wraps multiple turns).
+ * Resolve the per-turn container for a Claude assistant turn given its
+ * .row-start-2 response-content element. Walks up from the response element
+ * until the parent would include a sibling .row-start-2 (i.e., the parent
+ * bridges turns), and returns the last single-turn ancestor.
  *
- * The previous implementation used element.closest('[class*="grid"]') which
- * matched any grid-layout ancestor — on real Claude.ai DOM this often resolved
- * to a macro container wrapping the entire conversation, causing every
- * assistant turn to yield the first turn's content and thinking.
+ * Why this shape: on real Claude DOM each assistant turn has exactly one
+ * .row-start-2; its nearest ancestors also have exactly one until we reach
+ * the conversation column, which has N (one per turn). The boundary at which
+ * the parent's .row-start-2 count flips from 1 to >1 is the per-turn
+ * container's outer edge. This keeps extraction scoped to this turn only.
  *
- * @param {Element} copyButton - The [data-testid="action-bar-copy"] element
- * @returns {Element} - The per-turn container
+ * @param {Element} responseEl - The .row-start-2 element for this turn
+ * @returns {Element} - The per-turn container (includes .row-start-1 + .row-start-2)
  */
-function findClaudeAssistantContainer(copyButton) {
-  let current = copyButton.parentElement;
+function findClaudeAssistantContainer(responseEl) {
+  let current = responseEl;
   while (current && current !== document.body) {
-    const copyButtons = current.querySelectorAll(SELECTORS.assistantMessage);
-    if (copyButtons.length > 1) {
-      break;
-    }
-    if (current.querySelector(SELECTORS.responseContent) ||
-        current.querySelector(SELECTORS.thinkingContent)) {
+    const parent = current.parentElement;
+    if (!parent || parent === document.body) break;
+    if (parent.querySelectorAll(SELECTORS.responseContent).length > 1) {
       return current;
     }
-    current = current.parentElement;
+    if (parent.querySelector(SELECTORS.userMessage)) {
+      return current;
+    }
+    current = parent;
   }
-  return copyButton.parentElement || copyButton;
+  return current || responseEl;
 }
 
 /**
  * Extract turns from a Claude conversation.
- * Claude uses a flat container with data-testid attributes to identify messages.
+ * User turns are identified by [data-testid="user-message"].
+ * Assistant turns are identified by .row-start-2 (response-content row).
  * @returns {Promise<Array>} - Array of turn objects
  */
 async function extractTurnsClaude() {
   const turns = [];
   let turnIndex = 0;
 
-  // Find all user and assistant messages and sort by DOM position
   const userMsgs = Array.from(document.querySelectorAll(SELECTORS.userMessage));
-  const assistantMsgs = Array.from(document.querySelectorAll(SELECTORS.assistantMessage));
+  const responseEls = Array.from(document.querySelectorAll(SELECTORS.assistantMessage));
 
-  const allMsgs = [...userMsgs, ...assistantMsgs].sort((a, b) => {
+  const allMsgs = [...userMsgs, ...responseEls].sort((a, b) => {
     const position = a.compareDocumentPosition(b);
     return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
   });

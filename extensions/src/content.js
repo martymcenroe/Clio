@@ -686,20 +686,17 @@ function extractAssistantTurnClaude(element, index) {
     }
   }
 
-  // Extract response from .row-start-2 (preferred) or fall back to removing thinking
-  let content = '';
-  const responseEl = element.querySelector(SELECTORS.responseContent);
-  if (responseEl) {
-    content = extractTextContent(responseEl);
-  } else {
-    // Fallback: clone and remove thinking
-    const contentClone = element.cloneNode(true);
-    const thinkingClone = contentClone.querySelector(SELECTORS.thinkingContent);
-    if (thinkingClone) {
-      thinkingClone.remove();
-    }
-    content = extractTextContent(contentClone);
-  }
+  // Extract content by cloning the whole turn container and removing all
+  // .row-start-1 subtrees (there can be 2 — thinking title + tool-use row).
+  // What remains is the .row-start-2 response AND any sibling markdown
+  // content inside the response body. For artifact turns (email drafts,
+  // PDF edits, etc.) the commentary prose lives in a sibling
+  // .standard-markdown block next to an artifact widget that renders its
+  // text out-of-reach (likely iframe/shadow) — pulling only .row-start-2
+  // would silently drop that commentary. Issue #39.
+  const contentClone = element.cloneNode(true);
+  contentClone.querySelectorAll(SELECTORS.thinkingContent).forEach(el => el.remove());
+  const content = extractTextContent(contentClone);
 
   const turn = {
     index,

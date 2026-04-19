@@ -274,6 +274,61 @@ describe('extractAssistantTurnClaude', () => {
 
     expect(turn.type).toBe('thinking-only');
   });
+
+  test('captures commentary prose sibling of row-start-2 (artifact turn, issue #39)', () => {
+    // Mirrors real Claude DOM for artifact turns (email drafts, PDF edits):
+    //   div (per-turn container)
+    //     div.font-claude-response
+    //       div.row-start-1 (thinking title)
+    //       div.row-start-1 (tool-use row — optional)
+    //       div.row-start-2 (artifact widget — textContent often empty
+    //                        because artifact renders via iframe/shadow)
+    //       div
+    //         div.standard-markdown
+    //           p [Model: claude-opus-4-6 | Turn ID: 4 | Time: ...]
+    //           p "The equipment ask does the heavy lifting..."
+    const turnWrapper = document.createElement('div');
+    const body = document.createElement('div');
+    body.className = 'font-claude-response';
+
+    const thinking = document.createElement('div');
+    thinking.className = 'row-start-1';
+    thinking.textContent = 'Refined email structure';
+    body.appendChild(thinking);
+
+    const toolRow = document.createElement('div');
+    toolRow.className = 'row-start-1';
+    body.appendChild(toolRow);
+
+    const artifactWidget = document.createElement('div');
+    artifactWidget.className = 'row-start-2';
+    // Artifact widget has no accessible textContent (simulating iframe/shadow)
+    body.appendChild(artifactWidget);
+
+    const commentaryWrap = document.createElement('div');
+    const markdown = document.createElement('div');
+    markdown.className = 'standard-markdown';
+    const header = document.createElement('p');
+    header.className = 'font-claude-response-body';
+    header.textContent = '[Model: claude-opus-4-6 | Turn ID: 4 | Time: 2026-04-17 09:31 CT]';
+    const para = document.createElement('p');
+    para.className = 'font-claude-response-body';
+    para.textContent = 'The equipment ask does the heavy lifting. It gives the email a natural reason to exist.';
+    markdown.appendChild(header);
+    markdown.appendChild(para);
+    commentaryWrap.appendChild(markdown);
+    body.appendChild(commentaryWrap);
+
+    turnWrapper.appendChild(body);
+
+    const turn = extractAssistantTurnClaude(turnWrapper, 7);
+
+    expect(turn.content).toContain('Turn ID: 4');
+    expect(turn.content).toContain('The equipment ask does the heavy lifting');
+    expect(turn.thinking).toContain('Refined email structure');
+    // With real commentary captured, this is NOT a thinking-only turn
+    expect(turn.type).toBeUndefined();
+  });
 });
 
 describe('extractTurnsClaude', () => {

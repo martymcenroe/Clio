@@ -275,6 +275,39 @@ describe('extractAssistantTurnClaude', () => {
     expect(turn.type).toBe('thinking-only');
   });
 
+  test('preserves nested row-start-1 inside row-start-2 (real Claude normal-turn shape, issue #39)', () => {
+    // Real Claude DOM for NORMAL (non-artifact) turns:
+    //   div.font-claude-response
+    //     div.row-start-1                     (outer thinking title — remove)
+    //     div.row-start-2                     (response wrapper — keep)
+    //       div.row-start-1.col-start-1...    (INNER response body — KEEP)
+    // PR #40 blindly removed every .row-start-1 including the nested inner
+    // one, wiping out the actual response on all normal turns. The fix must
+    // remove only outer .row-start-1 (not inside a .row-start-2).
+    const body = document.createElement('div');
+    body.className = 'font-claude-response';
+
+    const outerThinking = document.createElement('div');
+    outerThinking.className = 'row-start-1';
+    outerThinking.textContent = 'Thinking title that should be removed';
+    body.appendChild(outerThinking);
+
+    const responseWrapper = document.createElement('div');
+    responseWrapper.className = 'row-start-2';
+    const innerResponse = document.createElement('div');
+    innerResponse.className = 'row-start-1 col-start-1 relative z-[2]';
+    innerResponse.textContent = '[Model: claude-opus-4-6 | Turn ID: 1 | Time: ...]\nThe real response body lives here.';
+    responseWrapper.appendChild(innerResponse);
+    body.appendChild(responseWrapper);
+
+    const turn = extractAssistantTurnClaude(body, 1);
+
+    expect(turn.content).toContain('Turn ID: 1');
+    expect(turn.content).toContain('The real response body lives here');
+    expect(turn.content).not.toContain('Thinking title that should be removed');
+    expect(turn.thinking).toContain('Thinking title that should be removed');
+  });
+
   test('captures commentary prose sibling of row-start-2 (artifact turn, issue #39)', () => {
     // Mirrors real Claude DOM for artifact turns (email drafts, PDF edits):
     //   div (per-turn container)

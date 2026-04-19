@@ -686,16 +686,27 @@ function extractAssistantTurnClaude(element, index) {
     }
   }
 
-  // Extract content by cloning the whole turn container and removing all
-  // .row-start-1 subtrees (there can be 2 — thinking title + tool-use row).
-  // What remains is the .row-start-2 response AND any sibling markdown
-  // content inside the response body. For artifact turns (email drafts,
-  // PDF edits, etc.) the commentary prose lives in a sibling
-  // .standard-markdown block next to an artifact widget that renders its
-  // text out-of-reach (likely iframe/shadow) — pulling only .row-start-2
-  // would silently drop that commentary. Issue #39.
+  // Extract content by cloning the turn container and removing only OUTER
+  // .row-start-1 subtrees (the thinking-title rows). Preserve any
+  // .row-start-1 nested INSIDE a .row-start-2 — on real Claude DOM the
+  // actual response body for normal turns lives in a nested
+  // .row-start-1.col-start-1 element that is a child of the outer
+  // .row-start-2. Removing it (as PR #40 did) wiped out every normal
+  // response. Issue #39.
+  //
+  // Real DOM:
+  //   font-claude-response
+  //     div.row-start-1                     <- OUTER thinking (remove)
+  //     div.row-start-2                     <- response wrapper (keep)
+  //       div.row-start-1.col-start-1...    <- INNER response body (keep)
+  //     [div > div.standard-markdown > p]   <- sibling commentary on
+  //                                            artifact turns (keep)
   const contentClone = element.cloneNode(true);
-  contentClone.querySelectorAll(SELECTORS.thinkingContent).forEach(el => el.remove());
+  contentClone.querySelectorAll(SELECTORS.thinkingContent).forEach(el => {
+    if (!el.closest(SELECTORS.responseContent)) {
+      el.remove();
+    }
+  });
   const content = extractTextContent(contentClone);
 
   const turn = {

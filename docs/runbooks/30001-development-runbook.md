@@ -218,6 +218,14 @@ Dumps and fixtures contain real data from your account. Before `git add`:
 - **"Chrome browser not found" at launch:** `channel: 'chrome'` requires a system Chrome install. On Windows, install Chrome from https://www.google.com/chrome/ and retry.
 - **No scrollable containers detected:** the sidebar is hidden or collapsed in the page when you clicked Resume. Expand it first, then re-run.
 - **`mostLikelySidebar` is null in the JSON:** the heuristic requires at least 5 children with the same class fingerprint. If the sidebar has fewer items or uses per-item randomized classes, fall back to the `scrollableContainers` list in the dump and pick the candidate manually.
+- **Harness failed and the terminal scrolled away before you could read it:** the spec records trace + video on every run (#79). Open the trace to replay what happened:
+  ```bash
+  # Find the latest failure's test-results directory
+  ls -lt tests/../test-results/ | head -3
+  # Open the trace (opens in a browser-based viewer)
+  npx playwright show-trace test-results/<your-failed-test-dir>/trace.zip
+  ```
+  The viewer shows a timeline of every Playwright action with before/after DOM snapshots, network, and console. Video lives in the same directory as `video.webm`. If `dumpSite()` threw, `docs/dom-dumps/{site}.json` will contain `{ error, stack, timestamp }` instead of analysis data — check there first before opening the trace.
 
 ## Troubleshooting
 

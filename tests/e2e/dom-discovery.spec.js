@@ -3,142 +3,166 @@
  * DOM discovery harness for Clio 2.0 sidebar harvesting (#47).
  *
  * One test per site (Gemini / Claude / ChatGPT). Each opens a headed
- * Chromium, pauses for the user to log in and navigate to the
- * conversation-list view, then runs structural analysis and writes:
+ * Chrome, pauses for the user to log in (first run only) and navigate
+ * to the conversation-list view, then runs structural analysis and
+ * writes:
  *
  *   docs/dom-dumps/{site}.json           structured report
  *   tests/fixtures/sidebar-{site}.html   full page HTML for jsdom tests
  *
- * Run:  npm run test:e2e -- dom-discovery
+ * Login is persistent: each site has its own Chrome profile at
+ *   ~/.clio-profiles/{site}/
+ * First run asks for login; every subsequent run uses the cached
+ * session and skips straight past the sign-in flow. Clear a specific
+ * profile to force re-login: `rm -rf ~/.clio-profiles/{site}/`.
+ *
+ * Run:  npm run test:e2e:dom-discovery
  * Runbook: docs/runbooks/30001-development-runbook.md §DOM Discovery (F1)
+ * ADR: docs/adrs/0201-playwright-system-chrome-channel.md
+ *      (this spec uses Option A — channel:chrome — AND Option B —
+ *      persistent user-data-dir — from that ADR)
  */
 
-const { test, expect } = require('@playwright/test');
+const { test, expect, chromium } = require('@playwright/test');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const OUT_DIR = path.join(__dirname, '..', '..', 'docs', 'dom-dumps');
 const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
+const PROFILES_ROOT = path.join(os.homedir(), '.clio-profiles');
 
 const SITES = [
   {
     id: 'gemini',
     label: 'Gemini',
     url: 'https://gemini.google.com/app',
-    hint: 'Log into Google. Ensure the Chat history sidebar (left panel) is visible.'
+    hint: 'Log into Google (first run only). Ensure the Chat history sidebar (left panel) is visible.'
   },
   {
     id: 'claude',
     label: 'Claude',
     url: 'https://claude.ai/',
-    hint: 'Log into Claude. Make sure the conversation list in the left sidebar is visible.'
+    hint: 'Log into Claude (first run only). Make sure the conversation list in the left sidebar is visible.'
   },
   {
     id: 'chatgpt',
     label: 'ChatGPT',
     url: 'https://chatgpt.com/',
-    hint: 'Log into ChatGPT. If the sidebar is collapsed, expand it before resuming.'
+    hint: 'Log into ChatGPT (first run only). If the sidebar is collapsed, expand it before resuming.'
   }
 ];
-
-// channel: 'chrome' launches the user's installed system Chrome instead of
-// Playwright's bundled Chromium — Google's anti-automation fingerprinting
-// blocks sign-in on bundled Chromium ("This browser or app may not be
-// secure"). --disable-blink-features=AutomationControlled removes the
-// navigator.webdriver signal that Playwright sets by default.
-//
-// trace/video are unconditionally on for this spec: it runs rarely,
-// interactively, and any failure is expensive to reproduce (requires
-// re-login). The forensic value on the first failure justifies the
-// trace/video cost. See docs/runbooks/30001-development-runbook.md
-// §DOM Discovery troubleshooting for how to open a saved trace.
-test.use({
-  headless: false,
-  viewport: { width: 1400, height: 900 },
-  channel: 'chrome',
-  launchOptions: {
-    args: ['--disable-blink-features=AutomationControlled']
-  },
-  trace: 'on',
-  video: 'on'
-});
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.mkdirSync(FIXTURES_DIR, { recursive: true });
+  fs.mkdirSync(PROFILES_ROOT, { recursive: true });
 });
 
 test.describe.serial('DOM discovery — Clio 2.0 sidebar harvesting (#47)', () => {
   for (const site of SITES) {
-    test(site.label, async ({ page, browserName }) => {
+    test(site.label, async ({ browserName }, testInfo) => {
       test.skip(browserName !== 'chromium', 'DOM discovery is Chromium-only');
       test.setTimeout(0);
 
-      console.log(`\n=== ${site.label.toUpperCase()} — ${site.url} ===`);
-      console.log(`Hint: ${site.hint}`);
-      console.log('After login + navigation, click Resume in the Playwright Inspector.\n');
+      // Per-site persistent profile — login survives across runs.
+      // ADR-0201 Option B implementation; supersedes the default
+      // Playwright page fixture for this spec (see #81).
+      const userDataDir = path.join(PROFILES_ROOT, site.id);
+      fs.mkdirSync(userDataDir, { recursive: true });
 
-      await page.goto(site.url, { waitUntil: 'domcontentloaded' });
-      await page.pause();
+      const isFirstRun = fs.readdirSync(userDataDir).length === 0;
 
-      // Analysis is wrapped so a thrown phase still leaves forensics on
-      // disk. The test still fails (see expect at the end) — but the
-      // dump JSON records the error + stack, and we also attempt an
-      // HTML snapshot independently. #79.
-      let dump;
-      let dumpError = null;
+      const context = await chromium.launchPersistentContext(userDataDir, {
+        channel: 'chrome',
+        headless: false,
+        viewport: { width: 1400, height: 900 },
+        args: ['--disable-blink-features=AutomationControlled'],
+        recordVideo: { dir: testInfo.outputDir }
+      });
+
+      await context.tracing.start({
+        screenshots: true,
+        snapshots: true,
+        sources: true
+      });
+
+      const page = context.pages()[0] || await context.newPage();
+
       try {
-        dump = await dumpSite(page);
-      } catch (e) {
-        dumpError = e;
-        dump = {
-          error: e.message,
-          stack: e.stack,
-          timestamp: new Date().toISOString(),
-          site: site.id,
-          url: page.url()
-        };
-        console.error(`[${site.label}] dumpSite threw:`, e.message);
-      }
-
-      const jsonPath = path.join(OUT_DIR, `${site.id}.json`);
-      fs.writeFileSync(jsonPath, JSON.stringify(dump, null, 2));
-
-      const htmlPath = path.join(FIXTURES_DIR, `sidebar-${site.id}.html`);
-      try {
-        fs.writeFileSync(htmlPath, await page.content());
-      } catch (e) {
-        console.error(`[${site.label}] page.content() failed — page may be closed:`, e.message);
-      }
-
-      if (dumpError) {
-        console.log(`\n✗ ${site.label} — dump failed`);
-        console.log(`  Dump (error form): ${path.relative(process.cwd(), jsonPath)}`);
-        console.log(`  Fixture:           ${path.relative(process.cwd(), htmlPath)}`);
-        console.log(`  Trace:             test-results/<dir>/trace.zip (open with: npx playwright show-trace ...)`);
-      } else {
-        console.log(`\n✓ ${site.label}`);
-        console.log(`  Dump:       ${path.relative(process.cwd(), jsonPath)}`);
-        console.log(`  Fixture:    ${path.relative(process.cwd(), htmlPath)}`);
-        console.log(`  Scrollables: ${dump.scrollableContainers.length}`);
-        if (dump.mostLikelySidebar) {
-          const fps = dump.mostLikelySidebar.childClassFingerprints || {};
-          const top = Object.entries(fps).sort((a, b) => b[1] - a[1])[0];
-          console.log(`  Sidebar:    ${dump.mostLikelySidebarSelector}`);
-          console.log(`  Children:   ${dump.mostLikelySidebar.childCount}`);
-          if (top) console.log(`  Pattern:    ${top[1]}x "${top[0] || '(no classes)'}"`);
+        console.log(`\n=== ${site.label.toUpperCase()} — ${site.url} ===`);
+        console.log(`Hint: ${site.hint}`);
+        console.log(`Profile: ${userDataDir}`);
+        if (isFirstRun) {
+          console.log('First run for this site — you will need to log in.');
+        } else {
+          console.log('Profile already authenticated — verify sidebar is visible, then resume.');
         }
-        if (dump.urlScheme && dump.urlScheme.afterUrl) {
-          console.log(`  URL click:  ${dump.urlScheme.afterUrl}`);
-        } else if (dump.urlScheme && dump.urlScheme.error) {
-          console.log(`  URL click:  ERROR — ${dump.urlScheme.error}`);
-        }
-      }
+        console.log('When ready, click Resume in the Playwright Inspector.\n');
 
-      // Rethrow with the original error so Playwright surfaces a useful
-      // stack (instead of a cryptic "Cannot read properties of undefined").
-      if (dumpError) throw dumpError;
-      expect(dump.scrollableContainers.length).toBeGreaterThan(0);
+        await page.goto(site.url, { waitUntil: 'domcontentloaded' });
+        await page.pause();
+
+        let dump;
+        let dumpError = null;
+        try {
+          dump = await dumpSite(page);
+        } catch (e) {
+          dumpError = e;
+          dump = {
+            error: e.message,
+            stack: e.stack,
+            timestamp: new Date().toISOString(),
+            site: site.id,
+            url: page.url()
+          };
+          console.error(`[${site.label}] dumpSite threw:`, e.message);
+        }
+
+        const jsonPath = path.join(OUT_DIR, `${site.id}.json`);
+        fs.writeFileSync(jsonPath, JSON.stringify(dump, null, 2));
+
+        const htmlPath = path.join(FIXTURES_DIR, `sidebar-${site.id}.html`);
+        try {
+          fs.writeFileSync(htmlPath, await page.content());
+        } catch (e) {
+          console.error(`[${site.label}] page.content() failed — page may be closed:`, e.message);
+        }
+
+        if (dumpError) {
+          console.log(`\n✗ ${site.label} — dump failed`);
+          console.log(`  Dump (error form): ${path.relative(process.cwd(), jsonPath)}`);
+          console.log(`  Fixture:           ${path.relative(process.cwd(), htmlPath)}`);
+          console.log(`  Trace:             ${path.relative(process.cwd(), testInfo.outputDir)}/trace.zip`);
+        } else {
+          console.log(`\n✓ ${site.label}`);
+          console.log(`  Dump:       ${path.relative(process.cwd(), jsonPath)}`);
+          console.log(`  Fixture:    ${path.relative(process.cwd(), htmlPath)}`);
+          console.log(`  Scrollables: ${dump.scrollableContainers.length}`);
+          if (dump.mostLikelySidebar) {
+            const fps = dump.mostLikelySidebar.childClassFingerprints || {};
+            const top = Object.entries(fps).sort((a, b) => b[1] - a[1])[0];
+            console.log(`  Sidebar:    ${dump.mostLikelySidebarSelector}`);
+            console.log(`  Children:   ${dump.mostLikelySidebar.childCount}`);
+            if (top) console.log(`  Pattern:    ${top[1]}x "${top[0] || '(no classes)'}"`);
+          }
+          if (dump.urlScheme && dump.urlScheme.afterUrl) {
+            console.log(`  URL click:  ${dump.urlScheme.afterUrl}`);
+          } else if (dump.urlScheme && dump.urlScheme.error) {
+            console.log(`  URL click:  ERROR — ${dump.urlScheme.error}`);
+          }
+        }
+
+        if (dumpError) throw dumpError;
+        expect(dump.scrollableContainers.length).toBeGreaterThan(0);
+      } finally {
+        try {
+          await context.tracing.stop({ path: path.join(testInfo.outputDir, 'trace.zip') });
+        } catch (e) {
+          // Trace-stop can fail if the context already died; not fatal.
+        }
+        await context.close();
+      }
     });
   }
 });

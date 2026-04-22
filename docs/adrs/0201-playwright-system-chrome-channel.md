@@ -1,8 +1,10 @@
 # 0201 - ADR: System Chrome Channel for Playwright Automation Against Anti-Automation-Gated Sites
 
-**Status:** Implemented
+**Status:** Implemented (Option A + Option B — see §7)
 **Date:** 2026-04-22
 **Categories:** Infrastructure, Process
+
+> **Update 2026-04-22 (same day):** Option B (persistent user-data-dir) was escalated into implementation alongside Option A after first live run showed that per-run login was untenable — the Claude test died mid-navigation and would have required re-login anyway. Both options now ship in `tests/e2e/dom-discovery.spec.js` (issue #81). Section 7 reflects the current state; Section 3 Option B is no longer "reserved."
 
 ## 1. Context
 
@@ -137,20 +139,32 @@ Trade-offs accepted:
 
 ## 7. Implementation
 
-- **Related Issues:** #47 (DOM-discovery harness), #75 (this fix), #76 (PR shipping the fix), #77 (this ADR)
+- **Related Issues:** #47 (DOM-discovery harness), #75 (Option A fix), #76 (PR shipping Option A), #77 (this ADR), #81 (Option B escalation), #79 (instrumentation)
 - **Related ADRs:** AssemblyZero ADR-0209 (Playwright persistent context for extension testing) — complementary, different scope. AssemblyZero ADR-0216 mirrors this ADR for cross-project reference.
-- **Status:** Complete — shipped as Clio PR #76, merged 2026-04-22
-- **Pattern for new specs that need it:**
+- **Status:** Complete — Option A shipped in PR #76; Option B shipped in the PR closing #81 (both merged 2026-04-22).
+- **Why both options ship together:** Option A (system Chrome channel) is needed to pass the fingerprint check at the sign-in page. Option B (persistent user-data-dir) is needed so login survives across test runs — without it, a mid-run failure requires re-login on the next attempt, which is untenable given sign-in time + occasional 2FA / CAPTCHA friction. Neither option alone is sufficient for a reliable harness; the two stack.
+- **Pattern for new specs that need both:**
   ```js
-  test.use({
+  const { chromium } = require('@playwright/test');
+  const os = require('os');
+  const path = require('path');
+
+  // Inside your test:
+  const userDataDir = path.join(os.homedir(), '.<project>-profiles', site.id);
+  const context = await chromium.launchPersistentContext(userDataDir, {
     channel: 'chrome',
-    launchOptions: {
-      args: ['--disable-blink-features=AutomationControlled']
-    }
+    headless: false,
+    args: ['--disable-blink-features=AutomationControlled']
   });
+  // ... use context.pages()[0] or context.newPage() ...
+  await context.close();
   ```
-- **When to apply:** any Playwright spec that must sign into Google, Microsoft, or comparable anti-automation-gated provider. Do NOT apply to specs that don't need it — bundled Chromium is faster and needs no external install.
-- **Escalation:** if this pattern ever fails (sign-in re-blocks), move the affected spec to Option B — persistent user-data-dir with pre-authenticated profile. File a follow-up ADR superseding this one if escalation becomes the default.
+- **When to apply:** any Playwright spec that must sign into Google, Microsoft, or comparable anti-automation-gated provider AND runs often enough that per-run login is a cost. Do NOT apply to specs that don't need it — bundled Chromium is faster and needs no external install.
+- **Profile location convention:** user home dir (`~/.<project>-profiles/`), not repo-local, not `test-results/`. Outside the repo so reclones and `git clean` don't wipe sessions; outside test-results so test-result churn doesn't wipe sessions either.
+- **Further escalation paths** (if both options still fail):
+  - Pin a specific Chrome binary instead of the system default (`executablePath`) — defends against auto-update fingerprint drift
+  - Add more launch args (e.g. `--disable-automation`, `--disable-web-security` only when essential)
+  - Route through an authenticated residential proxy (last resort; significant complexity)
 
 ## 8. References
 

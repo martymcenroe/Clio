@@ -168,17 +168,29 @@ Clio 2.0 harvests conversation lists from the sidebars of Gemini, Claude, and Ch
 
 - **System Chrome installed.** The harness uses `channel: 'chrome'` to launch your real Chrome install, not Playwright's bundled Chromium. Google's anti-automation fingerprinting blocks sign-in on bundled Chromium with "This browser or app may not be secure" — the Chrome channel is friendlier. On Windows, any standard Chrome install works; no extra setup.
 
+#### Persistent login profiles
+
+Each site's login is cached to disk so **you only log in once per site, forever** (until you explicitly clear the profile):
+
+- Profile location: `~/.clio-profiles/{gemini,claude,chatgpt}/` (outside the repo; survives reclones)
+- First run for a site: Chrome opens on a fresh profile, you log in manually
+- Subsequent runs: Chrome opens, profile is already authenticated, the site loads straight to the conversation list
+- Clear one site to force re-login: `rm -rf ~/.clio-profiles/{site}/`
+- Clear all: `rm -rf ~/.clio-profiles/`
+
+If a site ships a change that invalidates saved sessions (forced logout, security alert), you'll see the login page on next run; log in again and the profile re-authenticates.
+
 #### Running the harness
 
 ```bash
 npm run test:e2e:dom-discovery
 ```
 
-The `--debug` flag baked into this script forces the **Playwright Inspector** to open. That's what gives you the Resume button you'll need to hand control back to the script after login.
+The `--debug` flag baked into this script forces the **Playwright Inspector** to open. That's what gives you the Resume button you'll need to hand control back to the script.
 
 **What you'll see** — the command opens **two separate windows**:
 
-1. **Chrome browser** — a normal-looking browser window. Starts at `about:blank` (see workflow below), then navigates to the target site. This is where you log in and interact with the page.
+1. **Chrome browser** — a normal-looking browser window. Starts at `about:blank`, then navigates to the target site. On first run, you'll see the site's login page. On subsequent runs, you'll land in the logged-in conversation list directly.
 2. **Playwright Inspector** — a smaller window alongside the browser. Looks like a debugger: a toolbar across the top with playback controls (▶ Resume, ⏸ Pause, step-over), and a panel showing the paused line of script.
 
 The **Resume** button is the large green play triangle (▶) at the left of the Inspector's toolbar, keyboard shortcut **F8**. Clicking it tells the paused script "OK, proceed."
@@ -186,12 +198,12 @@ The **Resume** button is the large green play triangle (▶) at the left of the 
 **You will click Resume twice per site** because `--debug` mode pauses once at the start of the test AND again at the explicit `await page.pause()` line:
 
 1. Chrome opens at `about:blank`; Inspector is paused before the first `page.goto` line
-2. **Click ▶ Resume (or F8)** — the browser navigates to `https://gemini.google.com/app` (or the next pending site), then the script hits `page.pause()` and pauses again
-3. Log into Google in the Chrome window; make sure the Chat history sidebar on the left is visible (expand it if collapsed)
+2. **Click ▶ Resume (or F8)** — the browser navigates to the site
+3. **First run:** log into the site. **Subsequent runs:** verify the conversation-list sidebar is visible (expand it if collapsed). Either way, the script is now paused at `page.pause()`.
 4. **Click ▶ Resume again** — the analysis runs on the live page, writes outputs, closes the browser, and opens the next site
-5. Repeat the two-click pattern for Claude (`claude.ai/`) and ChatGPT (`chatgpt.com/`)
+5. Repeat the two-click pattern for each remaining site
 
-Expected runtime: ~5–10 minutes total (mostly manual login).
+Expected runtime on first run: ~5–10 minutes (mostly manual login). Subsequent runs: ~1–2 minutes (no login, just clicking Resume and waiting for analysis).
 
 #### Outputs
 

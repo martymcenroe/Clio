@@ -167,16 +167,25 @@ Clio 2.0 harvests conversation lists from the sidebars of Gemini, Claude, and Ch
 #### Running the harness
 
 ```bash
-npm run test:e2e -- dom-discovery
+npm run test:e2e:dom-discovery
 ```
 
-The harness runs headed (Chromium only) and pauses for login on each site in sequence:
+The `--debug` flag baked into this script forces the **Playwright Inspector** to open. That's what gives you the Resume button you'll need to hand control back to the script after login.
 
-1. Chromium opens on `https://gemini.google.com/app`
-2. Playwright Inspector window appears; the terminal prints a hint
-3. Log in, navigate so the conversation-list sidebar is visible
-4. Click **Resume** (▶) in the Playwright Inspector
-5. Harness runs structural analysis, saves outputs, and moves to the next site
+**What you'll see** — the command opens **two separate windows**:
+
+1. **Chromium browser** — a normal-looking browser window navigated to the target site. This is where you log in and interact with the page.
+2. **Playwright Inspector** — a smaller window alongside the browser. Looks like a debugger: a toolbar across the top with playback controls (▶ Resume, ⏸ Pause, step-over), and a panel showing the paused line of script.
+
+The **Resume** button is the large green play triangle (▶) at the left of the Inspector's toolbar. Clicking it is what tells the paused script "OK, proceed."
+
+Per-site workflow:
+
+1. Chromium opens on `https://gemini.google.com/app` (first site in sequence)
+2. Playwright Inspector opens alongside — the script is paused at `await page.pause()`
+3. Log into the browser, make sure the conversation-list sidebar is visible (expand it if collapsed)
+4. Switch to the Inspector window and click ▶ **Resume**
+5. Script runs structural analysis on the live page, writes outputs, closes the browser, opens the next site
 6. Repeat for Claude (`claude.ai/`) and ChatGPT (`chatgpt.com/`)
 
 Expected runtime: ~5–10 minutes total (mostly manual login).
@@ -200,10 +209,11 @@ Dumps and fixtures contain real data from your account. Before `git add`:
 
 #### Troubleshooting
 
-- **"Target closed" during page.pause():** the Inspector was closed before Resume. Re-run; leave the Inspector window open until the spec finishes.
+- **Inspector window doesn't open:** The `test:e2e:dom-discovery` script passes `--debug`, which is what triggers Inspector. If only the browser opens and you see no separate control window, confirm you ran `npm run test:e2e:dom-discovery` (not the plain `npm run test:e2e`). Running `PWDEBUG=1 npm run test:e2e -- dom-discovery` is an equivalent fallback. If neither works, your Playwright install may be missing its inspector UI — try `npx playwright install` to refresh.
+- **"Target closed" during `page.pause()`:** You closed the Inspector window before clicking Resume. Re-run; leave the Inspector open until the whole spec finishes (it closes automatically at the end).
 - **Google sign-in rejects the automation:** Gemini occasionally blocks Chromium with "this browser may not be secure". Sign in once with 2FA in the Playwright Chromium window; the session persists for the rest of the run. If it blocks repeatedly, add `channel: 'chrome'` to the chromium project in `playwright.config.js` (requires a system Chrome install).
-- **No scrollable containers detected:** the sidebar is hidden or collapsed. Expand it before clicking Resume.
-- **`mostLikelySidebar` is null in the JSON:** the heuristic requires at least 5 children with the same class fingerprint. If the sidebar has fewer items or uses per-item randomized classes, fall back to the `scrollableContainers` list and pick the candidate manually.
+- **No scrollable containers detected:** the sidebar is hidden or collapsed in the page when you clicked Resume. Expand it first, then re-run.
+- **`mostLikelySidebar` is null in the JSON:** the heuristic requires at least 5 children with the same class fingerprint. If the sidebar has fewer items or uses per-item randomized classes, fall back to the `scrollableContainers` list in the dump and pick the candidate manually.
 
 ## Troubleshooting
 

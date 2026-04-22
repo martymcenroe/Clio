@@ -41,7 +41,19 @@ const SITES = [
   }
 ];
 
-test.use({ headless: false, viewport: { width: 1400, height: 900 } });
+// channel: 'chrome' launches the user's installed system Chrome instead of
+// Playwright's bundled Chromium — Google's anti-automation fingerprinting
+// blocks sign-in on bundled Chromium ("This browser or app may not be
+// secure"). --disable-blink-features=AutomationControlled removes the
+// navigator.webdriver signal that Playwright sets by default.
+test.use({
+  headless: false,
+  viewport: { width: 1400, height: 900 },
+  channel: 'chrome',
+  launchOptions: {
+    args: ['--disable-blink-features=AutomationControlled']
+  }
+});
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });

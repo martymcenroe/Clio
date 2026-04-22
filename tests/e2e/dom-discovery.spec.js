@@ -46,13 +46,21 @@ const SITES = [
 // blocks sign-in on bundled Chromium ("This browser or app may not be
 // secure"). --disable-blink-features=AutomationControlled removes the
 // navigator.webdriver signal that Playwright sets by default.
+//
+// trace/video are unconditionally on for this spec: it runs rarely,
+// interactively, and any failure is expensive to reproduce (requires
+// re-login). The forensic value on the first failure justifies the
+// trace/video cost. See docs/runbooks/30001-development-runbook.md
+// §DOM Discovery troubleshooting for how to open a saved trace.
 test.use({
   headless: false,
   viewport: { width: 1400, height: 900 },
   channel: 'chrome',
   launchOptions: {
     args: ['--disable-blink-features=AutomationControlled']
-  }
+  },
+  trace: 'on',
+  video: 'on'
 });
 
 test.beforeAll(() => {
@@ -73,31 +81,63 @@ test.describe.serial('DOM discovery — Clio 2.0 sidebar harvesting (#47)', () =
       await page.goto(site.url, { waitUntil: 'domcontentloaded' });
       await page.pause();
 
-      const dump = await dumpSite(page);
+      // Analysis is wrapped so a thrown phase still leaves forensics on
+      // disk. The test still fails (see expect at the end) — but the
+      // dump JSON records the error + stack, and we also attempt an
+      // HTML snapshot independently. #79.
+      let dump;
+      let dumpError = null;
+      try {
+        dump = await dumpSite(page);
+      } catch (e) {
+        dumpError = e;
+        dump = {
+          error: e.message,
+          stack: e.stack,
+          timestamp: new Date().toISOString(),
+          site: site.id,
+          url: page.url()
+        };
+        console.error(`[${site.label}] dumpSite threw:`, e.message);
+      }
 
       const jsonPath = path.join(OUT_DIR, `${site.id}.json`);
       fs.writeFileSync(jsonPath, JSON.stringify(dump, null, 2));
 
       const htmlPath = path.join(FIXTURES_DIR, `sidebar-${site.id}.html`);
-      fs.writeFileSync(htmlPath, await page.content());
-
-      console.log(`\n✓ ${site.label}`);
-      console.log(`  Dump:       ${path.relative(process.cwd(), jsonPath)}`);
-      console.log(`  Fixture:    ${path.relative(process.cwd(), htmlPath)}`);
-      console.log(`  Scrollables: ${dump.scrollableContainers.length}`);
-      if (dump.mostLikelySidebar) {
-        const fps = dump.mostLikelySidebar.childClassFingerprints || {};
-        const top = Object.entries(fps).sort((a, b) => b[1] - a[1])[0];
-        console.log(`  Sidebar:    ${dump.mostLikelySidebarSelector}`);
-        console.log(`  Children:   ${dump.mostLikelySidebar.childCount}`);
-        if (top) console.log(`  Pattern:    ${top[1]}x "${top[0] || '(no classes)'}"`);
-      }
-      if (dump.urlScheme && dump.urlScheme.afterUrl) {
-        console.log(`  URL click:  ${dump.urlScheme.afterUrl}`);
-      } else if (dump.urlScheme && dump.urlScheme.error) {
-        console.log(`  URL click:  ERROR — ${dump.urlScheme.error}`);
+      try {
+        fs.writeFileSync(htmlPath, await page.content());
+      } catch (e) {
+        console.error(`[${site.label}] page.content() failed — page may be closed:`, e.message);
       }
 
+      if (dumpError) {
+        console.log(`\n✗ ${site.label} — dump failed`);
+        console.log(`  Dump (error form): ${path.relative(process.cwd(), jsonPath)}`);
+        console.log(`  Fixture:           ${path.relative(process.cwd(), htmlPath)}`);
+        console.log(`  Trace:             test-results/<dir>/trace.zip (open with: npx playwright show-trace ...)`);
+      } else {
+        console.log(`\n✓ ${site.label}`);
+        console.log(`  Dump:       ${path.relative(process.cwd(), jsonPath)}`);
+        console.log(`  Fixture:    ${path.relative(process.cwd(), htmlPath)}`);
+        console.log(`  Scrollables: ${dump.scrollableContainers.length}`);
+        if (dump.mostLikelySidebar) {
+          const fps = dump.mostLikelySidebar.childClassFingerprints || {};
+          const top = Object.entries(fps).sort((a, b) => b[1] - a[1])[0];
+          console.log(`  Sidebar:    ${dump.mostLikelySidebarSelector}`);
+          console.log(`  Children:   ${dump.mostLikelySidebar.childCount}`);
+          if (top) console.log(`  Pattern:    ${top[1]}x "${top[0] || '(no classes)'}"`);
+        }
+        if (dump.urlScheme && dump.urlScheme.afterUrl) {
+          console.log(`  URL click:  ${dump.urlScheme.afterUrl}`);
+        } else if (dump.urlScheme && dump.urlScheme.error) {
+          console.log(`  URL click:  ERROR — ${dump.urlScheme.error}`);
+        }
+      }
+
+      // Rethrow with the original error so Playwright surfaces a useful
+      // stack (instead of a cryptic "Cannot read properties of undefined").
+      if (dumpError) throw dumpError;
       expect(dump.scrollableContainers.length).toBeGreaterThan(0);
     });
   }
@@ -111,6 +151,7 @@ async function dumpSite(page) {
   // --------------------------------------------------------------------- //
   // Phase 1: structural analysis (side-effect free)                       //
   // --------------------------------------------------------------------- //
+  console.log('  Phase 1: structural analysis…');
   const analysis = await page.evaluate(() => {
     function describeElement(el, maxDepth = 6) {
       const parts = [];
@@ -245,10 +286,12 @@ async function dumpSite(page) {
   analysis.mostLikelySidebarSelector = analysis.mostLikelySidebar
     ? analysis.mostLikelySidebar.selector
     : null;
+  console.log(`  Phase 1 done — ${analysis.scrollableContainers.length} scrollable container(s), sidebar candidate: ${analysis.mostLikelySidebarSelector || 'none'}`);
 
   // --------------------------------------------------------------------- //
   // Phase 2: lazy-load probe — scroll the sidebar and log child counts    //
   // --------------------------------------------------------------------- //
+  console.log('  Phase 2: lazy-load probe…');
   try {
     analysis.lazyLoad = await page.evaluate(async () => {
       const scrollables = [];
@@ -293,10 +336,16 @@ async function dumpSite(page) {
   } catch (e) {
     analysis.lazyLoad = { error: String(e.message || e) };
   }
+  if (analysis.lazyLoad.error) {
+    console.log(`  Phase 2 done — error: ${analysis.lazyLoad.error}`);
+  } else {
+    console.log(`  Phase 2 done — ${analysis.lazyLoad.initialCount} → ${analysis.lazyLoad.finalCount} items after ${analysis.lazyLoad.scrollIterations} scroll(s)`);
+  }
 
   // --------------------------------------------------------------------- //
   // Phase 3: URL scheme sample — click first sidebar item, capture URL    //
   // --------------------------------------------------------------------- //
+  console.log('  Phase 3: URL-scheme sample…');
   try {
     const beforeUrl = page.url();
     const clickResult = await page.evaluate(() => {
@@ -361,6 +410,11 @@ async function dumpSite(page) {
     }
   } catch (e) {
     analysis.urlScheme = { error: String(e.message || e) };
+  }
+  if (analysis.urlScheme && analysis.urlScheme.afterUrl) {
+    console.log(`  Phase 3 done — URL: ${analysis.urlScheme.afterUrl}`);
+  } else {
+    console.log(`  Phase 3 done — error: ${analysis.urlScheme && analysis.urlScheme.error}`);
   }
 
   return analysis;

@@ -7,7 +7,7 @@ const { defineConfig } = require('@playwright/test');
  */
 module.exports = defineConfig({
   testDir: './tests',
-  testMatch: '**/*.e2e.test.js',
+  testMatch: ['**/*.e2e.test.js', '**/*.spec.js'],
 
   /* Run tests in parallel */
   fullyParallel: true,

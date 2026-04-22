@@ -157,6 +157,54 @@ poetry run --directory /c/Users/mcwiz/Projects/AgentOS \
 
 Required sizes: 16px, 32px, 48px, 128px
 
+### DOM Discovery (Clio 2.0 — F1, issue #47)
+
+Clio 2.0 harvests conversation lists from the sidebars of Gemini, Claude, and ChatGPT. Selectors for those sidebars are derived from real-DOM dumps produced by the Playwright harness in `tests/e2e/dom-discovery.spec.js`. Run the harness whenever:
+
+- You are starting work on sidebar-harvest issues (#51, #53) and need fresh fixtures
+- A site ships a UI change that breaks sidebar harvesting
+
+#### Running the harness
+
+```bash
+npm run test:e2e -- dom-discovery
+```
+
+The harness runs headed (Chromium only) and pauses for login on each site in sequence:
+
+1. Chromium opens on `https://gemini.google.com/app`
+2. Playwright Inspector window appears; the terminal prints a hint
+3. Log in, navigate so the conversation-list sidebar is visible
+4. Click **Resume** (▶) in the Playwright Inspector
+5. Harness runs structural analysis, saves outputs, and moves to the next site
+6. Repeat for Claude (`claude.ai/`) and ChatGPT (`chatgpt.com/`)
+
+Expected runtime: ~5–10 minutes total (mostly manual login).
+
+#### Outputs
+
+- `docs/dom-dumps/{gemini,claude,chatgpt}.json` — structured report:
+  - `scrollableContainers` — every scrollable with child-count and class fingerprints
+  - `mostLikelySidebar` — best match by repeated-child-fingerprint score
+  - `accountMenuCandidates` — avatars / account triggers (for #49 labels UI)
+  - `lazyLoad` — how child count progresses as the sidebar scrolls
+  - `urlScheme` — URL before/after clicking the first sidebar item (for conversation-id parsing in #51)
+- `tests/fixtures/sidebar-{gemini,claude,chatgpt}.html` — full page HTML snapshots consumed by S5's jsdom regression tests (#53)
+
+#### Before committing
+
+Dumps and fixtures contain real data from your account. Before `git add`:
+
+- **Scan for sensitive content:** conversation titles may be private. Either (a) sanitize titles in the HTML with find-and-replace, or (b) gitignore the specific fixture and commit a curated minimal sample.
+- **Scan for tokens:** full-page HTML may include hidden inputs with CSRF tokens. `grep -Ei "token|csrf|bearer|authorization" tests/fixtures/sidebar-*.html` to audit. Session tokens are harmless after logout but some reviewers prefer them stripped.
+
+#### Troubleshooting
+
+- **"Target closed" during page.pause():** the Inspector was closed before Resume. Re-run; leave the Inspector window open until the spec finishes.
+- **Google sign-in rejects the automation:** Gemini occasionally blocks Chromium with "this browser may not be secure". Sign in once with 2FA in the Playwright Chromium window; the session persists for the rest of the run. If it blocks repeatedly, add `channel: 'chrome'` to the chromium project in `playwright.config.js` (requires a system Chrome install).
+- **No scrollable containers detected:** the sidebar is hidden or collapsed. Expand it before clicking Resume.
+- **`mostLikelySidebar` is null in the JSON:** the heuristic requires at least 5 children with the same class fingerprint. If the sidebar has fewer items or uses per-item randomized classes, fall back to the `scrollableContainers` list and pick the candidate manually.
+
 ## Troubleshooting
 
 ### Content Script Not Loaded

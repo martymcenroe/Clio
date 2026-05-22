@@ -103,10 +103,16 @@ npm run test:all        # All tests
 
 See the [development runbook](docs/runbooks/30001-development-runbook.md) for detailed development instructions, including how to reload the extension after code changes.
 
+Before opening a pull request, please read [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+
 ## Privacy
 
 All data processing happens locally in your browser. No data is sent to any external servers.
 
 ## License
 
-MIT
+See [LICENSE](LICENSE).

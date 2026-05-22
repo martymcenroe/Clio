@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Clio</title>
+  <meta name="description" content="Privacy policy for Clio, a Chrome extension that extracts Gemini, Claude, and ChatGPT conversations to local JSON. All processing is local.">
+  <link rel="canonical" href="https://martymcenroe.github.io/Clio/privacy.html">
+
+  <style>
+    :root {
+      --text: #1a1a1a;
+      --muted: #555;
+      --rule: #e5e5e5;
+      --accent: #1a5490;
+      --bg: #fafafa;
+      --card: #ffffff;
+      --code-bg: #f0f0f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.65;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+    }
+    header {
+      border-bottom: 1px solid var(--rule);
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+    }
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .last-updated {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+    h2 {
+      margin-top: 48px;
+      margin-bottom: 16px;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+    h3 {
+      margin-top: 32px;
+      margin-bottom: 12px;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    p, li { font-size: 1rem; }
+    .summary {
+      background: var(--card);
+      border-left: 4px solid var(--accent);
+      padding: 20px 24px;
+      margin: 24px 0;
+      border-radius: 4px;
+    }
+    .summary strong { color: var(--accent); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--rule);
+      vertical-align: top;
+    }
+    th {
+      background: var(--card);
+      font-weight: 600;
+    }
+    code {
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    a { color: var(--accent); }
+    a:hover { text-decoration: underline; }
+    ul { padding-left: 24px; }
+    li { margin-bottom: 6px; }
+    footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid var(--rule);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    footer a { color: var(--muted); }
+  </style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>Privacy Policy</h1>
+  <p class="last-updated">Last updated: 2026-05-22</p>
+</header>
+
+<div class="summary">
+  <strong>Summary:</strong> Clio is a Chrome extension that extracts your Gemini, Claude, and ChatGPT conversations to local JSON files. All processing happens in your browser. Clio does not transmit your conversations to any external server, does not send telemetry, and does not collect personally identifiable information.
+</div>
+
+<h2>What Clio processes</h2>
+
+<p>When you press the toolbar button on a supported LLM site, Clio reads the <strong>conversation DOM</strong> of the page you are currently viewing. That includes:</p>
+
+<ul>
+  <li>The text of your messages and the assistant's replies</li>
+  <li>Code blocks, with language labels preserved</li>
+  <li>Images embedded in the conversation (when present)</li>
+  <li>Assistant "thinking" / reasoning sections, when expanded</li>
+  <li>The conversation title, conversation ID, and URL</li>
+</ul>
+
+<p>These pieces are assembled into a ZIP archive containing <code>conversation.json</code> (the structured transcript) and an <code>images/</code> folder with extracted image files.</p>
+
+<h2>Where this data goes</h2>
+
+<p>The ZIP file is written to your local disk via Chrome's <code>chrome.downloads</code> API. The "Save As" dialog from Chrome lets you pick the destination. <strong>That is the only place the data goes.</strong></p>
+
+<p>Clio does <strong>not</strong>:</p>
+
+<ul>
+  <li>Transmit conversation content to any external server</li>
+  <li>Send telemetry, error reports, or usage analytics</li>
+  <li>Maintain a remote database</li>
+  <li>Share data with third parties</li>
+  <li>Track you across sites</li>
+  <li>Embed any analytics, advertising, or fingerprinting library</li>
+  <li>Load any code from a remote source (everything is bundled in the extension)</li>
+</ul>
+
+<p>You can verify this by reading the <a href="https://github.com/martymcenroe/Clio/blob/main/extensions/manifest.json">extension manifest</a> and the source code — there are no <code>fetch</code> or <code>XMLHttpRequest</code> calls to any origin outside <code>gemini.google.com</code>, <code>claude.ai</code>, and <code>chatgpt.com</code>, and those exist only to read the DOM rendered for you in your own session.</p>
+
+<h2>Permission rationale</h2>
+
+<p>The Chrome Web Store requires extensions to justify every permission they request. Clio's manifest is intentionally minimal:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Permission</th>
+      <th>What it allows</th>
+      <th>Why Clio needs it</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>activeTab</code></td>
+      <td>Read the DOM of the tab you are currently looking at, only when you press the toolbar button</td>
+      <td>Required to read the conversation you want to extract</td>
+    </tr>
+    <tr>
+      <td><code>downloads</code></td>
+      <td>Write the result ZIP via the "Save As" dialog</td>
+      <td>Required to save the extraction to your disk</td>
+    </tr>
+    <tr>
+      <td><code>host_permissions</code> for <code>gemini.google.com</code>, <code>claude.ai</code>, <code>chatgpt.com</code></td>
+      <td>Inject Clio's DOM-walking content script on those exact sites</td>
+      <td>The three sites Clio supports — nowhere else</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Permissions Clio does <strong>not</strong> request: <code>tabs</code>, <code>cookies</code>, <code>webRequest</code>, <code>storage</code>, <code>identity</code>, <code>notifications</code>, broader <code>host_permissions</code>.</p>
+
+<h2>Open-source transparency</h2>
+
+<p>Clio's full source code is available at <a href="https://github.com/martymcenroe/Clio">github.com/martymcenroe/Clio</a>. The extension is licensed under <a href="https://github.com/martymcenroe/Clio/blob/main/LICENSE">MIT</a>. You can build the same extension from source and verify byte-for-byte what is running.</p>
+
+<p>The security posture is documented in detail in <a href="https://github.com/martymcenroe/Clio/blob/main/SECURITY.md">SECURITY.md</a>, including the threat model and explicit out-of-scope items.</p>
+
+<h2>Your control over your data</h2>
+
+<p>Because all data lives only on your local disk, your data subject rights are exercised by you directly through your operating system: delete the ZIP files when you no longer want them. Clio has no remote copy of anything to delete on your behalf.</p>
+
+<p>The conversations themselves remain on the LLM provider's servers under their own privacy terms — Clio does not change anything about Google's, Anthropic's, or OpenAI's data handling. Clio gives you a local copy; it does not remove the original.</p>
+
+<h2>Children's privacy</h2>
+
+<p>Clio does not knowingly collect any data from anyone, including children. If you believe a child has been harmed by Clio's behavior, please contact us at the email below — but note that Clio runs locally and does not store or transmit data.</p>
+
+<h2>Changes to this policy</h2>
+
+<p>If this policy changes materially, the change will be reflected in a new "Last updated" date and announced in the project's <a href="https://github.com/martymcenroe/Clio/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+
+<h2>Contact</h2>
+
+<p>Privacy questions: <strong>martymcenroe@gmail.com</strong> (subject: <code>Clio privacy question</code>)</p>
+
+<p>Security vulnerabilities should be reported per <a href="https://github.com/martymcenroe/Clio/blob/main/SECURITY.md">SECURITY.md</a>, not as privacy questions.</p>
+
+<footer>
+  <p><a href="https://github.com/martymcenroe/Clio">Clio on GitHub</a> · MIT License · Copyright © 2026 Martin McEnroe / THRIVETECH.AI</p>
+</footer>
+
+</div>
+</body>
+</html>

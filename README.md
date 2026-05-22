@@ -111,7 +111,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 ## Privacy
 
-All data processing happens locally in your browser. No data is sent to any external servers.
+All data processing happens locally in your browser. No data is sent to any external servers. See [PRIVACY.md](PRIVACY.md) for the full policy, and [SECURITY.md](SECURITY.md) for the threat model and vulnerability-reporting channel.
 
 ## License
 

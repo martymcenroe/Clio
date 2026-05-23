@@ -362,6 +362,99 @@ describe('extractAssistantTurnClaude', () => {
     // With real commentary captured, this is NOT a thinking-only turn
     expect(turn.type).toBeUndefined();
   });
+
+  test('strips artifact-widget chrome (Send via Gmail, tab labels) and separates label/value (issue #43)', () => {
+    // Real DOM verified 2026-05-23: Claude email-draft artifact widget
+    // has a distinctive class signature on its outer container.
+    // Synthetic fixture mirrors structural shape; content is invented.
+    const turnWrapper = document.createElement('div');
+    turnWrapper.className = 'font-claude-response';
+
+    const widget = document.createElement('div');
+    widget.className = 'font-ui bg-bg-000 rounded-2xl rounded-t-3xl overflow-hidden border-border-300 border';
+
+    // Variant-selector tab bar with text-bearing buttons
+    const tabBar = document.createElement('div');
+    tabBar.className = 'flex gap-1 p-1.5 border-b-0.5 border-border-300 overflow-x-auto';
+    const tabA = document.createElement('button');
+    tabA.className = 'group/row';
+    tabA.textContent = 'Warm decline, door open';
+    const tabB = document.createElement('button');
+    tabB.className = 'group/row';
+    tabB.textContent = 'Brief, final close';
+    tabBar.appendChild(tabA);
+    tabBar.appendChild(tabB);
+    widget.appendChild(tabBar);
+
+    // Subject row — label + value, no whitespace separator in textContent
+    const subjectRow = document.createElement('div');
+    subjectRow.className = 'flex items-center border-b-0.5 border-border-300';
+    const subjectLabel = document.createElement('label');
+    subjectLabel.textContent = 'Subject:';
+    const subjectValue = document.createElement('span');
+    subjectValue.textContent = 'Re: Your inquiry';
+    subjectRow.appendChild(subjectLabel);
+    subjectRow.appendChild(subjectValue);
+    widget.appendChild(subjectRow);
+
+    // Body
+    const body = document.createElement('div');
+    const p1 = document.createElement('p');
+    p1.textContent = 'Hi [Name],';
+    const p2 = document.createElement('p');
+    p2.textContent = "Thanks for reaching out. It isn't the right fit for me right now.";
+    const p3 = document.createElement('p');
+    p3.textContent = 'Best, Marty';
+    body.appendChild(p1);
+    body.appendChild(p2);
+    body.appendChild(p3);
+    widget.appendChild(body);
+
+    // Action bar — Send via Gmail and three icon-only buttons
+    const actionBar = document.createElement('div');
+    actionBar.className = 'flex items-center justify-end gap-2 px-2 py-2';
+    const copyBtn = document.createElement('button');
+    copyBtn.setAttribute('aria-label', 'Copy message');
+    const resetBtn = document.createElement('button');
+    resetBtn.setAttribute('aria-label', 'Reset changes');
+    const backBtn = document.createElement('button');
+    backBtn.setAttribute('aria-label', 'Back to chat');
+    const sendBtn = document.createElement('button');
+    const sendSpan = document.createElement('span');
+    sendSpan.textContent = 'Send via Gmail';
+    sendBtn.appendChild(sendSpan);
+    actionBar.appendChild(copyBtn);
+    actionBar.appendChild(resetBtn);
+    actionBar.appendChild(backBtn);
+    actionBar.appendChild(sendBtn);
+    widget.appendChild(actionBar);
+
+    turnWrapper.appendChild(widget);
+
+    // Post-widget commentary prose (sibling of widget, still part of turn)
+    const commentary = document.createElement('p');
+    commentary.textContent = 'Two options above — one keeps the door open.';
+    turnWrapper.appendChild(commentary);
+
+    const turn = extractAssistantTurnClaude(turnWrapper, 0);
+
+    // Widget chrome stripped
+    expect(turn.content).not.toContain('Send via Gmail');
+    expect(turn.content).not.toContain('Warm decline, door open');
+    expect(turn.content).not.toContain('Brief, final close');
+
+    // Subject label and value separated with whitespace
+    expect(turn.content).toContain('Subject: Re: Your inquiry');
+    expect(turn.content).not.toContain('Subject:Re: Your inquiry');
+
+    // Body preserved
+    expect(turn.content).toContain('Hi [Name]');
+    expect(turn.content).toContain('right fit for me');
+    expect(turn.content).toContain('Best, Marty');
+
+    // Post-widget commentary preserved
+    expect(turn.content).toContain('Two options above');
+  });
 });
 
 describe('extractTurnsClaude', () => {

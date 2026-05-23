@@ -5,6 +5,18 @@
   <title>Engineering-first AI solution - Claude</title>
 </head>
 <body>
+  <!--
+    Synthetic Claude conversation fixture for #114 modernization.
+
+    Wraps each assistant turn in `<div class="font-claude-response">` (the
+    stable per-turn boundary across both pre-redesign and modern Claude DOM).
+    Turn 1 mirrors the modern grid-style internal layout (.row-start-1 for
+    thinking, .row-start-2 for response with nested response-body).
+    Turn 2 mirrors the pre-redesign layout (paragraphs directly inside the
+    response container, no .row-start-1/.row-start-2 grid).
+
+    All content is synthetic — no operator data.
+  -->
   <div class="flex-1 flex flex-col max-w-3xl">
 
     <!-- Turn 1: User message -->
@@ -12,22 +24,26 @@
       Hello Claude. Can you help me design a system architecture?
     </div>
 
-    <!-- Turn 1: Assistant response with thinking -->
-    <div class="grid-container" style="display: grid;">
-      <div data-testid="action-bar-copy"></div>
-      <div class="row-start-1">
-        <p>Analyzing the request for system architecture design. The user wants a comprehensive approach.</p>
-        <button class="group/row">Get current time</button>
-      </div>
-      <div class="row-start-2">
-        <p>I'd be happy to help you design a system architecture. Here's a starting point:</p>
-        <pre><code data-language="python">class SystemArchitecture:
+    <!-- Turn 1: Assistant response WITH thinking (modern grid-style) -->
+    <div class="font-claude-response relative leading-[1.65rem]">
+      <div class="grid-container" style="display: grid;">
+        <div data-testid="action-bar-copy"></div>
+        <div class="row-start-1">
+          <p>Analyzing the request for system architecture design. The user wants a comprehensive approach.</p>
+          <button class="group/row">Get current time</button>
+        </div>
+        <div class="row-start-2">
+          <div class="row-start-1 col-start-1 relative z-[2]">
+            <p>I'd be happy to help you design a system architecture. Here's a starting point:</p>
+            <pre><code data-language="python">class SystemArchitecture:
     def __init__(self):
         self.components = []
 
     def add_component(self, name):
         self.components.append(name)</code></pre>
-        <p>Let me know what specific requirements you have.</p>
+            <p>Let me know what specific requirements you have.</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -37,15 +53,12 @@
       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="architecture diagram">
     </div>
 
-    <!-- Turn 2: Assistant response without thinking -->
-    <div class="grid-container" style="display: grid;">
-      <div data-testid="action-bar-copy"></div>
-      <div class="row-start-2">
-        <p>For real-time data processing, I recommend using an event-driven architecture with message queues. The key components would be:</p>
-        <p>1. An ingestion layer for incoming data streams</p>
-        <p>2. A processing engine for transformations</p>
-        <p>3. A storage layer optimized for time-series data</p>
-      </div>
+    <!-- Turn 2: Assistant response WITHOUT thinking (pre-redesign style) -->
+    <div class="font-claude-response relative leading-[1.65rem]">
+      <p class="font-claude-response-body">For real-time data processing, I recommend using an event-driven architecture with message queues. The key components would be:</p>
+      <p class="font-claude-response-body">1. An ingestion layer for incoming data streams</p>
+      <p class="font-claude-response-body">2. A processing engine for transformations</p>
+      <p class="font-claude-response-body">3. A storage layer optimized for time-series data</p>
     </div>
 
   </div>

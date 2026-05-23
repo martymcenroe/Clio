@@ -94,19 +94,19 @@ describe('extractConversationId (Claude)', () => {
 });
 
 describe('countMessages (Claude)', () => {
-  test('counts user and assistant messages (row-start-2)', () => {
+  test('counts user and assistant messages (font-claude-response)', () => {
     document.body.innerHTML = [
       '<div data-testid="user-message">Hello</div>',
-      '<div class="row-start-2">First response</div>',
+      '<div class="font-claude-response">First response</div>',
       '<div data-testid="user-message">Follow up</div>',
-      '<div class="row-start-2">Second response</div>'
+      '<div class="font-claude-response">Second response</div>'
     ].join('');
     expect(countMessages()).toBe(4);
   });
 
   test('does NOT count action-bar-copy buttons (user messages have them too)', () => {
     // Regression for #32: copy buttons appear on both user and assistant
-    // messages. Only .row-start-2 identifies an assistant turn.
+    // messages. Only .font-claude-response identifies an assistant turn.
     document.body.innerHTML = [
       '<div data-testid="user-message">Hello</div>',
       '<button data-testid="action-bar-copy"></button>',
@@ -373,7 +373,7 @@ describe('extractTurnsClaude', () => {
     document.body.appendChild(user1);
 
     const grid1 = document.createElement('div');
-    grid1.className = 'grid-container';
+    grid1.className = 'font-claude-response';
     const copy1 = document.createElement('div');
     copy1.setAttribute('data-testid', 'action-bar-copy');
     grid1.appendChild(copy1);
@@ -389,7 +389,7 @@ describe('extractTurnsClaude', () => {
     document.body.appendChild(user2);
 
     const grid2 = document.createElement('div');
-    grid2.className = 'grid-container';
+    grid2.className = 'font-claude-response';
     const copy2 = document.createElement('div');
     copy2.setAttribute('data-testid', 'action-bar-copy');
     grid2.appendChild(copy2);
@@ -435,7 +435,7 @@ describe('extractTurnsClaude with shared grid ancestor (regression #25)', () => 
 
     function appendAssistant(thinkingText, responseText) {
       const perTurn = document.createElement('div');
-      perTurn.className = 'message-layout';
+      perTurn.className = 'font-claude-response';
 
       const thinking = document.createElement('div');
       thinking.className = 'row-start-1';
@@ -540,7 +540,7 @@ describe('extractTurnsClaude with real Claude DOM shape (regression #32)', () =>
       } else {
         const outer = document.createElement('div');
         const group = document.createElement('div');
-        group.className = 'group';
+        group.className = 'group font-claude-response';
         if (turn.thinking) {
           const think = document.createElement('div');
           think.className = 'row-start-1';
@@ -649,7 +649,7 @@ describe('extractTurns dispatches by site', () => {
     document.body.appendChild(user);
 
     const grid = document.createElement('div');
-    grid.className = 'grid-container';
+    grid.className = 'font-claude-response';
     const copy = document.createElement('div');
     copy.setAttribute('data-testid', 'action-bar-copy');
     grid.appendChild(copy);
@@ -685,7 +685,7 @@ describe('fixture-based Claude extraction', () => {
 
   test('fixture has expected Claude structure', () => {
     const userMsgs = document.querySelectorAll('[data-testid="user-message"]');
-    const assistantMsgs = document.querySelectorAll('[data-testid="action-bar-copy"]');
+    const assistantMsgs = document.querySelectorAll('.font-claude-response:not(.font-claude-response-body)');
     expect(userMsgs.length).toBe(2);
     expect(assistantMsgs.length).toBe(2);
   });

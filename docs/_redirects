@@ -1,0 +1,15 @@
+# Cloudflare Pages redirects/rewrites
+# Reference: https://developers.cloudflare.com/pages/configuration/redirects/
+
+# Clean URLs — rewrite (200) so the path stays clean in the address bar
+/privacy        /privacy.html        200
+
+# Off-site references — temporary redirect (302); becomes 301 if we want them canonical
+/security       https://github.com/martymcenroe/Clio/blob/main/SECURITY.md   302
+/wiki           https://github.com/martymcenroe/Clio/wiki                    302
+/changelog      https://github.com/martymcenroe/Clio/blob/main/CHANGELOG.md  302
+/contributing   https://github.com/martymcenroe/Clio/blob/main/CONTRIBUTING.md  302
+/source         https://github.com/martymcenroe/Clio                         302
+/repo           https://github.com/martymcenroe/Clio                         302
+/license        https://github.com/martymcenroe/Clio/blob/main/LICENSE       302
+/issues         https://github.com/martymcenroe/Clio/issues                  302

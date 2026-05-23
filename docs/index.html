@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clio — Local-first archival for Gemini, Claude, and ChatGPT conversations</title>
+  <meta name="description" content="Clio is a Chrome extension that extracts your AI conversations to structured local JSON. Strict-local processing. No telemetry. Open source under MIT.">
+  <link rel="canonical" href="https://cliocast.com/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://cliocast.com/">
+  <meta property="og:title" content="Clio — Local-first archival of your AI conversations">
+  <meta property="og:description" content="Chrome extension. Extracts Gemini, Claude, and ChatGPT conversations to local JSON. Privacy-first, no telemetry, open source.">
+
+  <style>
+    :root {
+      --text: #1a1a1a;
+      --muted: #555;
+      --rule: #e5e5e5;
+      --accent: #1a5490;
+      --accent-soft: #e8f0f8;
+      --bg: #fafafa;
+      --card: #ffffff;
+      --code-bg: #f0f0f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.65;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+    }
+    header {
+      border-bottom: 1px solid var(--rule);
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+    }
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    .tagline {
+      color: var(--muted);
+      font-size: 1.15rem;
+      margin: 0;
+    }
+    h2 {
+      margin-top: 48px;
+      margin-bottom: 16px;
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    p, li { font-size: 1rem; }
+    .callout {
+      background: var(--card);
+      border-left: 4px solid var(--accent);
+      padding: 20px 24px;
+      margin: 24px 0;
+      border-radius: 4px;
+    }
+    .callout strong { color: var(--accent); }
+    .commitment {
+      background: var(--accent-soft);
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    code {
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    a { color: var(--accent); }
+    a:hover { text-decoration: underline; }
+    ul, ol { padding-left: 24px; }
+    li { margin-bottom: 8px; }
+    .install-note {
+      font-style: italic;
+      color: var(--muted);
+    }
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      padding-left: 0;
+    }
+    .steps li {
+      counter-increment: step;
+      padding-left: 36px;
+      position: relative;
+      margin-bottom: 10px;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    footer {
+      margin-top: 80px;
+      padding-top: 24px;
+      border-top: 1px solid var(--rule);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    footer a { color: var(--muted); }
+    footer p { margin: 6px 0; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>Clio</h1>
+  <p class="tagline">Local-first archival of your conversations with Gemini, Claude, and ChatGPT.</p>
+</header>
+
+<section>
+  <p>Clio is a Chrome extension that extracts your AI conversations to structured JSON — text, code, thinking, images — and saves them to your local disk. The data does not leave your browser. There is no telemetry. The source is on GitHub.</p>
+</section>
+
+<section>
+  <h2>Install</h2>
+  <p class="install-note">Coming soon to the Chrome Web Store.</p>
+  <p>In the meantime, Clio can be loaded from source — see the <a href="https://github.com/martymcenroe/Clio">GitHub repository</a> for instructions.</p>
+</section>
+
+<section>
+  <h2>Three commitments</h2>
+  <p>Clio's design is organized around the security CIA triad. Each commitment is enforced by the manifest, not by a runtime promise.</p>
+  <ul>
+    <li><span class="commitment">Confidentiality</span> — Your conversations never leave your browser. No remote transmission, no telemetry, no third parties. <a href="privacy.html">Privacy policy</a>.</li>
+    <li><span class="commitment">Integrity</span> — What Clio captures faithfully reflects what you saw, or extraction fails loudly. Silent partial captures are unacceptable. <a href="https://github.com/martymcenroe/Clio/blob/main/SECURITY.md">Security policy</a>.</li>
+    <li><span class="commitment">Availability</span> — Your access to your own conversations does not depend on the provider's continued goodwill. <a href="https://github.com/martymcenroe/Clio/wiki/Availability-and-Denial-of-Access">Why this matters</a>.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li>Open any Gemini, Claude, or ChatGPT conversation in your browser.</li>
+    <li>Click the Clio toolbar icon.</li>
+    <li>Click <strong>Extract Conversation</strong>.</li>
+    <li>Save the ZIP — a structured <code>conversation.json</code> plus an <code>images/</code> folder.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>What Clio captures</h2>
+  <ul>
+    <li>Every message in the conversation, in DOM order, with roles preserved</li>
+    <li>Code blocks with language labels</li>
+    <li>Embedded images, fetched at extraction time</li>
+    <li>Assistant thinking / reasoning sections when expanded</li>
+    <li>Conversation metadata — title, source URL, timestamp</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Permissions</h2>
+  <p>Clio's manifest requests the minimum surface area required to do its job:</p>
+  <ul>
+    <li><code>activeTab</code> — read the DOM of the tab you're currently looking at, only when you press the toolbar button</li>
+    <li><code>downloads</code> — write the extracted ZIP to your local disk via the "Save As" dialog</li>
+    <li>Host access to <code>gemini.google.com</code>, <code>claude.ai</code>, and <code>chatgpt.com</code> — and nothing else</li>
+  </ul>
+  <p>No <code>tabs</code>, no <code>cookies</code>, no <code>webRequest</code>, no <code>storage</code>, no <code>&lt;all_urls&gt;</code>. The <a href="https://github.com/martymcenroe/Clio/blob/main/extensions/manifest.json">manifest</a> is the ground-truth permission declaration.</p>
+</section>
+
+<section>
+  <h2>Open source</h2>
+  <p>Clio is published under the <a href="https://github.com/martymcenroe/Clio/blob/main/LICENSE">MIT License</a>. The full source code is at <a href="https://github.com/martymcenroe/Clio">github.com/martymcenroe/Clio</a>.</p>
+  <p>For governance and design discussion — why these design choices, what threat model they address, what they don't address — see the <a href="https://github.com/martymcenroe/Clio/wiki">project wiki</a>.</p>
+</section>
+
+<section>
+  <h2>Contact</h2>
+  <p>Privacy questions or feedback: <a href="mailto:martymcenroe@gmail.com?subject=Clio%20privacy%20question">martymcenroe@gmail.com</a>.</p>
+  <p>Security vulnerabilities: see <a href="https://github.com/martymcenroe/Clio/blob/main/SECURITY.md">SECURITY.md</a> for the private reporting channel. Do not file public issues for security reports.</p>
+</section>
+
+<footer>
+  <p>
+    <a href="https://github.com/martymcenroe/Clio">GitHub</a> ·
+    <a href="privacy.html">Privacy</a> ·
+    <a href="https://github.com/martymcenroe/Clio/blob/main/SECURITY.md">Security</a> ·
+    <a href="https://github.com/martymcenroe/Clio/wiki">Wiki</a> ·
+    <a href="https://github.com/martymcenroe/Clio/blob/main/CHANGELOG.md">Changelog</a>
+  </p>
+  <p>MIT License · Copyright © 2026 Martin McEnroe / THRIVETECH.AI</p>
+</footer>
+
+</div>
+</body>
+</html>

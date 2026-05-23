@@ -2,15 +2,22 @@
  * Centralized DOM selectors for ChatGPT UI elements.
  * Isolated here for easy maintenance when ChatGPT updates their UI.
  *
- * VERIFIED: 2026-02-28 from real ChatGPT DOM snapshot via Playwright
- * Source: chatgpt.com/c/67bd8097-... (Strangler Pattern in Python)
+ * VERIFIED: 2026-05-23 from two real ChatGPT DOM snapshots saved via
+ * Chrome "Webpage, Single File":
+ *   - Find Missing Number (older, chatgpt.com/c/85301244-...)
+ *   - Contract Review Recommendations (newer, chatgpt.com/c/69eff2c8-...)
+ *
+ * Both samples have zero <article> elements. ChatGPT dropped the
+ * <article data-turn="..."> wrapper at some point between the original
+ * 2026-02-28 verification (issue #15) and now (#116). The per-turn
+ * boundary is the inner div with `data-message-author-role`. We select
+ * on that attribute directly — no article-based selector path.
  */
 
 const SELECTORS = {
   site: 'chatgpt',
 
-  // Conversation container — ChatGPT renders turns as <article> elements
-  // inside a main content area. The articles themselves are the containers.
+  // Conversation container — main content area
   conversationContainer: 'main',
 
   // Session title — ChatGPT uses document.title directly (no suffix)
@@ -19,12 +26,13 @@ const SELECTORS = {
   // Scroll container
   scrollContainer: 'main [class*="overflow-y-auto"], main',
 
-  // Message elements — ChatGPT uses <article> with data-turn attribute
-  userMessage: 'article[data-turn="user"]',
-  assistantMessage: 'article[data-turn="assistant"]',
+  // Message elements — current ChatGPT renders each turn as a div
+  // bearing `data-message-author-role="user"` or `="assistant"`.
+  userMessage: '[data-message-author-role="user"]',
+  assistantMessage: '[data-message-author-role="assistant"]',
 
   // All messages (union of user + assistant)
-  allMessages: 'article[data-turn="user"], article[data-turn="assistant"]',
+  allMessages: '[data-message-author-role="user"], [data-message-author-role="assistant"]',
 
   // Content selectors within messages
   // User text is inside .whitespace-pre-wrap

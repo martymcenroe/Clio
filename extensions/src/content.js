@@ -264,7 +264,7 @@ function countMessages() {
     return userMsgs.length + assistantMsgs.length;
   }
   if (site === 'chatgpt') {
-    return document.querySelectorAll('article[data-turn="user"], article[data-turn="assistant"]').length;
+    return document.querySelectorAll('[data-message-author-role="user"], [data-message-author-role="assistant"]').length;
   }
   // Gemini: Count ONLY primary elements (user-query, model-response)
   // Don't use composite SELECTORS which include fallbacks that may be nested
@@ -812,13 +812,13 @@ async function extractTurnsClaude() {
  * @param {number} index - Turn index
  * @returns {Object} - Turn object
  */
-function extractAssistantTurnChatGPT(article, index) {
-  const images = findImages(article, index);
+function extractAssistantTurnChatGPT(messageEl, index) {
+  const images = findImages(messageEl, index);
 
   // Extract reasoning label if present (e.g. "Reasoned about X for Y seconds")
   let thinking = null;
   if (SELECTORS.reasoningLabel) {
-    const reasoningEl = article.querySelector(SELECTORS.reasoningLabel);
+    const reasoningEl = messageEl.querySelector(SELECTORS.reasoningLabel);
     if (reasoningEl) {
       const reasonText = reasoningEl.textContent.trim();
       if (reasonText.toLowerCase().includes('reason') || reasonText.toLowerCase().includes('thought')) {
@@ -829,14 +829,16 @@ function extractAssistantTurnChatGPT(article, index) {
 
   // Extract response content from .markdown container
   const contentSelector = SELECTORS.assistantContent || '.markdown';
-  const contentEl = article.querySelector(contentSelector);
-  const content = contentEl ? extractTextContent(contentEl) : extractTextContent(article);
+  const contentEl = messageEl.querySelector(contentSelector);
+  const content = contentEl ? extractTextContent(contentEl) : extractTextContent(messageEl);
 
-  // Extract model slug if available
-  let modelSlug = null;
-  const modelEl = article.querySelector('[data-message-model-slug]');
-  if (modelEl) {
-    modelSlug = modelEl.getAttribute('data-message-model-slug');
+  // Extract model slug if available (may be on the messageEl itself or a descendant)
+  let modelSlug = messageEl.getAttribute('data-message-model-slug');
+  if (!modelSlug) {
+    const modelEl = messageEl.querySelector('[data-message-model-slug]');
+    if (modelEl) {
+      modelSlug = modelEl.getAttribute('data-message-model-slug');
+    }
   }
 
   return {
@@ -862,24 +864,24 @@ async function extractTurnsChatGPT() {
   const turns = [];
   let turnIndex = 0;
 
-  const articles = document.querySelectorAll(SELECTORS.allMessages);
+  const messageEls = document.querySelectorAll(SELECTORS.allMessages);
 
-  for (let i = 0; i < articles.length; i++) {
-    const article = articles[i];
-    const turnType = article.getAttribute('data-turn');
+  for (let i = 0; i < messageEls.length; i++) {
+    const messageEl = messageEls[i];
+    const turnType = messageEl.getAttribute('data-message-author-role');
 
     if (turnType === 'user') {
       // Extract user content from .whitespace-pre-wrap or the message element
       const contentSelector = SELECTORS.userContent || '.whitespace-pre-wrap';
-      const contentEl = article.querySelector(contentSelector);
-      const element = contentEl || article;
+      const contentEl = messageEl.querySelector(contentSelector);
+      const element = contentEl || messageEl;
       turns.push(extractUserTurn(element, turnIndex++));
     } else if (turnType === 'assistant') {
-      turns.push(extractAssistantTurnChatGPT(article, turnIndex++));
+      turns.push(extractAssistantTurnChatGPT(messageEl, turnIndex++));
     }
 
     if (i > 0 && i % 20 === 0) {
-      showProgress(`Extracting turn ${i}/${articles.length}...`);
+      showProgress(`Extracting turn ${i}/${messageEls.length}...`);
       await sleep(0);
     }
   }

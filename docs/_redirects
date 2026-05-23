@@ -1,8 +1,11 @@
 # Cloudflare Pages redirects/rewrites
 # Reference: https://developers.cloudflare.com/pages/configuration/redirects/
-
-# Clean URLs — rewrite (200) so the path stays clean in the address bar
-/privacy        /privacy.html        200
+#
+# Clean URLs: NOT defined here. Cloudflare Pages automatically serves
+# `/foo.html` at `/foo` — defining an explicit `/foo /foo.html 200`
+# rewrite collides with CFP's built-in extension-stripping (308) and
+# creates an infinite redirect loop. Just put the HTML file in
+# dist/site/ and request /foo.
 
 # Off-site references — temporary redirect (302); becomes 301 if we want them canonical
 /security       https://github.com/martymcenroe/Clio/blob/main/SECURITY.md   302

@@ -10,9 +10,40 @@ Adapted from Aletheia's runbook 10905; Clio differs in being Chrome-only (no Fir
 
 | Store | Account | Dashboard |
 |-------|---------|-----------|
-| Chrome Web Store | Personal developer account (see local credentials store) | https://chrome.google.com/webstore/devconsole |
+| Chrome Web Store | `cto@thrivetech.ai` | https://chrome.google.com/webstore/devconsole |
+
+This is the same developer account Aletheia publishes under. The one-time $5 USD developer-registration fee has already been paid against this account — there is no additional fee for publishing Clio under the same account.
+
+**Multi-account hazard.** This Google identity is one of many Google accounts the publisher may have signed in to in any given Chrome profile. Selecting the wrong account at the dashboard sign-in step is the most common source of "I can't find my extension" confusion at upload time. See the *First-time setup and account verification* section below.
 
 Firefox AMO is *not* in scope for the initial 1.4.0 launch. A future issue will track Firefox publication; the extension currently only ships for Chromium browsers.
+
+## First-time setup and account verification
+
+Skip this section if you have already published to CWS from this account on this machine. The steps below are for a fresh machine, a new browser profile, or first-time publishers.
+
+### Account verification before any upload
+
+1. Open a new Chrome window. Go to https://chrome.google.com/webstore/devconsole.
+2. If Chrome prompts for account selection, **carefully choose `cto@thrivetech.ai`** — not any other Google account that may be signed in. The chooser shows each account's display name and avatar; verify the email at the bottom of the chooser tile before clicking.
+3. If signed in to a different account, sign out completely first (https://accounts.google.com/Logout) — *do not* use "Add another account" alongside other Google sessions; the dashboard sometimes silently uses the default browser identity rather than the one you intended.
+4. Once in the dashboard, confirm in the **top-right avatar menu** that the active identity shows `cto@thrivetech.ai`. If it shows anything else, abort and re-do step 2.
+
+### One-time developer registration (already done for this account)
+
+Documented here for future maintainers. If a new CWS publisher account ever needs to be created:
+
+1. Sign in to the dashboard at the URL above with the new Google identity
+2. Accept the Chrome Web Store Developer Agreement
+3. Pay the **one-time $5 USD registration fee** (Google Pay or credit card)
+4. Verify a contact email address (Google sends a verification email; the link must be clicked from the same browser session)
+5. The account is now eligible to publish
+
+For `cto@thrivetech.ai` this is already done — the account already has Aletheia published under it and Clio inherits that registration.
+
+### Verifying Clio's presence in the dashboard
+
+After verifying the account (above), the dashboard's main view is the **Item list** — a left sidebar with each extension this account publishes. For the first Clio upload, Clio will not appear in this list until the New Item flow completes (see Upload section). For subsequent updates, Clio appears with its current version, last update date, and review status.
 
 ## Pre-flight checklist
 
@@ -71,12 +102,29 @@ The reported version must match the ZIP filename.
 
 ## Upload to the Chrome Web Store
 
+### Pre-conditions
+
+- ZIP built and verified per the previous sections (`dist/clio-chrome-vX.Y.Z.zip` exists)
+- Signed in to dashboard as `cto@thrivetech.ai` — verified per *First-time setup and account verification* above
+
+### First publish (Clio not yet in the dashboard)
+
 1. Go to https://chrome.google.com/webstore/devconsole
-2. Sign in as the documented Clio developer account
-3. Find **Clio** in the extension list — or click **New Item** for the first publish
-4. Click **Package** → **Upload new package**
-5. Upload `dist/clio-chrome-vX.Y.Z.zip`
-6. Wait for validation — fix any errors before proceeding
+2. Confirm top-right avatar shows `cto@thrivetech.ai` (multi-account hazard)
+3. Click the **+ New Item** button (top of the Item list, typically a prominent button labeled with a plus or "Add new item")
+4. The "Upload your item" dialog appears. Click **Choose file** and select `dist/clio-chrome-vX.Y.Z.zip`
+5. Click **Upload**. The dashboard validates the package — this takes 10–60 seconds. Validation errors appear inline; fix them in the source, rebuild, and re-upload before proceeding.
+6. On successful validation, the dashboard creates a draft listing for Clio and navigates to the **Store listing** tab. Continue with the *Store listing* section below.
+
+### Subsequent updates (Clio already in the dashboard)
+
+1. Go to https://chrome.google.com/webstore/devconsole
+2. Confirm top-right avatar shows `cto@thrivetech.ai`
+3. From the Item list, click the **Clio** row to open its dashboard
+4. In the left sidebar, click **Package**
+5. Click **Upload new package** (button near the top of the Package tab)
+6. Choose `dist/clio-chrome-vX.Y.Z.zip` and upload
+7. Validation runs; on success, the new version becomes the draft. The previously-published version remains live until this draft is submitted and approved.
 
 ## Store listing
 

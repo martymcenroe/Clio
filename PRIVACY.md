@@ -65,17 +65,15 @@ The conversations themselves remain on the LLM provider's servers under their ow
 
 ## GDPR / UK GDPR
 
-If you are in the EU, UK, or other jurisdictions covered by GDPR-equivalent laws, you have the right to access, correct, delete, restrict, or object to processing of your personal data, and the right to data portability.
+Clio does not process personal data. Your conversations and the ZIP files Clio writes live only on your own device — there is no Clio server, no Clio database, nothing that holds personal data about you.
 
-Clio holds no personal data. Your conversations and the ZIP files Clio writes live only on your own device, never on any Clio-controlled server. Those rights are therefore fulfilled by default — you control the files via your operating system, and there is nothing on a Clio server to access, export, or delete.
+If you are in the EU, UK, or other jurisdiction covered by GDPR-equivalent law, your subject rights (access, deletion, portability, etc.) are satisfied by default: there is nothing on a Clio server to access or delete. You control your local files via your operating system.
 
-If you still wish to make a formal data subject request (for example, to confirm we hold no data about you), email **opensource@martymcenroe.ai** with subject `Clio GDPR request`. We will respond within 30 days.
-
-We are not a "data controller" or "data processor" in the GDPR sense for any personal data, because the extension's architecture makes such processing impossible.
+The operator is the publisher of the software, not a "data controller" or "data processor" under GDPR for any personal data the extension touches. The architecture makes such processing impossible.
 
 ## Children's privacy
 
-Clio does not knowingly collect any data from anyone, including children. If you believe a child has been harmed by Clio's behavior, please contact us at the email below — but note that Clio runs locally and does not store or transmit data.
+Clio does not collect data from anyone, including children. COPPA, GDPR-K, and similar children's-privacy regimes regulate the **collection** of personal information from children — Clio's local-only design forecloses such collection. The extension has no remote endpoint, no telemetry, and no targeting; there is no behavior directed at any party other than the local user.
 
 ## Changes to this policy
 

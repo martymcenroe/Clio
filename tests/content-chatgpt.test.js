@@ -93,18 +93,18 @@ describe('extractConversationId (ChatGPT)', () => {
 });
 
 describe('countMessages (ChatGPT)', () => {
-  test('counts user and assistant articles', () => {
+  test('counts user and assistant message elements', () => {
     // NOTE: innerHTML with static test data only (jsdom, no browser, no untrusted content)
     document.body.innerHTML = [
-      '<article data-turn="user">Hello</article>',
-      '<article data-turn="assistant">Hi!</article>',
-      '<article data-turn="user">Follow up</article>',
-      '<article data-turn="assistant">Sure</article>'
+      '<div data-message-author-role="user">Hello</div>',
+      '<div data-message-author-role="assistant">Hi!</div>',
+      '<div data-message-author-role="user">Follow up</div>',
+      '<div data-message-author-role="assistant">Sure</div>'
     ].join('');
     expect(countMessages()).toBe(4);
   });
 
-  test('returns 0 when no articles', () => {
+  test('returns 0 when no message elements', () => {
     document.body.innerHTML = '<div>No conversation here</div>';
     expect(countMessages()).toBe(0);
   });
@@ -112,18 +112,15 @@ describe('countMessages (ChatGPT)', () => {
 
 describe('extractAssistantTurnChatGPT', () => {
   test('extracts markdown content from assistant turn', () => {
-    const article = document.createElement('article');
-    article.setAttribute('data-turn', 'assistant');
-    const markdown = document.createElement('div');
-    markdown.className = 'markdown prose';
-    markdown.textContent = 'The strangler pattern is used for migration.';
     const msgDiv = document.createElement('div');
     msgDiv.setAttribute('data-message-author-role', 'assistant');
     msgDiv.setAttribute('data-message-model-slug', 'gpt-4o');
+    const markdown = document.createElement('div');
+    markdown.className = 'markdown prose';
+    markdown.textContent = 'The strangler pattern is used for migration.';
     msgDiv.appendChild(markdown);
-    article.appendChild(msgDiv);
 
-    const turn = extractAssistantTurnChatGPT(article, 0);
+    const turn = extractAssistantTurnChatGPT(msgDiv, 0);
 
     expect(turn.role).toBe('assistant');
     expect(turn.content).toContain('strangler pattern');
@@ -132,28 +129,25 @@ describe('extractAssistantTurnChatGPT', () => {
   });
 
   test('extracts reasoning label from o1 turn', () => {
-    const article = document.createElement('article');
-    article.setAttribute('data-turn', 'assistant');
+    const msgDiv = document.createElement('div');
+    msgDiv.setAttribute('data-message-author-role', 'assistant');
+    msgDiv.setAttribute('data-message-model-slug', 'o1');
 
-    // Reasoning header
+    // Reasoning header (inside the message element on modern DOM)
     const reasoningDiv = document.createElement('div');
     reasoningDiv.className = 'flex items-start gap-3 pb-2';
     const btn = document.createElement('button');
     btn.textContent = 'Reasoned about architecture for 8 seconds';
     reasoningDiv.appendChild(btn);
-    article.appendChild(reasoningDiv);
+    msgDiv.appendChild(reasoningDiv);
 
     // Response content
     const markdown = document.createElement('div');
     markdown.className = 'markdown prose';
     markdown.textContent = 'Based on your diagram...';
-    const msgDiv = document.createElement('div');
-    msgDiv.setAttribute('data-message-author-role', 'assistant');
-    msgDiv.setAttribute('data-message-model-slug', 'o1');
     msgDiv.appendChild(markdown);
-    article.appendChild(msgDiv);
 
-    const turn = extractAssistantTurnChatGPT(article, 0);
+    const turn = extractAssistantTurnChatGPT(msgDiv, 0);
 
     expect(turn.thinking).toContain('Reasoned about architecture');
     expect(turn.content).toContain('Based on your diagram');
@@ -161,8 +155,8 @@ describe('extractAssistantTurnChatGPT', () => {
   });
 
   test('extracts code blocks from assistant turn', () => {
-    const article = document.createElement('article');
-    article.setAttribute('data-turn', 'assistant');
+    const msgDiv = document.createElement('div');
+    msgDiv.setAttribute('data-message-author-role', 'assistant');
     const markdown = document.createElement('div');
     markdown.className = 'markdown';
     const text = document.createTextNode("Here's the code:");
@@ -173,31 +167,25 @@ describe('extractAssistantTurnChatGPT', () => {
     code.textContent = 'print("hello")';
     pre.appendChild(code);
     markdown.appendChild(pre);
-    const msgDiv = document.createElement('div');
-    msgDiv.setAttribute('data-message-author-role', 'assistant');
     msgDiv.appendChild(markdown);
-    article.appendChild(msgDiv);
 
-    const turn = extractAssistantTurnChatGPT(article, 0);
+    const turn = extractAssistantTurnChatGPT(msgDiv, 0);
 
     expect(turn.content).toContain('```python');
     expect(turn.content).toContain('print("hello")');
   });
 
   test('extracts images from assistant turn', () => {
-    const article = document.createElement('article');
-    article.setAttribute('data-turn', 'assistant');
+    const msgDiv = document.createElement('div');
+    msgDiv.setAttribute('data-message-author-role', 'assistant');
     const markdown = document.createElement('div');
     markdown.className = 'markdown';
     const img = document.createElement('img');
     img.src = 'data:image/png;base64,abc123';
     markdown.appendChild(img);
-    const msgDiv = document.createElement('div');
-    msgDiv.setAttribute('data-message-author-role', 'assistant');
     msgDiv.appendChild(markdown);
-    article.appendChild(msgDiv);
 
-    const turn = extractAssistantTurnChatGPT(article, 0);
+    const turn = extractAssistantTurnChatGPT(msgDiv, 0);
 
     expect(turn.attachments).toHaveLength(1);
     expect(turn.attachments[0].type).toBe('image');
@@ -207,47 +195,41 @@ describe('extractAssistantTurnChatGPT', () => {
 describe('extractTurnsChatGPT', () => {
   test('extracts turns from ChatGPT DOM in order', async () => {
     // Build DOM programmatically to avoid innerHTML
-    const user1 = document.createElement('article');
-    user1.setAttribute('data-turn', 'user');
-    user1.setAttribute('data-testid', 'conversation-turn-1');
+    const user1 = document.createElement('div');
+    user1.setAttribute('data-message-author-role', 'user');
+    user1.setAttribute('data-message-id', 'u1');
     const u1text = document.createElement('div');
     u1text.className = 'whitespace-pre-wrap';
     u1text.textContent = 'Hello ChatGPT';
     user1.appendChild(u1text);
     document.body.appendChild(user1);
 
-    const assist1 = document.createElement('article');
-    assist1.setAttribute('data-turn', 'assistant');
-    assist1.setAttribute('data-testid', 'conversation-turn-2');
+    const assist1 = document.createElement('div');
+    assist1.setAttribute('data-message-author-role', 'assistant');
+    assist1.setAttribute('data-message-id', 'a1');
+    assist1.setAttribute('data-message-model-slug', 'gpt-4o');
     const a1md = document.createElement('div');
     a1md.className = 'markdown';
     a1md.textContent = 'Hi! How can I help?';
     assist1.appendChild(a1md);
-    const a1msg = document.createElement('div');
-    a1msg.setAttribute('data-message-author-role', 'assistant');
-    a1msg.setAttribute('data-message-model-slug', 'gpt-4o');
-    assist1.appendChild(a1msg);
     document.body.appendChild(assist1);
 
-    const user2 = document.createElement('article');
-    user2.setAttribute('data-turn', 'user');
-    user2.setAttribute('data-testid', 'conversation-turn-3');
+    const user2 = document.createElement('div');
+    user2.setAttribute('data-message-author-role', 'user');
+    user2.setAttribute('data-message-id', 'u2');
     const u2text = document.createElement('div');
     u2text.className = 'whitespace-pre-wrap';
     u2text.textContent = 'What is 2+2?';
     user2.appendChild(u2text);
     document.body.appendChild(user2);
 
-    const assist2 = document.createElement('article');
-    assist2.setAttribute('data-turn', 'assistant');
-    assist2.setAttribute('data-testid', 'conversation-turn-4');
+    const assist2 = document.createElement('div');
+    assist2.setAttribute('data-message-author-role', 'assistant');
+    assist2.setAttribute('data-message-id', 'a2');
     const a2md = document.createElement('div');
     a2md.className = 'markdown';
     a2md.textContent = '2+2 equals 4.';
     assist2.appendChild(a2md);
-    const a2msg = document.createElement('div');
-    a2msg.setAttribute('data-message-author-role', 'assistant');
-    assist2.appendChild(a2msg);
     document.body.appendChild(assist2);
 
     const turns = await extractTurnsChatGPT();
@@ -268,25 +250,22 @@ describe('extractTurns dispatches to ChatGPT', () => {
   test('uses ChatGPT extraction when site is chatgpt', async () => {
     useChatGPT();
 
-    const user = document.createElement('article');
-    user.setAttribute('data-turn', 'user');
-    user.setAttribute('data-testid', 'conversation-turn-1');
+    const user = document.createElement('div');
+    user.setAttribute('data-message-author-role', 'user');
+    user.setAttribute('data-message-id', 'u1');
     const utext = document.createElement('div');
     utext.className = 'whitespace-pre-wrap';
     utext.textContent = 'Hello';
     user.appendChild(utext);
     document.body.appendChild(user);
 
-    const assist = document.createElement('article');
-    assist.setAttribute('data-turn', 'assistant');
-    assist.setAttribute('data-testid', 'conversation-turn-2');
+    const assist = document.createElement('div');
+    assist.setAttribute('data-message-author-role', 'assistant');
+    assist.setAttribute('data-message-id', 'a1');
     const amd = document.createElement('div');
     amd.className = 'markdown';
     amd.textContent = 'Hi!';
     assist.appendChild(amd);
-    const amsg = document.createElement('div');
-    amsg.setAttribute('data-message-author-role', 'assistant');
-    assist.appendChild(amsg);
     document.body.appendChild(assist);
 
     const turns = await extractTurns();
@@ -313,8 +292,8 @@ describe('fixture-based ChatGPT extraction', () => {
   });
 
   test('fixture has expected ChatGPT structure', () => {
-    const userMsgs = document.querySelectorAll('article[data-turn="user"]');
-    const assistantMsgs = document.querySelectorAll('article[data-turn="assistant"]');
+    const userMsgs = document.querySelectorAll('[data-message-author-role="user"]');
+    const assistantMsgs = document.querySelectorAll('[data-message-author-role="assistant"]');
     expect(userMsgs.length).toBe(2);
     expect(assistantMsgs.length).toBe(2);
   });

@@ -102,11 +102,12 @@ Cloudflare starts an initial deploy from `main`. It typically completes in 30–
 
 Before binding the custom domain, verify the subdomain works:
 
-- `https://clio.pages.dev/` should render `docs/index.html`
-- `https://clio.pages.dev/privacy.html` should render `docs/privacy.html`
-- `https://clio.pages.dev/privacy` (clean URL) should *also* render the privacy page — confirms the `_redirects` 200-rewrite is being honored
+- `https://clio.pages.dev/` should render `docs/index.html` (HTTP 200)
+- `https://clio.pages.dev/privacy` (clean URL) should render `docs/privacy.html` content (HTTP 200) — Cloudflare Pages automatically serves `filename.html` at `/filename`; no explicit `_redirects` rule needed
+- `https://clio.pages.dev/privacy.html` should 308-redirect to `/privacy` (CFP normalizes to the clean URL)
+- `https://clio.pages.dev/wiki` should 302-redirect to `https://github.com/martymcenroe/Clio/wiki` (one of the external redirects in `_redirects`)
 
-If the clean URL doesn't work, check the **Functions** / **Redirects** tab in the project dashboard and confirm Cloudflare picked up `_redirects`.
+If the clean URL loops (`HTTP/1.1 308 Permanent Redirect` with `Location: /privacy`), check `_redirects` for an explicit `/privacy /privacy.html 200` rule and remove it — that rule collides with CFP's automatic extension-stripping (see Troubleshooting below).
 
 ### Step 5 — Bind the custom domain
 
@@ -225,14 +226,17 @@ CF Pages dashboard → **Deployments** → find the previous green deploy → **
 
 1. Drop the new `.html` file under `docs/`.
 2. Add its filename to the `SITE_FILES` list at the top of `tools/build_site.py`.
-3. Add a corresponding `_redirects` rule if you want a clean URL.
-4. Merge to `main` — Path A auto-deploys; Path B requires you to run `python tools/build_site.py && wrangler pages deploy dist/site --project-name=clio`.
+3. Merge to `main` — Path A auto-deploys; Path B requires you to run `python tools/build_site.py && wrangler pages deploy dist/site --project-name=clio`.
+
+The file is automatically reachable at `/<basename>` (clean URL) AND `/<basename>.html`. CFP serves the file content at the clean URL (200) and 308-redirects the `.html` form to the clean form. Do NOT add an explicit `_redirects` rule for the clean URL — see "Adding redirects" below.
 
 The `SITE_FILES` step is load-bearing: any file not in that list is **excluded** from the build output. This is the safety net that prevents internal docs from accidentally shipping.
 
 ### Adding redirects
 
-Edit `docs/_redirects`. Cloudflare Pages re-reads on every deploy. The syntax is `source destination status` per line; status `200` is a rewrite (URL stays clean), `301`/`302` is a redirect (URL changes in the address bar). `_redirects` is already in `SITE_FILES`, so no change to `tools/build_site.py` is needed.
+Edit `docs/_redirects` for **off-site** redirects (e.g., `/wiki → https://github.com/.../wiki 302`). Cloudflare Pages re-reads on every deploy. The syntax is `source destination status` per line; `301`/`302` is a redirect (URL changes in the address bar). `_redirects` is already in `SITE_FILES`, so no change to `tools/build_site.py` is needed.
+
+**Do NOT use `_redirects` for in-site clean URLs.** The pattern `/foo /foo.html 200` looks like it should produce a clean-URL rewrite, but it collides with CFP's built-in `.html`-stripping behavior and produces an infinite 308 loop (Clio #112, fixed 2026-05-23). CFP already serves `/foo.html` at `/foo` automatically — no rule needed.
 
 ---
 
@@ -243,7 +247,8 @@ Edit `docs/_redirects`. Cloudflare Pages re-reads on every deploy. The syntax is
 | `cliocast.com` resolves to a Cloudflare 522 / 525 | Origin (the Pages project) not yet ready | Wait 60s, retry. If persists, check the Pages project dashboard for deploy errors. |
 | `cliocast.com` resolves but shows GitHub Pages 404 | Custom domain bound to the wrong project, or DNS pointing to GHP not CFP | In Cloudflare DNS, verify the CNAME for `cliocast.com` points at `clio.pages.dev`, not at GitHub Pages. |
 | HTTPS shows certificate warning | Cert not yet provisioned | Wait up to 10 minutes. If still warning, in the Pages project → Custom domains → click the domain → manually trigger cert reissue. |
-| `/privacy` returns 404 but `/privacy.html` works | `_redirects` not picked up by CFP | Check that `_redirects` is at the *root* of the build output dir (`docs/_redirects`, not `docs/some-subfolder/_redirects`). Trigger a redeploy. |
+| `/privacy` returns 404 but `/privacy.html` works | `_redirects` file present in build output but `privacy.html` not in `dist/site/` | Check that `privacy.html` is in `SITE_FILES` in `tools/build_site.py`; rebuild and redeploy. |
+| `/privacy` loops with `HTTP/1.1 308 Permanent Redirect`, `Location: /privacy` | Explicit `/privacy /privacy.html 200` rule in `_redirects` colliding with CFP's automatic `.html`-stripping | Remove the rule from `docs/_redirects`. CFP's built-in clean URL handling serves the file at `/privacy` without any explicit rule. |
 | `wrangler whoami` shows the wrong account | Earlier `wrangler login` ran under a different Google identity | `wrangler logout`, then `wrangler login` and complete the browser flow under `mcwizard1@gmail.com`. |
 | GitHub repo header still shows old description after running the metadata script | Hard-cache in the browser | Hard refresh (Ctrl-F5); also verify the script printed `[OK]` for both PATCH and PUT calls. |
 

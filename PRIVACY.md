@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** 2026-05-22
+**Last updated:** 2026-05-23
 
 ## Summary
 
@@ -63,6 +63,16 @@ Because all data lives only on your local disk, your data subject rights are exe
 
 The conversations themselves remain on the LLM provider's servers under their own privacy terms — Clio does not change anything about Google's, Anthropic's, or OpenAI's data handling. Clio gives you a local copy; it does not remove the original.
 
+## GDPR / UK GDPR
+
+If you are in the EU, UK, or other jurisdictions covered by GDPR-equivalent laws, you have the right to access, correct, delete, restrict, or object to processing of your personal data, and the right to data portability.
+
+Clio holds no personal data. Your conversations and the ZIP files Clio writes live only on your own device, never on any Clio-controlled server. Those rights are therefore fulfilled by default — you control the files via your operating system, and there is nothing on a Clio server to access, export, or delete.
+
+If you still wish to make a formal data subject request (for example, to confirm we hold no data about you), email **opensource@martymcenroe.ai** with subject `Clio GDPR request`. We will respond within 30 days.
+
+We are not a "data controller" or "data processor" in the GDPR sense for any personal data, because the extension's architecture makes such processing impossible.
+
 ## Children's privacy
 
 Clio does not knowingly collect any data from anyone, including children. If you believe a child has been harmed by Clio's behavior, please contact us at the email below — but note that Clio runs locally and does not store or transmit data.
@@ -73,6 +83,6 @@ If this policy changes materially, the change will be reflected in a new "Last u
 
 ## Contact
 
-Privacy questions: **martymcenroe@gmail.com** (subject: `Clio privacy question`)
+Privacy questions: **opensource@martymcenroe.ai** (subject: `Clio privacy question`)
 
 Security vulnerabilities should be reported per [SECURITY.md](SECURITY.md), not as privacy questions.

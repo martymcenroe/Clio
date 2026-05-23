@@ -6,7 +6,7 @@ Clio is a Chrome extension that extracts your Gemini, Claude, and ChatGPT conver
 
 If you believe you have found a security vulnerability in Clio, please report it privately to:
 
-**martymcenroe@gmail.com** (subject line: `Clio security report`)
+**opensource@martymcenroe.ai** (subject line: `Clio security report`)
 
 Please **do not** file a public GitHub issue for security reports. The `Report a vulnerability` link routed from the issue templates points here.
 

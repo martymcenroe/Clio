@@ -32,8 +32,8 @@ docs/html-input/
 # Session logs (may contain sensitive info)
 docs/session-logs/
 
-# Unleashed session transcripts (auto-generated, untracked)
-data/unleashed/
-
-# Handoff logs
-data/handoff-log.md
+# Session data — extractions, DOM dumps, handoffs, pickups, session
+# transcripts. Contains verbatim conversation content (extracted ZIPs,
+# saved HTML pages for debugging, etc.). NEVER tracked. Always-on
+# broad rule supersedes the narrow per-file rules below.
+data/

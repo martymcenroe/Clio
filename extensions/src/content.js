@@ -661,6 +661,48 @@ function extractAssistantTurn(element, index) {
 }
 
 /**
+ * Strip Claude artifact-widget chrome from a cloned response container.
+ *
+ * Claude renders interactive artifact cards (email drafts, document drafts,
+ * code) inside the assistant response. The card has a distinctive class
+ * signature: `font-ui` + `rounded-2xl` + `rounded-t-3xl` + `overflow-hidden`
+ * + `border-border-300` — verified 2026-05-23 against a real Recruiter
+ * email-draft widget (issue #43).
+ *
+ * Inside each widget, two kinds of text were leaking into the extracted
+ * content:
+ *
+ *   1. Button labels — variant-selector tabs ("Warm decline, door open" /
+ *      "Brief, final close") and action buttons ("Send via Gmail") have
+ *      visible text inside `<span>` children, which textContent captures
+ *      as if it were prose.
+ *   2. Adjacent label+value pairs — a `<label>Subject:</label>` element
+ *      next to its value renders as readable "Subject: Re: Your inquiry"
+ *      in the UI but textContent concatenates them with no separator:
+ *      "Subject:Re: Your inquiry".
+ *
+ * Fix: remove all `<button>` elements inside any matched widget (none of
+ * them are prose), and append a single space inside each `<label>` so the
+ * subsequent value reads with proper separation.
+ *
+ * @param {Element} rootEl - cloned response container to modify in place
+ */
+function stripArtifactWidgetChrome(rootEl) {
+  if (!rootEl || typeof rootEl.querySelectorAll !== 'function') return;
+  const widgetRoots = rootEl.querySelectorAll(
+    '.font-ui.rounded-2xl.rounded-t-3xl.overflow-hidden.border-border-300'
+  );
+  if (!widgetRoots.length) return;
+  const doc = rootEl.ownerDocument || document;
+  for (const widget of widgetRoots) {
+    widget.querySelectorAll('button').forEach(btn => btn.remove());
+    widget.querySelectorAll('label').forEach(label => {
+      label.appendChild(doc.createTextNode(' '));
+    });
+  }
+}
+
+/**
  * Extract a single Claude assistant turn.
  * Claude uses .row-start-1 for thinking and .row-start-2 for response content.
  * Tool use is indicated by buttons with group/row class inside .row-start-1.
@@ -708,6 +750,7 @@ function extractAssistantTurnClaude(element, index) {
       el.remove();
     }
   });
+  stripArtifactWidgetChrome(contentClone);
   const content = extractTextContent(contentClone);
 
   const turn = {

@@ -2,12 +2,27 @@
  * Centralized DOM selectors for Claude.ai UI elements.
  * Isolated here for easy maintenance when Claude updates their UI.
  *
- * VERIFIED: 2026-04-18 from real Claude DOM via DevTools ancestor-path dump (issue #32).
+ * VERIFIED: 2026-05-23 against three real Claude conversation DOM saves
+ * spanning two DOM eras:
+ *   - OLDEST: "AI for Construction" — pre-redesign Claude (15 turns)
+ *   - MODERN-prose: "Haiku about rain" (1 turn, no tools)
+ *   - MODERN-widget: Recruiter email artifact (1 turn, tool-call + email widget)
  *
- * assistantMessage uses `.row-start-2` (response-content row) because Claude
- * places `[data-testid="action-bar-copy"]` on BOTH user and assistant messages,
- * so the copy-button selector would double-count. `.row-start-2` appears
- * exactly once per assistant turn and never inside a user-message subtree.
+ * Per-turn assistant boundary is `.font-claude-response` (the outer div
+ * containing all response content for a single turn). Verified stable in
+ * BOTH eras:
+ *   - OLDEST: 15 occurrences (matches 15 turns)
+ *   - MODERN: 1 per turn
+ *
+ * Previously this selector was `.row-start-2`. That class:
+ *   - does NOT exist in pre-redesign Claude DOM (0 matches in OLDEST sample)
+ *   - DOES exist in modern Claude but as a sub-element (a grid row for tool
+ *     calls), not as the per-turn boundary
+ * Using `.row-start-2` meant zero turns extracted on older conversations,
+ * and the right-count-for-the-wrong-reason on modern ones.
+ *
+ * User-message selector `[data-testid="user-message"]` is stable across
+ * both eras.
  */
 
 const SELECTORS = {
@@ -24,19 +39,26 @@ const SELECTORS = {
 
   // Message elements
   userMessage: '[data-testid="user-message"]',
-  // One .row-start-2 per assistant turn (the response-content row).
+  // One .font-claude-response per assistant turn — the outer response-container.
+  // Stable across both pre-redesign (oldest) and modern Claude DOM.
   // Do NOT use [data-testid="action-bar-copy"] — Claude renders that on user
   // messages too, which caused duplicate assistant entries (issue #32).
-  assistantMessage: '.row-start-2',
+  // Do NOT use [class="font-claude-response-body"] — that's per paragraph, not per turn.
+  assistantMessage: '.font-claude-response:not(.font-claude-response-body)',
 
   // All messages (union of user + assistant)
-  allMessages: '[data-testid="user-message"], .row-start-2',
+  allMessages: '[data-testid="user-message"], .font-claude-response:not(.font-claude-response-body)',
 
   // Expandable content — thinking toggles in Claude
   expandButton: null, // Claude doesn't use generic expand buttons
   thinkingToggle: '.row-start-1 button[aria-expanded="false"]',
 
   // Thinking and response content within assistant turns
+  // .row-start-1 (thinking) and .row-start-2 (response wrapper) exist only in
+  // the modern grid-style DOM (when Claude renders a 2-row grid for tool calls
+  // or thinking). On older Claude DOM these are absent — the assistant
+  // response is just paragraphs directly inside .font-claude-response, and
+  // the thinking/response split logic below is a no-op (which is correct).
   thinkingContent: '.row-start-1',
   responseContent: '.row-start-2',
 

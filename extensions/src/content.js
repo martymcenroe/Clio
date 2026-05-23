@@ -257,10 +257,11 @@ function resetScrollConfig() {
 function countMessages() {
   const site = getSite();
   if (site === 'claude') {
-    // Assistant turns: one .row-start-2 per turn. Do not use action-bar-copy
-    // (appears on user messages too, inflated the count — issue #32).
+    // Assistant turns: one .font-claude-response per turn. Do not use
+    // action-bar-copy (appears on user messages too, inflated the count —
+    // issue #32). Do not use .row-start-2 (broken on pre-redesign Claude — #114).
     const userMsgs = document.querySelectorAll('[data-testid="user-message"]');
-    const assistantMsgs = document.querySelectorAll('.row-start-2');
+    const assistantMsgs = document.querySelectorAll('.font-claude-response:not(.font-claude-response-body)');
     return userMsgs.length + assistantMsgs.length;
   }
   if (site === 'chatgpt') {
@@ -791,8 +792,12 @@ async function extractTurnsClaude() {
     if (isUser) {
       turns.push(extractUserTurn(element, turnIndex++));
     } else {
-      const turnContainer = findClaudeAssistantContainer(element);
-      turns.push(extractAssistantTurnClaude(turnContainer, turnIndex++));
+      // element IS the per-turn container (.font-claude-response) — no
+      // walking-up needed. Pre-2026-05 code used .row-start-2 as the
+      // assistant-turn selector and then walked up via
+      // findClaudeAssistantContainer to find the bounding turn. With the
+      // new selector that step is unnecessary (#114).
+      turns.push(extractAssistantTurnClaude(element, turnIndex++));
     }
 
     if (i > 0 && i % 20 === 0) {

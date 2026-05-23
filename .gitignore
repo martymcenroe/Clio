@@ -17,6 +17,7 @@ Thumbs.db
 
 # Build artifacts
 *.zip
+dist/
 
 # Temporary files
 tmp/
@@ -33,3 +34,6 @@ docs/session-logs/
 
 # Unleashed session transcripts (auto-generated, untracked)
 data/unleashed/
+
+# Handoff logs
+data/handoff-log.md

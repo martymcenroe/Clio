@@ -8,6 +8,14 @@ This is a one-time setup. After the initial wiring, every push to `main` trigger
 
 ---
 
+## Critical rule: never deploy from `docs/`
+
+`docs/` is a mixed-content directory holding 3 public files (`index.html`, `privacy.html`, `_redirects`) alongside ~24 internal artifacts (LLDs, runbooks, ADRs, reports). On 2026-05-23 a first deploy via `wrangler pages deploy docs` uploaded all 31 files to a public CFP project — the project was deleted within minutes and triggered a fleet-wide session-log audit across 21 repos.
+
+**Fleet rule (post-incident):** always deploy from `dist/site/`, which is produced by `python tools/build_site.py`. The script copies exactly the 3 public files and wipes anything else first, so a future renamed/removed file does not linger. Path A wires this as the CFP build command; Path B runs it before every `wrangler pages deploy`.
+
+---
+
 ## Prerequisites
 
 - [ ] `wrangler` CLI installed and authenticated against the publisher's Cloudflare account (`mcwizard1@gmail.com`, the same account `aletheia-api` runs in). Verify: `wrangler whoami` shows the right email.
@@ -79,10 +87,12 @@ If prompted, authorize the Cloudflare GitHub App. Grant access to the `martymcen
 | Repository | `martymcenroe/Clio` |
 | Project name | `clio` (this becomes `clio.pages.dev` as the default subdomain) |
 | Production branch | `main` |
-| Build command | *(leave blank)* — the site is pure static HTML, no build step |
-| Build output directory | `docs` |
+| Build command | `python tools/build_site.py` — copies the 3 public files into `dist/site/` |
+| Build output directory | `dist/site` |
 | Root directory | *(leave blank)* — defaults to repo root |
 | Environment variables | *(none needed)* |
+
+> **Do NOT set Build output directory to `docs`.** See "Critical rule" above — that's the configuration that caused the 2026-05-23 incident.
 
 Click **Save and Deploy**.
 
@@ -170,12 +180,13 @@ Use this path only if you've decided against the GitHub integration. Each deploy
 
 ```bash
 cd /c/Users/mcwiz/Projects/Clio
-wrangler whoami                                  # verify Cloudflare identity
-wrangler pages project create clio               # creates the project
-wrangler pages deploy docs --project-name=clio   # first deploy
+wrangler whoami                                       # verify Cloudflare identity
+wrangler pages project create clio --production-branch=main   # creates the project
+python tools/build_site.py                            # build dist/site/ from docs/
+wrangler pages deploy dist/site --project-name=clio   # first deploy (3 files)
 ```
 
-The output reports the `clio.pages.dev` URL.
+The output reports the `clio.pages.dev` URL. `wrangler` will print "Uploading 3 files" — if it says more than 3, abort and check that you ran `tools/build_site.py` and pointed `--project-name` at `dist/site`, not `docs`.
 
 ### Bind the custom domain
 
@@ -183,15 +194,16 @@ Same as Path A Step 5 — through the dashboard. Wrangler doesn't (yet) have a s
 
 ### Deploy on every update
 
-After merging a PR that touches `docs/`:
+After merging a PR that touches `docs/index.html`, `docs/privacy.html`, or `docs/_redirects`:
 
 ```bash
 cd /c/Users/mcwiz/Projects/Clio
 git pull
-wrangler pages deploy docs --project-name=clio
+python tools/build_site.py
+wrangler pages deploy dist/site --project-name=clio
 ```
 
-Each invocation creates a new deployment in the project history; the latest replaces the live site within seconds.
+Each invocation creates a new deployment in the project history; the latest replaces the live site within seconds. The build script is idempotent — re-running on an unchanged source produces an identical `dist/site/`.
 
 ### Update the GitHub repo metadata
 
@@ -211,11 +223,16 @@ CF Pages dashboard → **Deployments** → find the previous green deploy → **
 
 ### Adding pages
 
-Drop any `.html` file under `docs/` and it will be reachable at `https://cliocast.com/<filename>`. Add a corresponding `_redirects` rule if you want a clean URL.
+1. Drop the new `.html` file under `docs/`.
+2. Add its filename to the `SITE_FILES` list at the top of `tools/build_site.py`.
+3. Add a corresponding `_redirects` rule if you want a clean URL.
+4. Merge to `main` — Path A auto-deploys; Path B requires you to run `python tools/build_site.py && wrangler pages deploy dist/site --project-name=clio`.
+
+The `SITE_FILES` step is load-bearing: any file not in that list is **excluded** from the build output. This is the safety net that prevents internal docs from accidentally shipping.
 
 ### Adding redirects
 
-Edit `docs/_redirects`. Cloudflare Pages re-reads on every deploy. The syntax is `source destination status` per line; status `200` is a rewrite (URL stays clean), `301`/`302` is a redirect (URL changes in the address bar).
+Edit `docs/_redirects`. Cloudflare Pages re-reads on every deploy. The syntax is `source destination status` per line; status `200` is a rewrite (URL stays clean), `301`/`302` is a redirect (URL changes in the address bar). `_redirects` is already in `SITE_FILES`, so no change to `tools/build_site.py` is needed.
 
 ---
 
@@ -235,6 +252,7 @@ Edit `docs/_redirects`. Cloudflare Pages re-reads on every deploy. The syntax is
 ## Related documents
 
 - `docs/runbooks/30002-chrome-web-store-publish.md` — the Chrome Web Store submission runbook; uses the URL stood up here
+- `tools/build_site.py` — the build script Path A and Path B both invoke; canonical list of public-facing files
 - `PRIVACY.md` and `docs/privacy.html` — the content this runbook publishes
 - `AssemblyZero/docs/adrs/0216-in-process-classic-pat-decryption.md` — the classic-PAT pattern
 - `AssemblyZero/tools/update_clio_repo_metadata.py` — the script Step 7 invokes

@@ -2,8 +2,24 @@
  * Centralized DOM selectors for Gemini UI elements.
  * Isolated here for easy maintenance when Gemini updates their UI.
  *
- * VERIFIED: 2026-01-19 from real Gemini DOM snapshot
- * Source: docs/html-input/Google Gemini.htm
+ * VERIFIED: 2026-05-23 against three real Gemini conversation DOM saves
+ * (issue #115):
+ *   - AgentOS Refactor (Jan/Feb 2026, oldest) — 10 turns
+ *   - IEEE Document Title (current) — 10 turns
+ *   - Power Sector Organizations (current) — 1 turn
+ *
+ * In all three samples the primary custom elements work cleanly:
+ *   <user-query> count == <model-response> count == turn count
+ *
+ * `[data-message-author-role]` did NOT match in any of the three samples —
+ * those union-fallbacks have been zero-match in real Gemini DOM for at
+ * least 4 months. Kept in the union anyway: extension tests
+ * (auto-scroll, large-conversation, validateSelectors) deliberately
+ * model an alternate Gemini DOM shape via `data-message-author-role`,
+ * treating the fallback as a contractual support path for hypothetical
+ * Gemini variants. Not safe to retire without re-aligning those tests.
+ *
+ * Originally last verified 2026-01-19.
  *
  * LLD Reference: docs/reports/1/lld-clio.md Section 6.1
  */
@@ -13,7 +29,6 @@ const SELECTORS = {
 
   // Conversation structure
   // VERIFIED: <div class="conversation-container message-actions-hover-boundary" id="...">
-  // FIXED: Removed 'main' - too broad, causes clicking of global UI elements
   conversationContainer: '.conversation-container, [data-conversation-id]',
   // VERIFIED: <span class="conversation-title gds-title-m">
   sessionTitle: '.conversation-title, h1[data-conversation-title], h1',

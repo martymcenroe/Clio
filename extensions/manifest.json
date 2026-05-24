@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Clio",
-  "version": "1.3.9",
+  "version": "1.3.10",
   "description": "Extract full Gemini, Claude, and ChatGPT conversations to JSON with images",
   "permissions": [
     "activeTab",
-    "downloads"
+    "downloads",
+    "scripting"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",

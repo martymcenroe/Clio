@@ -247,6 +247,78 @@ function formatBytes(bytes) {
 }
 
 // ============================================================================
+// Content-script messaging with re-inject recovery (#139)
+// ============================================================================
+
+/**
+ * Pattern that matches the Chrome error raised when chrome.tabs.sendMessage
+ * targets a tab whose content script is not loaded. Two variant strings
+ * are seen in the wild depending on Chrome version.
+ */
+const RECEIVING_END_ERROR = /Receiving end does not exist|Could not establish connection/i;
+
+/**
+ * Map a site key to the [selectors-file, content.js] script paths to
+ * inject when recovering from a missing content script.
+ */
+function scriptsForSite(site) {
+  if (site === 'claude') return ['src/selectors-claude.js', 'src/content.js'];
+  if (site === 'chatgpt') return ['src/selectors-chatgpt.js', 'src/content.js'];
+  return ['src/selectors.js', 'src/content.js']; // gemini (default)
+}
+
+/**
+ * sendMessage wrapper that converts the Chrome callback-style API to a
+ * Promise. Resolves with the response or rejects with an Error whose
+ * message is chrome.runtime.lastError.message.
+ */
+function sendExtractMessageOnce(tabId) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, { action: 'extract' }, response => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
+/**
+ * Send the extract message to the active tab. If the content script is
+ * not loaded ("Receiving end does not exist" / "Could not establish
+ * connection"), inject it via chrome.scripting.executeScript and retry
+ * exactly once. Any other error bubbles up unchanged. After exhausting
+ * the retry, raises a user-friendly Error.
+ */
+async function sendExtractMessage(tab) {
+  try {
+    return await sendExtractMessageOnce(tab.id);
+  } catch (err) {
+    if (!RECEIVING_END_ERROR.test(err.message || '')) {
+      throw err; // unrelated extraction error — let it surface as-is
+    }
+    // Recovery path: re-inject the content script for this site.
+    if (!chrome.scripting || !chrome.scripting.executeScript) {
+      throw new Error("Couldn't reach the page. Please reload the tab and try again.");
+    }
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: scriptsForSite(getSitePrefix(tab.url))
+      });
+    } catch (injectErr) {
+      throw new Error("Couldn't reach the page. Please reload the tab and try again.");
+    }
+    try {
+      return await sendExtractMessageOnce(tab.id);
+    } catch (retryErr) {
+      throw new Error("Couldn't reach the page. Please reload the tab and try again.");
+    }
+  }
+}
+
+// ============================================================================
 // Main Handler
 // ============================================================================
 
@@ -269,18 +341,15 @@ async function handleExtract() {
       return;
     }
 
-    // Send extract message to content script
+    // Send extract message to content script. If the content script
+    // isn't loaded in the tab (e.g. tab was opened before the extension
+    // was installed/reloaded), Chrome rejects with "Receiving end does
+    // not exist". sendExtractMessage transparently re-injects the
+    // content script and retries once before surfacing a friendly
+    // recovery message (#139).
     showProgress('Extracting conversation...');
 
-    const result = await new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tab.id, { action: 'extract' }, response => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(response);
-        }
-      });
-    });
+    const result = await sendExtractMessage(tab);
 
     if (!result.success) {
       setStatus(result.error || 'Extraction failed', 'error');
@@ -383,6 +452,8 @@ if (typeof module !== 'undefined' && module.exports) {
     downloadBlob,
     handleExtract,
     saveLastResult,
-    restoreLastResult
+    restoreLastResult,
+    sendExtractMessage,
+    scriptsForSite
   };
 }

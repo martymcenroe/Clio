@@ -21,6 +21,9 @@ global.chrome = {
     onChanged: {
       addListener: jest.fn()
     }
+  },
+  scripting: {
+    executeScript: jest.fn()
   }
 };
 
@@ -34,6 +37,7 @@ beforeEach(() => {
   chrome.tabs.sendMessage.mockClear();
   chrome.downloads.download.mockClear();
   chrome.downloads.onChanged.addListener.mockClear();
+  chrome.scripting.executeScript.mockClear();
 });
 
 // Mock JSZip for popup.js tests

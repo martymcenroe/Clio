@@ -114,6 +114,12 @@ Used to read the DOM of the currently active conversation tab when the user clic
 Used to save the extracted conversation as a ZIP file to the user's computer. The ZIP is created entirely in the browser (via JSZip, bundled in the extension) and saved through Chrome's standard download flow to whatever folder the user has configured. No external upload, no server involvement.
 ```
 
+### scripting
+
+```
+Used solely as a recovery path. When the user clicks Clio on a tab that was opened before Clio was installed or last reloaded, Chrome's content script hasn't been injected into that tab — clicking the extract button would otherwise fail with the raw error "Could not establish connection." The scripting permission lets Clio re-inject its own content script (the same files declared in the manifest's content_scripts entries) into the active tab so the extraction can proceed. It is invoked only on this specific failure path, only into the currently active tab, and only with Clio's own bundled scripts. It is not used to inject code into any other tab or at any other time.
+```
+
 ### Host permissions: `https://claude.ai/*`, `https://gemini.google.com/*`, `https://chatgpt.com/*`
 
 ```

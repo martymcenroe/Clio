@@ -18,6 +18,8 @@ const {
   setButtonState,
   saveLastResult,
   restoreLastResult,
+  sendExtractMessage,
+  scriptsForSite,
   createZip,
   downloadBlob,
   handleExtract
@@ -455,6 +457,107 @@ describe('restoreLastResult (site-aware)', () => {
     seedCache({ site: 'gemini' });
     const result = restoreLastResult();
     expect(result).toBe(true);
+  });
+});
+
+// ============================================================================
+// Content-script messaging recovery (#139)
+// ============================================================================
+
+describe('scriptsForSite', () => {
+  test('claude site → claude selectors', () => {
+    expect(scriptsForSite('claude')).toEqual(['src/selectors-claude.js', 'src/content.js']);
+  });
+  test('chatgpt site → chatgpt selectors', () => {
+    expect(scriptsForSite('chatgpt')).toEqual(['src/selectors-chatgpt.js', 'src/content.js']);
+  });
+  test('gemini (or unknown) → default selectors', () => {
+    expect(scriptsForSite('gemini')).toEqual(['src/selectors.js', 'src/content.js']);
+    expect(scriptsForSite('unknown')).toEqual(['src/selectors.js', 'src/content.js']);
+  });
+});
+
+describe('sendExtractMessage (re-inject + retry)', () => {
+  const tab = { id: 42, url: 'https://claude.ai/chat/abc' };
+
+  test('happy path: first sendMessage succeeds, no re-inject', async () => {
+    chrome.tabs.sendMessage.mockImplementation((tabId, msg, cb) => {
+      cb({ success: true, data: { hello: 'world' } });
+    });
+    const result = await sendExtractMessage(tab);
+    expect(result.success).toBe(true);
+    expect(result.data.hello).toBe('world');
+    expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+  });
+
+  test('unrelated error: throws original error, no re-inject', async () => {
+    chrome.tabs.sendMessage.mockImplementation((tabId, msg, cb) => {
+      chrome.runtime.lastError = { message: 'Some other unrelated error' };
+      cb(null);
+      chrome.runtime.lastError = null;
+    });
+    await expect(sendExtractMessage(tab)).rejects.toThrow('Some other unrelated error');
+    expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+  });
+
+  test('receiving-end error → executeScript succeeds → retry succeeds', async () => {
+    let attempt = 0;
+    chrome.tabs.sendMessage.mockImplementation((tabId, msg, cb) => {
+      attempt++;
+      if (attempt === 1) {
+        chrome.runtime.lastError = { message: 'Could not establish connection. Receiving end does not exist.' };
+        cb(null);
+        chrome.runtime.lastError = null;
+      } else {
+        cb({ success: true, data: { recovered: true } });
+      }
+    });
+    chrome.scripting.executeScript.mockResolvedValue([]);
+
+    const result = await sendExtractMessage(tab);
+    expect(result.success).toBe(true);
+    expect(result.data.recovered).toBe(true);
+    expect(chrome.scripting.executeScript).toHaveBeenCalledTimes(1);
+    expect(chrome.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 42 },
+      files: ['src/selectors-claude.js', 'src/content.js']
+    });
+    expect(attempt).toBe(2);
+  });
+
+  test('receiving-end error → executeScript fails → throws friendly error', async () => {
+    chrome.tabs.sendMessage.mockImplementation((tabId, msg, cb) => {
+      chrome.runtime.lastError = { message: 'Receiving end does not exist' };
+      cb(null);
+      chrome.runtime.lastError = null;
+    });
+    chrome.scripting.executeScript.mockRejectedValue(new Error('permission denied'));
+    await expect(sendExtractMessage(tab)).rejects.toThrow("Couldn't reach the page. Please reload the tab and try again.");
+  });
+
+  test('receiving-end error → executeScript ok → retry fails → throws friendly error', async () => {
+    chrome.tabs.sendMessage.mockImplementation((tabId, msg, cb) => {
+      chrome.runtime.lastError = { message: 'Receiving end does not exist' };
+      cb(null);
+      chrome.runtime.lastError = null;
+    });
+    chrome.scripting.executeScript.mockResolvedValue([]);
+    await expect(sendExtractMessage(tab)).rejects.toThrow("Couldn't reach the page. Please reload the tab and try again.");
+  });
+
+  test('receiving-end error + chrome.scripting absent → friendly error', async () => {
+    chrome.tabs.sendMessage.mockImplementation((tabId, msg, cb) => {
+      chrome.runtime.lastError = { message: 'Receiving end does not exist' };
+      cb(null);
+      chrome.runtime.lastError = null;
+    });
+    const savedScripting = chrome.scripting;
+    delete chrome.scripting;
+    try {
+      await expect(sendExtractMessage(tab)).rejects.toThrow("Couldn't reach the page. Please reload the tab and try again.");
+    } finally {
+      chrome.scripting = savedScripting;
+    }
   });
 });
 

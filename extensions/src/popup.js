@@ -56,8 +56,13 @@ function showResult(messageCount, images, errors, scrollInfo, isLastResult = fal
 
 /**
  * Save extraction results to localStorage for persistence.
+ * @param {Object} data - extraction result
+ * @param {string} site - site key (claude / chatgpt / gemini) where the
+ *   extraction happened, used by restoreLastResult to gate display on
+ *   site match. Without it, the cached card is shown only when no
+ *   current-site argument is supplied (test path).
  */
-function saveLastResult(data) {
+function saveLastResult(data, site) {
   try {
     const lastResult = {
       messageCount: data.metadata.messageCount,
@@ -65,6 +70,7 @@ function saveLastResult(data) {
       errorCount: data.metadata.extractionErrors.length,
       scrollInfo: data.metadata.scrollInfo,
       title: data.metadata.title,
+      site: site || null,
       timestamp: new Date().toISOString()
     };
     localStorage.setItem('clio_lastResult', JSON.stringify(lastResult));
@@ -75,26 +81,35 @@ function saveLastResult(data) {
 
 /**
  * Restore last extraction result from localStorage if available.
+ * Site-aware: when currentSite is provided, only restores if the cached
+ * extraction was from the same site. Prevents the popup from showing
+ * Gemini stats on a ChatGPT page (#138).
+ * @param {string} [currentSite] - site key of the active tab
+ *   (claude / chatgpt / gemini). If omitted, falls back to the legacy
+ *   non-site-aware behavior. Old caches without a `site` field are
+ *   always hidden when currentSite is provided.
  */
-function restoreLastResult() {
+function restoreLastResult(currentSite) {
   try {
     const saved = localStorage.getItem('clio_lastResult');
-    if (saved) {
-      const lastResult = JSON.parse(saved);
-      // Only show if less than 1 hour old
-      const age = Date.now() - new Date(lastResult.timestamp).getTime();
-      if (age < 60 * 60 * 1000) {
-        showResult(
-          lastResult.messageCount,
-          lastResult.imageCount,
-          lastResult.errorCount,
-          lastResult.scrollInfo,
-          true // isLastResult
-        );
-        setStatus(`Last: ${lastResult.title || 'Untitled'}`, 'info');
-        return true;
-      }
-    }
+    if (!saved) return false;
+    const lastResult = JSON.parse(saved);
+    // Only show if less than 1 hour old
+    const age = Date.now() - new Date(lastResult.timestamp).getTime();
+    if (age >= 60 * 60 * 1000) return false;
+    // Site-mismatch gate. If caller passed currentSite, require the
+    // cached extraction's site to match. Old caches (pre-#138) have no
+    // site field and are always hidden when a currentSite is provided.
+    if (currentSite && lastResult.site !== currentSite) return false;
+    showResult(
+      lastResult.messageCount,
+      lastResult.imageCount,
+      lastResult.errorCount,
+      lastResult.scrollInfo,
+      true // isLastResult
+    );
+    setStatus(`Last: ${lastResult.title || 'Untitled'}`, 'info');
+    return true;
   } catch (e) {
     // Ignore localStorage errors
   }
@@ -283,8 +298,10 @@ async function handleExtract() {
       data.metadata.scrollInfo
     );
 
-    // Save to localStorage for persistence (popup may close during download)
-    saveLastResult(data);
+    // Save to localStorage for persistence (popup may close during download).
+    // Pass site so the next popup-open on a different site doesn't surface
+    // these stats (#138).
+    saveLastResult(data, getSitePrefix(tab.url));
 
     // Check size
     const estimatedSize = estimateExportSize(images || []);
@@ -333,15 +350,16 @@ const extractBtn = document.getElementById('extractBtn');
 if (extractBtn) {
   extractBtn.addEventListener('click', handleExtract);
 
-  // Restore last extraction results if available (for when popup was closed during save)
-  restoreLastResult();
-
-  // Check if we're on a Gemini page on load
+  // Determine active tab's site, then restore the last extraction's
+  // stats ONLY if it was from the same site (#138). On an unsupported
+  // page, disable the button and skip the restore entirely.
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (!tab || !tab.url || !isSupportedSite(tab.url)) {
       setStatus('Open a Gemini, Claude, or ChatGPT conversation to extract.', 'warning');
       setButtonState(false);
+      return;
     }
+    restoreLastResult(getSitePrefix(tab.url));
   });
 }
 

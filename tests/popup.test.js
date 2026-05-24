@@ -16,6 +16,8 @@ const {
   hideProgress,
   showResult,
   setButtonState,
+  saveLastResult,
+  restoreLastResult,
   createZip,
   downloadBlob,
   handleExtract
@@ -351,6 +353,108 @@ describe('setButtonState', () => {
     setButtonState(false, 'Processing...');
     const extractBtn = document.getElementById('extractBtn');
     expect(extractBtn.textContent).toBe('Processing...');
+  });
+});
+
+// ============================================================================
+// Last-result persistence (site-aware — #138)
+// ============================================================================
+
+describe('saveLastResult', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  test('persists site in the blob', () => {
+    const data = {
+      metadata: {
+        title: 'Some Claude Conversation',
+        messageCount: 10,
+        imageCount: 0,
+        extractionErrors: [],
+        scrollInfo: { messagesLoaded: 10, scrollAttempts: 2 }
+      }
+    };
+    saveLastResult(data, 'claude');
+    const saved = JSON.parse(localStorage.getItem('clio_lastResult'));
+    expect(saved.site).toBe('claude');
+    expect(saved.title).toBe('Some Claude Conversation');
+    expect(saved.messageCount).toBe(10);
+  });
+
+  test('stores site=null when caller omits site', () => {
+    const data = {
+      metadata: {
+        title: 'No site',
+        messageCount: 1,
+        imageCount: 0,
+        extractionErrors: [],
+        scrollInfo: null
+      }
+    };
+    saveLastResult(data);
+    const saved = JSON.parse(localStorage.getItem('clio_lastResult'));
+    expect(saved.site).toBeNull();
+  });
+});
+
+describe('restoreLastResult (site-aware)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  function seedCache(overrides) {
+    const blob = Object.assign({
+      messageCount: 10,
+      imageCount: 0,
+      errorCount: 0,
+      scrollInfo: null,
+      title: 'Cached Conversation',
+      site: 'claude',
+      timestamp: new Date().toISOString()
+    }, overrides);
+    localStorage.setItem('clio_lastResult', JSON.stringify(blob));
+  }
+
+  test('shows cached stats when currentSite matches', () => {
+    seedCache({ site: 'claude' });
+    const result = restoreLastResult('claude');
+    expect(result).toBe(true);
+  });
+
+  test('hides cached stats when currentSite differs', () => {
+    seedCache({ site: 'gemini', title: 'A Gemini chat' });
+    const result = restoreLastResult('chatgpt');
+    expect(result).toBe(false);
+  });
+
+  test('hides legacy cache (no site field) when currentSite is provided', () => {
+    seedCache({ site: undefined });
+    // Remove the explicit undefined property so it serializes without site
+    const blob = JSON.parse(localStorage.getItem('clio_lastResult'));
+    delete blob.site;
+    localStorage.setItem('clio_lastResult', JSON.stringify(blob));
+    const result = restoreLastResult('claude');
+    expect(result).toBe(false);
+  });
+
+  test('hides when cache is older than 1 hour even if site matches', () => {
+    const stale = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    seedCache({ site: 'claude', timestamp: stale });
+    const result = restoreLastResult('claude');
+    expect(result).toBe(false);
+  });
+
+  test('returns false when no cache exists', () => {
+    expect(restoreLastResult('claude')).toBe(false);
+  });
+
+  test('legacy: shows cached stats when currentSite is omitted', () => {
+    // Backward compat for callers that pre-date #138 — pass no
+    // currentSite, get the old non-site-aware behavior.
+    seedCache({ site: 'gemini' });
+    const result = restoreLastResult();
+    expect(result).toBe(true);
   });
 });
 

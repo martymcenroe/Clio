@@ -71,7 +71,7 @@ function showProgress(message) {
     progressElement.id = 'clio-progress';
     progressElement.style.cssText = `
       position: fixed;
-      top: 20px;
+      bottom: 20px;
       right: 20px;
       background: #1a73e8;
       color: white;

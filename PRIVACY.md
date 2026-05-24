@@ -37,7 +37,7 @@ Clio does not:
 - Include any analytics, advertising, or fingerprinting code
 - Load any code from the internet (everything Clio runs is bundled into the extension you install)
 
-You can verify all of this by reading the [extension's source code](https://github.com/martymcenroe/Clio). The extension makes no network requests outside of the three chat sites it supports (gemini.google.com, claude.ai, and chatgpt.com), and the only requests it sends to those sites are for the image files that already appear in the conversation you are viewing.
+You can verify all of this by reading the [extension's source code](https://github.com/martymcenroe/Clio). The extension makes network requests only to two kinds of place: (1) the three chat sites it supports (gemini.google.com, claude.ai, and chatgpt.com), to read the conversation you are viewing; and (2) the provider-controlled image-hosting domains where conversations' embedded images live (currently googleusercontent.com, where Gemini stores user-uploaded files). The only requests sent to those image hosts are to download images that already appear in the conversation you are viewing, so the ZIP contains them.
 
 ## What permissions Clio asks for, and why
 
@@ -48,6 +48,8 @@ The Chrome Web Store requires extensions to declare and justify every permission
 | `activeTab` | Read the conversation visible on the tab you are looking at, only at the moment you click the Clio button | To read the conversation you want to save |
 | `downloads` | Save the resulting ZIP file to your computer through Chrome's "Save As" window | To deliver the saved conversation to you |
 | `host_permissions` for `gemini.google.com`, `claude.ai`, and `chatgpt.com` | Run Clio's reading code only on those three chat sites | These are the only three sites Clio works on |
+| `host_permissions` for `googleusercontent.com` (and its subdomains) | Download user-uploaded images from Gemini conversations so they end up in the ZIP | Gemini hosts uploaded files on this domain; without permission, the browser would block the fetch and the images would be missing from your saved copy |
+| `scripting` | Re-inject Clio's own reading code into the active tab if it isn't already there | Recovery path only — used when you click Clio on a tab that was open before Clio was installed or last reloaded |
 
 Permissions Clio does **not** ask for: tabs, cookies, web requests, storage, identity, notifications, or access to any other websites.
 

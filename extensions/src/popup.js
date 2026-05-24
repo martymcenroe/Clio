@@ -29,6 +29,30 @@ function hideProgress() {
   progressEl.classList.remove('visible');
 }
 
+/**
+ * Show a warning row when some images failed to fetch (typically due to
+ * the provider's image-CDN not returning CORS headers permitting the
+ * extension's fetch). Hides the row when failedCount is 0. The popup
+ * still completes — the conversation text is unaffected — but the user
+ * needs to know images are missing (#141).
+ * @param {number} failedCount
+ */
+function showImageFetchWarning(failedCount) {
+  const el = document.getElementById('imageFetchWarning');
+  if (!el) return;
+  const text = document.getElementById('imageFetchWarningText');
+  if (failedCount > 0) {
+    if (text) {
+      text.textContent = failedCount === 1
+        ? '1 image could not be saved (provider blocked the download). See conversation.json metadata.extractionErrors for details.'
+        : `${failedCount} images could not be saved (provider blocked the download). See conversation.json metadata.extractionErrors for details.`;
+    }
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 function showResult(messageCount, images, errors, scrollInfo, isLastResult = false) {
   const resultEl = document.getElementById('result');
   resultEl.classList.add('visible');
@@ -367,6 +391,14 @@ async function handleExtract() {
       data.metadata.scrollInfo
     );
 
+    // Surface image-fetch failures explicitly (the bare error count
+    // doesn't communicate what kind of failure it was). Counts only
+    // image_fetch type errors — other extraction warnings appear via
+    // the warnings array below (#141).
+    const imageFetchFailures = (data.metadata.extractionErrors || [])
+      .filter(e => e && e.type === 'image_fetch').length;
+    showImageFetchWarning(imageFetchFailures);
+
     // Save to localStorage for persistence (popup may close during download).
     // Pass site so the next popup-open on a different site doesn't surface
     // these stats (#138).
@@ -447,6 +479,7 @@ if (typeof module !== 'undefined' && module.exports) {
     showProgress,
     hideProgress,
     showResult,
+    showImageFetchWarning,
     setButtonState,
     createZip,
     downloadBlob,

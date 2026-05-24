@@ -15,6 +15,7 @@ const {
   showProgress,
   hideProgress,
   showResult,
+  showImageFetchWarning,
   setButtonState,
   saveLastResult,
   restoreLastResult,
@@ -355,6 +356,43 @@ describe('setButtonState', () => {
     setButtonState(false, 'Processing...');
     const extractBtn = document.getElementById('extractBtn');
     expect(extractBtn.textContent).toBe('Processing...');
+  });
+});
+
+// ============================================================================
+// Image-fetch warning surface (#141)
+// ============================================================================
+
+describe('showImageFetchWarning', () => {
+  test('hides the warning when failedCount is 0', () => {
+    const el = document.getElementById('imageFetchWarning');
+    el.style.display = 'block';
+    showImageFetchWarning(0);
+    expect(el.style.display).toBe('none');
+  });
+
+  test('shows warning with singular text when failedCount is 1', () => {
+    showImageFetchWarning(1);
+    const el = document.getElementById('imageFetchWarning');
+    const text = document.getElementById('imageFetchWarningText');
+    expect(el.style.display).toBe('block');
+    expect(text.textContent).toMatch(/^1 image could not be saved/);
+  });
+
+  test('shows warning with plural text when failedCount > 1', () => {
+    showImageFetchWarning(27);
+    const el = document.getElementById('imageFetchWarning');
+    const text = document.getElementById('imageFetchWarningText');
+    expect(el.style.display).toBe('block');
+    expect(text.textContent).toMatch(/^27 images could not be saved/);
+  });
+
+  test('hides when failedCount transitions back to 0 after being non-zero', () => {
+    showImageFetchWarning(5);
+    const el = document.getElementById('imageFetchWarning');
+    expect(el.style.display).toBe('block');
+    showImageFetchWarning(0);
+    expect(el.style.display).toBe('none');
   });
 });
 

@@ -120,6 +120,12 @@ Used to save the extracted conversation as a ZIP file to the user's computer. Th
 Used solely as a recovery path. When the user clicks Clio on a tab that was opened before Clio was installed or last reloaded, Chrome's content script hasn't been injected into that tab — clicking the extract button would otherwise fail with the raw error "Could not establish connection." The scripting permission lets Clio re-inject its own content script (the same files declared in the manifest's content_scripts entries) into the active tab so the extraction can proceed. It is invoked only on this specific failure path, only into the currently active tab, and only with Clio's own bundled scripts. It is not used to inject code into any other tab or at any other time.
 ```
 
+### Host permissions: `https://*.googleusercontent.com/*`
+
+```
+Used to fetch user-uploaded image attachments from Gemini conversations. Gemini stores uploaded files at session-authenticated URLs on googleusercontent.com (e.g., lh3.googleusercontent.com). Without this host permission, the browser blocks the extension from fetching these images, leaving them missing from the ZIP. The extension only fetches images that are already embedded in the conversation the user is viewing — it does not read or modify any other content on these hosts. The wildcard covers the various lh3/lh4/lh5 subdomains Gemini may use depending on hash routing.
+```
+
 ### Host permissions: `https://claude.ai/*`, `https://gemini.google.com/*`, `https://chatgpt.com/*`
 
 ```

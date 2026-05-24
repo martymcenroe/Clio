@@ -25,9 +25,11 @@ Chrome extension for extracting full Gemini, Claude, and ChatGPT conversations t
 
 ### Key Files
 
-- `extensions/manifest.json` — Chrome extension config (Manifest V3)
-- `extensions/src/content.js` — DOM extraction logic
-- `extensions/src/selectors.js` — Centralized DOM selectors
+- `extensions/manifest.json` — Chrome extension config (Manifest V3); `content_scripts` entries pair each site's selectors file with `content.js`
+- `extensions/src/content.js` — shared DOM extraction logic (site-branching inside)
+- `extensions/src/selectors.js` — Gemini selectors
+- `extensions/src/selectors-claude.js` — Claude selectors
+- `extensions/src/selectors-chatgpt.js` — ChatGPT selectors
 - `extensions/src/popup.html` / `popup.js` — Extension popup UI
 
 ---

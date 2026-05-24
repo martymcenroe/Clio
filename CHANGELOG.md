@@ -6,23 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
-## [Unreleased] — 1.4.0
+## [1.4.0] — 2026-05-24
 
-The Chrome Web Store launch release. Track progress on the [`chrome-web-store`](https://github.com/martymcenroe/Clio/issues?q=label%3Achrome-web-store) label.
+The Chrome Web Store launch release.
 
 ### Added
 - Repository hygiene: `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, GitHub issue and PR templates
-- `PRIVACY.md` and `docs/privacy.html` — strict-local privacy policy
-- GitHub Pages landing site (`docs/index.html`) hosting the privacy policy URL for the CWS listing
+- `PRIVACY.md` and `docs/privacy.html` — strict-local privacy policy hosted at `cliocast.com/privacy`
+- GitHub Pages landing site and the Cloudflare-Pages-deployed `cliocast.com` landing
 - GitHub Wiki content covering AI governance, data sovereignty, threat model, and defense in depth
 - ADR-0201 — system Chrome channel for Playwright against anti-automation-gated sites
 - Playwright DOM-discovery harness (sidebar, account-menu, URL schemes) with persistent browser profiles
 - Roadmap document: Clio 2.0 personal conversation archive initiative
 - Release tooling: `tools/build_release.py` produces CWS-ready ZIPs
+- `scripting` permission, used solely as a recovery path to re-inject Clio's content script when a tab loaded before the extension was installed (#139, #145)
+- `host_permissions` for `*.googleusercontent.com/*` so Gemini's user-uploaded images make it into the ZIP (#141, #146)
+- Popup warning row when one or more images failed to fetch (#141, #146)
+- CWS listing copy drafted in `docs/listing-copy.md` with permission justifications for every declared permission
+- Chrome Web Store publishing runbook `docs/runbooks/30002-chrome-web-store-publish.md`
+- Cloudflare Pages setup runbook `docs/runbooks/30003-cloudflare-pages-setup.md` and `tools/build_site.py` for the `dist/site/` build pattern
+- Two CWS listing screenshots at 1280×800 (lighthouse-keeper board game conversation) in `docs/assets/store/` (#92)
+- `tools/resize_screenshot.py` — convert any screenshot to CWS listing dimensions
 
 ### Changed
 - Repository description and topics refreshed to reflect Gemini + Claude + ChatGPT support
 - Removed per-repo security hooks (now managed globally)
+- **ChatGPT:** selectors modernized — `[data-message-author-role]` replaces the deprecated `article[data-turn]` (#116, #118)
+- **Claude:** selectors modernized — `.font-claude-response` replaces the brittle `.row-start-2` (#114, #119)
+- **Gemini:** selectors stability verified across Jan–May DOM samples; rationale documented inline (#115, #121)
+
+### Fixed
+- **Claude:** Artifact widget chrome (button labels like "Send via Gmail", missing separators) stripped from email-card artifacts (#43, #120)
+- **Popup:** Progress badge moved from `top: 20px` to `bottom: 20px` so it no longer overlaps the extension popup (#140, #143)
+- **Popup:** Stats card hides on cross-site navigation — no more Gemini stats appearing on a ChatGPT tab (#138, #144). Cross-conversation gating tracked separately (#147, #148, superseded by #149)
+- **Popup:** Auto-recover from "Receiving end does not exist" by re-injecting the content script, with a friendly error if recovery fails (#139, #145)
 
 ---
 

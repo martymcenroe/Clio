@@ -1,7 +1,10 @@
 /**
  * Unit tests for background.js (service worker)
  *
- * Tests Chrome event listener registration and handler behavior.
+ * Tests Chrome event listener registration. The console.log behavior these
+ * tests previously asserted was removed in #151 to keep the source clean
+ * for the Chrome Web Store reviewer; the listener registrations remain as
+ * no-op stubs because the manifest declares them.
  */
 
 describe('background.js', () => {
@@ -10,17 +13,13 @@ describe('background.js', () => {
   let consoleLogSpy;
 
   beforeEach(() => {
-    // Clear mocks
     chrome.runtime.onInstalled.addListener.mockClear();
     chrome.downloads.onChanged.addListener.mockClear();
 
-    // Spy on console.log
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
-    // Reset module cache to re-run registration
     jest.resetModules();
 
-    // Capture the callbacks when background.js is loaded
     chrome.runtime.onInstalled.addListener.mockImplementation((cb) => {
       onInstalledCallback = cb;
     });
@@ -28,7 +27,6 @@ describe('background.js', () => {
       onChangedCallback = cb;
     });
 
-    // Load the module
     require('../extensions/src/background.js');
   });
 
@@ -48,49 +46,17 @@ describe('background.js', () => {
     });
   });
 
-  describe('onInstalled Handler', () => {
-    test('logs install event', () => {
+  describe('Handlers are silent (no debug logging)', () => {
+    test('onInstalled handler does not call console.log', () => {
       onInstalledCallback({ reason: 'install' });
-      expect(consoleLogSpy).toHaveBeenCalledWith('Clio installed/updated:', 'install');
-    });
-
-    test('logs update event', () => {
       onInstalledCallback({ reason: 'update' });
-      expect(consoleLogSpy).toHaveBeenCalledWith('Clio installed/updated:', 'update');
-    });
-
-    test('logs browser_update event', () => {
       onInstalledCallback({ reason: 'browser_update' });
-      expect(consoleLogSpy).toHaveBeenCalledWith('Clio installed/updated:', 'browser_update');
-    });
-  });
-
-  describe('onChanged Handler', () => {
-    test('logs when download completes', () => {
-      onChangedCallback({
-        id: 123,
-        state: { current: 'complete' }
-      });
-      expect(consoleLogSpy).toHaveBeenCalledWith('Download completed:', 123);
-    });
-
-    test('does not log when download is in progress', () => {
-      onChangedCallback({
-        id: 123,
-        state: { current: 'in_progress' }
-      });
       expect(consoleLogSpy).not.toHaveBeenCalled();
     });
 
-    test('does not log when state is not provided', () => {
-      onChangedCallback({
-        id: 123,
-        filename: { current: 'test.zip' }
-      });
-      expect(consoleLogSpy).not.toHaveBeenCalled();
-    });
-
-    test('does not log when delta has no state property', () => {
+    test('onChanged handler does not call console.log', () => {
+      onChangedCallback({ id: 123, state: { current: 'complete' } });
+      onChangedCallback({ id: 123, state: { current: 'in_progress' } });
       onChangedCallback({ id: 123 });
       expect(consoleLogSpy).not.toHaveBeenCalled();
     });

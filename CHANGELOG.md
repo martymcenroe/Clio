@@ -6,9 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.4.1] — 2026-05-25
+
+Pre-submission cleanup release. `v1.4.0` was tagged but never submitted to the Chrome Web Store — pre-flight surfaced two unnecessary `console.log` calls in the background service worker. They do not violate the privacy policy (local console output, never transmitted), but they present a confusing surface for a reviewer auditing a strict-local extension. `v1.4.1` ships without them.
+
+### Removed
+- `console.log` for the `chrome.runtime.onInstalled` install/update event (#151)
+- `console.log` for the `chrome.downloads.onChanged` completion event (#151)
+
+### Changed
+- Background-service-worker listener bodies reduced to no-op stubs after the debug logs were removed; listener registrations remain because the manifest declares them (#151)
+- `tests/background.test.js` updated to assert the handlers stay silent rather than asserting log output (#151)
+
 ## [1.4.0] — 2026-05-24
 
-The Chrome Web Store launch release.
+The Chrome Web Store launch release. **Tagged but never submitted** — superseded by 1.4.1.
 
 ### Added
 - Repository hygiene: `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, GitHub issue and PR templates

@@ -7,17 +7,11 @@
 
 /* global chrome */
 
-// Log extension installation/update
-chrome.runtime.onInstalled.addListener((details) => {
-  console.log('Clio installed/updated:', details.reason);
-});
-
-// Handle download completion notifications (optional)
-chrome.downloads.onChanged.addListener((delta) => {
-  if (delta.state && delta.state.current === 'complete') {
-    console.log('Download completed:', delta.id);
-  }
-});
+// Listener stubs. Required by the manifest's background.service_worker
+// declaration. No-op after #151 removed the debug console.log breadcrumbs
+// that previously lived in these bodies.
+chrome.runtime.onInstalled.addListener(() => {});
+chrome.downloads.onChanged.addListener(() => {});
 
 // ============================================================================
 // Exports for Testing

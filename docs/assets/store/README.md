@@ -1,7 +1,8 @@
 # Chrome Web Store listing assets
 
 Drop the assets the CWS submission form needs here. The listing copy that
-references these is in `docs/listing-copy.md`.
+references these is in `docs/runbooks/30002-chrome-web-store-publish.md`
+§7 / §8 / §9 (paste-ready blocks).
 
 ## Required
 

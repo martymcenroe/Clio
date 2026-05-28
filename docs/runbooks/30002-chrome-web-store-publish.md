@@ -1,9 +1,15 @@
 # 30002 — Chrome Web Store Publishing (Clio)
 
-> **Version:** 3
+> **Version:** 4
 > **Last updated:** 2026-05-28
 > **Applies to:** Clio Chrome extension, every submission to the Chrome Web Store
+> **Tracking issue:** [martymcenroe/Clio#95](https://github.com/martymcenroe/Clio/issues/95)
 > **Account-setup material:** moved to [`30004-cws-account-setup.md`](./30004-cws-account-setup.md)
+
+## Throughout this runbook
+
+- **Operator** — the human running the publishing process at the Chrome Web Store dashboard. Can perform any step.
+- **Agent** — a Claude Code session with this repo's working tree available. Performs any step marked agent. Invoked by the canonical phrases in §0 below.
 
 ## How to verify you have the latest copy
 
@@ -12,11 +18,25 @@ This runbook lives at `docs/runbooks/30002-chrome-web-store-publish.md` in [mart
 To compare a printed copy against the canonical:
 
 1. Note the version number on your copy
-2. From the repo, `git pull --ff-only` on `main`
-3. Open the freshly-pulled file and check the version line
-4. If the version differs, re-print before continuing
+2. Say `Run pre-flight` or `Audit 30002` (see §0) — the agent reports the current `main` HEAD's runbook version line as part of its output
+3. If your copy's version differs, re-print before continuing
 
 The §17 Change log at the bottom of this file lists every version with what changed.
+
+## 0. Invoke the agent (canonical phrases)
+
+The operator types one of these phrases into the agent chat to trigger the matching action. The agent should recognize the phrase verbatim or with minor punctuation variation; if a phrase below is ambiguous in context, the agent asks for clarification before acting.
+
+| To make the agent... | Operator says |
+|---|---|
+| Audit the runbook itself for gaps / drift | `Audit 30002` |
+| Run §3a pre-flight + §4 build in one go and hand back the ZIP path | `Run pre-flight` |
+| Run §3a only (no build) and report findings | `Run §3a` |
+| Run §4 build only (pre-flight already passed) | `Run §4` |
+| Comment submission date on #95 (uses current Central time, or pass `at YYYY-MM-DD HH:MM`) | `Submitted` |
+| After CWS approves: run §12a — README + `docs/index.html` install-link update PR, tag the commit, comment + close #95 | `Run post-publish <live CWS URL>` |
+
+The agent's reply to any of these includes: (a) a one-line confirmation of what it just did, (b) any findings or follow-ups, (c) the current `main` HEAD's runbook version line so the operator can sanity-check their printed copy on every turn.
 
 ## 1. Where to start (reading paths)
 
@@ -47,27 +67,29 @@ Split by responsibility. **Agent items** happen in the repo. **Operator items** 
 
 ### 3a. Agent does (in the repo, before producing the ZIP)
 
-1. `extensions/manifest.json` has the new `version` value, monotonically increasing from the last published version
-2. `host_permissions` is exactly `https://gemini.google.com/*`, `https://claude.ai/*`, `https://chatgpt.com/*`, `https://*.googleusercontent.com/*`
+1. `extensions/manifest.json` has the new `version` value, monotonically increasing from the last published version. For Path A first submission, no prior published version exists; auto-pass.
+2. `host_permissions` matches `extensions/manifest.json`'s `host_permissions` array. Each entry has a paste-block justification in §9. Adding a new host to the manifest requires also adding a §9 paste-block; if §9 has fewer entries than the manifest, that's the finding.
 3. `permissions` is exactly `activeTab`, `downloads`, `scripting`
-4. No debug-tier console calls in shipped `extensions/src/*.js` — specifically no live `console.log` / `console.debug` / `console.info` / `console.warn`. The v1.4.0 → v1.4.1 patch was driven by exactly this miss. **Exception:** `console.error` inside a `try/catch` where the error is also surfaced to the user via the popup UI is intentional defensive logging and may stay (e.g., `popup.js`'s extraction-error handler). Commented-out calls and explanatory comments mentioning `console.log` by name are not findings.
+4. No live debug-tier console calls in `extensions/src/*.js`. **Banned:** live `console.log` / `console.debug` / `console.info` / `console.warn`. **Allowed:** `console.error` inside a `try/catch` that also surfaces the error to the user via the popup UI (e.g. `popup.js`'s extraction-error handler); commented-out calls; explanatory comments mentioning these by name.
 5. No hardcoded test URLs, dev flags, or scratch code
 6. All tests pass: `npm test`
-7. Lint clean: `npm run lint`. **Aspirational** — if Clio's `package.json` has no `lint` script yet, file (or reference) a tracking issue for eslint setup and continue. Do not block ship. (Current tracker: #165.)
+7. Lint clean: `npm run lint`. **Aspirational** — if `package.json` has no `lint` script, file (or reference) a tracking issue for eslint setup and continue. Do not block ship. (Current tracker: #165.)
 8. Version bump merged to `main` — build from `main`, never a feature branch
 9. `CHANGELOG.md` has a dated entry for this version (not `[Unreleased]`)
 10. Release notes file `docs/releases/chrome-vX.Y.Z.md` written before the §4 build — see §15
-11. Listing screenshots exist at `docs/assets/store/screenshot-*.png`, format PNG, dimensions 1280×800. Mechanical check; agent reports the file list, sizes, and dimensions to the operator. (Visual content review for personal-info bleed is operator-only — see §3b.3.)
+11. Listing screenshots exist at `docs/assets/store/screenshot-*.png`, format PNG, dimensions 1280×800. Mechanical check; agent reports file list, sizes, and dimensions to the operator.
+12. Agent reads each `docs/assets/store/screenshot-*.png` and pre-describes what's visible (browser chrome, popup state, conversation content). Operator confirms in §3b.3 — agent's pre-description reduces operator's review from "from scratch" to "approve flag-list."
+13. Agent reports the current `main` HEAD commit SHA and the runbook's `> **Version:**` line so the operator can sanity-check their printed copy against ground truth.
 
 ### 3b. Operator does (on the publishing machine)
 
 1. §2 Account check passes — Publisher chip reads `ThriveTech.ai` and avatar email is `cto@thrivetech.ai`
-2. The version isn't already in the dashboard. For Path B updates, check the Package tab's version history. For Path A first submissions, Clio doesn't exist in the Items list yet, so this is auto-pass.
-3. Operator visually reviews the listing screenshots that §3a.11 confirmed exist — no operator-personal info, no embarrassing browser tabs/extensions, no sensitive conversation content visible
-4. `docs/listing-copy.md`'s redirect target (the runbook §7 / §8 / §9 inlined copy) reviewed (or intentionally skipped) for any text changes since last submission
-5. This runbook's version line matches `main` (see "How to verify you have the latest copy" above)
+2. The version isn't already in the dashboard. For Path B updates, check the Package tab's version history. For Path A first submissions, Clio doesn't exist in the Items list yet; auto-pass.
+3. Operator approves agent's §3a.12 screenshot pre-description, or flags personal info / embarrassing content the agent missed
+4. §7 / §8 / §9 paste-blocks in this runbook reviewed (or intentionally skipped) for changes since last submission — these are the canonical source; no second document to open
+5. Operator's printed copy version line matches the version the agent reported in §3a.13
 
-If any §3a item is unchecked, the agent fixes it before producing the ZIP. If any §3b item is unchecked, the operator pauses before clicking Upload.
+If any §3a item is unchecked, the agent fixes what it can (write missing release notes, file lint tracker, etc.) and surfaces the rest to the operator before producing the ZIP. If any §3b item is unchecked, the operator pauses before clicking Upload.
 
 ## 4. Build the ZIP (agent does this)
 
@@ -82,10 +104,14 @@ cd /c/Users/mcwiz/Projects/Clio
 python tools/build_release.py  # produces dist/clio-chrome-vX.Y.Z.zip
 ```
 
+`build_release.py` removes any stale `dist/clio-chrome-v*.zip` files from prior versions before producing the new one, so the operator cannot accidentally upload an old artifact from the dashboard's file picker.
+
 Fallback if `tools/build_release.py` is missing or broken:
 
 ```bash
-cd /c/Users/mcwiz/Projects/Clio/extensions
+cd /c/Users/mcwiz/Projects/Clio
+rm -f dist/clio-chrome-v*.zip  # clean stale artifacts manually
+cd extensions
 zip -r ../dist/clio-chrome-vX.Y.Z.zip . -x '.*' -x '*/.*' -x 'node_modules/*'
 ```
 
@@ -302,25 +328,32 @@ If a reviewer asks why the justifications are unusually short on any one permiss
 
 ## 11. Submit for review
 
-1. Click **Submit for review**
+1. Operator clicks **Submit for review**
 2. Chrome review typically takes 1–3 business days
-3. Note the submission date and time in GitHub issue #95
+3. Operator says `Submitted` to the agent. Agent runs `gh issue comment 95` with the current Central-time submission timestamp, or with the time the operator specified after `at`.
 
-## 12. Post-publish verification
+## 12. Post-publish
 
-After the extension is approved and live:
+After Chrome approves the listing and emails the operator that the version is live, the operator says `Run post-publish <live CWS URL>` to the agent. The two split:
 
-1. Install from the CWS listing on a clean Chrome profile
+### 12a. Agent does (`Run post-publish <URL>`)
+
+1. Update the README install link from "Coming soon" / dev-mode instructions to a direct CWS install link at the supplied URL — branch, commit, PR, merge
+2. Update `docs/index.html` install link (`<p class="install-note">Coming soon to the Chrome Web Store.</p>` at line ~147) to a CWS install button at the supplied URL — branch, commit, PR, merge
+3. Tag the released commit: `git tag vX.Y.Z-published && git push origin vX.Y.Z-published`
+4. Comment on #95 with the approval date and the live URL; close the issue
+
+### 12b. Operator does (clean-profile smoke test)
+
+1. Install Clio from the CWS listing on a clean Chrome profile (agent cannot drive Chrome's profile manager)
 2. **Gemini smoke test:** open a Gemini conversation → click the Clio toolbar icon → click Extract → verify a valid ZIP downloads and the JSON parses
 3. **Claude smoke test:** repeat on a Claude conversation
 4. **ChatGPT smoke test:** repeat on a ChatGPT conversation
 5. Verify `chrome://extensions` shows the version that was uploaded
-6. Update the README install link to the live CWS URL (separate PR)
-7. Update `docs/index.html` install link (separate PR)
-8. Tag the released commit: `git tag vX.Y.Z-published && git push origin vX.Y.Z-published`
-9. Note the approval date and live URL in #95, then close it
 
-If any smoke test fails: do **not** delist immediately. File a `launch-blocker` issue, reproduce in dev mode, fix and ship a patch version. A version on the store that mostly works is recoverable; a removed listing has to go through review from scratch.
+### 12c. If a smoke test fails
+
+Do **not** delist. File a `launch-blocker` issue, reproduce in dev mode, ship a patch version. A version on the store that mostly works is recoverable; a removed listing has to go through review from scratch.
 
 ## 13. Version bump procedure
 
@@ -371,12 +404,12 @@ Current per-version files in this repo:
 - `PRIVACY.md` — public privacy policy
 - `SECURITY.md` — threat model and vulnerability reporting
 - `extensions/manifest.json` — ground-truth permission declaration
-- Aletheia runbook 10905 — original source this was adapted from
 
 ## 17. Change log
 
 | Version | Date | Change |
 |---------|------|--------|
-| 3 | 2026-05-28 | Numbered §3a items (1–11) and §3b items (1–5) so they can be referenced as "§3a.N" / "§3b.N". New §3a.11: agent confirms listing-screenshot file existence + 1280×800 PNG dimensions (mechanical check, moved out of operator scope). §3b.3 narrowed to visual privacy review of screenshot content. §4 Build the ZIP explicitly labeled as an agent task; operator only receives the ZIP path. §3a.4 refined: debug-tier console calls (`log`/`debug`/`info`/`warn`) banned, `console.error` inside try/catch that also surfaces to the user UI is intentional and allowed. §3a.7 softened: lint is aspirational; if no script, file a tracking issue (#165) and don't block ship. §7 / §8 / §9 inlined — paste-ready Short Description, Long Description, Single Purpose, and per-permission justification blocks. `docs/listing-copy.md` reduced to a stub redirect. Closes #162, #163, #164, #166. |
+| 4 | 2026-05-28 | Added §0 "Invoke the agent" command table with canonical phrases (`Audit 30002`, `Run pre-flight`, `Run §3a`, `Run §4`, `Submitted`, `Run post-publish <URL>`). Added "Throughout this runbook" definitions stanza for operator/agent, and a tracking-issue header link to #95. §11.3 moved from operator to agent (`gh issue comment 95` for the submitted-on timestamp). §12 split into §12a Agent (README + docs/index.html install-link PRs, tag, comment+close #95) and §12b Operator (clean-profile install + three-site smoke tests + chrome://extensions verify). §3b.3 reframed: §3a.12 (new) has agent pre-describe screenshot content; operator approves the flag-list. §3a.13 (new): agent reports current `main` HEAD SHA and runbook version line so operator can verify printed copy without doing the pull themselves. §3b.4 simplified to "review §7/§8/§9 paste-blocks" (drop reference to the listing-copy.md redirect stub). §3a.1, §3a.2, §3a.4 tightened. §16 drops "Aletheia runbook 10905" — provenance stays in v1 changelog entry. §4 documents that `build_release.py` removes stale `dist/clio-chrome-v*.zip` files before producing the new artifact. Closes #168, #169, #170, #171. |
+| 3 | 2026-05-28 | Numbered §3a items (1–11) and §3b items (1–5). New §3a.11: agent confirms listing-screenshot files exist at 1280×800 PNG. §3b.3 narrowed to visual privacy review of screenshot content. §4 Build explicitly labeled an agent task; operator only receives the ZIP path. §3a.4 refined: debug-tier console calls banned, `console.error` in try/catch that also surfaces to user UI is allowed. §3a.7 softened: lint is aspirational; if no script, file a tracking issue (#165) and don't block ship. §7 / §8 / §9 inlined as paste-ready blocks. `docs/listing-copy.md` reduced to a stub redirect. Closes #162, #163, #164, #166. |
 | 2 | 2026-05-28 | Added version/date header and "how to verify you have the latest copy" section. Numbered all top-level sections §1–§17. Added §1 Quick Start with Path A / Path B / Path C reading-path matrix. Split §3 Pre-flight into §3a Agent and §3b Operator. Moved account-setup material (multi-account hazard, one-time developer registration, first-machine verification) to [`30004-cws-account-setup.md`](./30004-cws-account-setup.md); 30002 now keeps only the in-line §2 Account check. Added `scripting` and `*.googleusercontent.com` permission justifications to §9. Updated privacy-policy URL to `cliocast.com/privacy`. Closes #159, #160. |
 | 1 | 2026-05-22 | Initial Clio-adapted version (forked from Aletheia runbook 10905). |

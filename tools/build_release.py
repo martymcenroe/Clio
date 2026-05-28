@@ -125,13 +125,21 @@ def main() -> int:
         DIST_DIR.mkdir(exist_ok=True)
         print(f"  [OK] {DIST_DIR}")
 
+        # Step 3a: Remove stale Clio ZIPs from prior versions so the operator
+        # can't grab the wrong file from the dashboard's file picker. The
+        # site/ subdirectory and any non-Clio content in dist/ are left alone.
+        stale = sorted(DIST_DIR.glob("clio-chrome-v*.zip"))
+        if stale:
+            print(f"\nStep 3a: Removing {len(stale)} stale artifact(s)...")
+            for old in stale:
+                print(f"  removing {old.name}")
+                old.unlink()
+        else:
+            print("\nStep 3a: No stale artifacts to remove")
+
         # Step 4: Build ZIP
         print("\nStep 4: Building Chrome artifact...")
         output = DIST_DIR / f"clio-chrome-v{version}.zip"
-        # Remove existing artifact for the same version so we don't accidentally
-        # append to an old ZIP and ship stale content
-        if output.exists():
-            output.unlink()
         file_count = build_zip(EXTENSION_DIR, output)
         print(f"  [OK] {output.name} ({file_count} files)")
 

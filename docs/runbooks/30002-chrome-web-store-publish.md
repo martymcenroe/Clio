@@ -1,7 +1,7 @@
 # 30002 — Chrome Web Store Publishing (Clio)
 
-> **Version:** 6
-> **Last updated:** 2026-05-28 3:26:11 PM Central
+> **Version:** 7
+> **Last updated:** 2026-05-28 3:40:27 PM Central
 > **Applies to:** Clio Chrome extension, every submission to the Chrome Web Store
 > **Tracking issue:** [martymcenroe/Clio#95](https://github.com/martymcenroe/Clio/issues/95)
 > **Account-setup material:** moved to [`30004-cws-account-setup.md`](./30004-cws-account-setup.md)
@@ -239,9 +239,18 @@ If Clio is useful to you, please leave a Chrome Web Store review or star the Git
 
 ### 7d. Category
 
+CWS organizes categories under uppercase meta-headers (PRODUCTIVITY, LIFESTYLE, etc.). PRODUCTIVITY is the header, not a selectable value. Pick `Tools` from the PRODUCTIVITY group.
+
 ```
-Productivity
+Tools
 ```
+
+Rationale (preserved for future maintainers):
+- `Tools` (selected) — single-purpose utility; matches Clio's framing
+- `Developer Tools` (rejected) — too narrow; Clio also serves archival, citation, research, and personal record-keeping per §7c
+- `Workflow & Planning` (rejected) — implies process management; Clio is an export utility, not a planner
+- `Communication` (rejected) — Clio doesn't enable communication; it exports completed conversations
+- `Education` (rejected) — not a teaching tool
 
 ### 7e. Language
 
@@ -415,6 +424,7 @@ Current per-version files in this repo:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 7 | 2026-05-28 3:40:27 PM Central | §7d Category corrected: `Productivity` is a CWS meta-header (not selectable). Paste-block changed to `Tools`. Added preamble explaining the meta-header structure and a rationale list naming each rejected option and why, so the choice survives future maintainers. Closes #180. |
 | 6 | 2026-05-28 3:26:11 PM Central | §4 restructured for symmetry with §3. Renamed `Build the ZIP` → `Build & verify the ZIP`. New §4a Build (the build_release.py invocation + fallback). Existing §4a Verify renumbered to §4b Verify. Both substeps carry the `(agent does this)` label explicitly. §0 invoke-table updated: `Run §4` triggers build + verify, not "build only". Closes #178. |
 | 5 | 2026-05-28 3:23:56 PM Central | §7c Long Description gets new "IF CLIO HELPS YOU" closing section asking for a Chrome Web Store review or GitHub star. Framed as "help others discover this useful extension" — not begging-tone. Closes #175. |
 | 4 | 2026-05-28 2:52:36 PM Central | Added §0 "Invoke the agent" command table with canonical phrases (`Audit 30002`, `Run pre-flight`, `Run §3a`, `Run §4`, `Submitted`, `Run post-publish <URL>`). Added "Throughout this runbook" definitions stanza for operator/agent, and a tracking-issue header link to #95. §11.3 moved from operator to agent (`gh issue comment 95` for the submitted-on timestamp). §12 split into §12a Agent (README + docs/index.html install-link PRs, tag, comment+close #95) and §12b Operator (clean-profile install + three-site smoke tests + chrome://extensions verify). §3b.3 reframed: §3a.12 (new) has agent pre-describe screenshot content; operator approves the flag-list. §3a.13 (new): agent reports current `main` HEAD SHA and runbook version line so operator can verify printed copy without doing the pull themselves. §3b.4 simplified to "review §7/§8/§9 paste-blocks" (drop reference to the listing-copy.md redirect stub). §3a.1, §3a.2, §3a.4 tightened. §16 drops "Aletheia runbook 10905" — provenance stays in v1 changelog entry. §4 documents that `build_release.py` removes stale `dist/clio-chrome-v*.zip` files before producing the new artifact. Closes #168, #169, #170, #171. |

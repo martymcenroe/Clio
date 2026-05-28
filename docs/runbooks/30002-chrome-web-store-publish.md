@@ -1,6 +1,6 @@
 # 30002 — Chrome Web Store Publishing (Clio)
 
-> **Version:** 2
+> **Version:** 3
 > **Last updated:** 2026-05-28
 > **Applies to:** Clio Chrome extension, every submission to the Chrome Web Store
 > **Account-setup material:** moved to [`30004-cws-account-setup.md`](./30004-cws-account-setup.md)
@@ -43,32 +43,35 @@ Full account-setup detail (registration, multi-account hazard explanation, first
 
 ## 3. Pre-flight checklist
 
-Split by responsibility. Agent items happen in the repo. Operator items happen on the publishing machine and dashboard. Each party checks their own before handing off.
+Split by responsibility. **Agent items** happen in the repo. **Operator items** happen on the publishing machine and dashboard. Each party checks their own before handing off. Items are numbered so they can be referenced as "§3a.N" or "§3b.N".
 
 ### 3a. Agent does (in the repo, before producing the ZIP)
 
-- [ ] `extensions/manifest.json` has the new `version` value, monotonically increasing from the last published version
-- [ ] `host_permissions` is exactly `gemini.google.com`, `claude.ai`, `chatgpt.com` plus any image hosts already justified (currently `https://*.googleusercontent.com/*` for Gemini images)
-- [ ] `permissions` is exactly `activeTab`, `downloads`, `scripting`
-- [ ] No `console.log` / `console.debug` / `console.info` / `console.warn` / `console.error` left in shipped `extensions/src/*.js` (the v1.4.0 → v1.4.1 patch was driven by exactly this miss)
-- [ ] No hardcoded test URLs, dev flags, or scratch code
-- [ ] All tests pass: `npm test`
-- [ ] Lint clean: `npm run lint` (no warnings, not just no errors)
-- [ ] Version bump merged to `main` — build from `main`, never a feature branch
-- [ ] `CHANGELOG.md` has a dated entry for this version (not `[Unreleased]`)
-- [ ] Release notes file `docs/releases/chrome-vX.Y.Z.md` written before upload — see §15
+1. `extensions/manifest.json` has the new `version` value, monotonically increasing from the last published version
+2. `host_permissions` is exactly `https://gemini.google.com/*`, `https://claude.ai/*`, `https://chatgpt.com/*`, `https://*.googleusercontent.com/*`
+3. `permissions` is exactly `activeTab`, `downloads`, `scripting`
+4. No debug-tier console calls in shipped `extensions/src/*.js` — specifically no live `console.log` / `console.debug` / `console.info` / `console.warn`. The v1.4.0 → v1.4.1 patch was driven by exactly this miss. **Exception:** `console.error` inside a `try/catch` where the error is also surfaced to the user via the popup UI is intentional defensive logging and may stay (e.g., `popup.js`'s extraction-error handler). Commented-out calls and explanatory comments mentioning `console.log` by name are not findings.
+5. No hardcoded test URLs, dev flags, or scratch code
+6. All tests pass: `npm test`
+7. Lint clean: `npm run lint`. **Aspirational** — if Clio's `package.json` has no `lint` script yet, file (or reference) a tracking issue for eslint setup and continue. Do not block ship. (Current tracker: #165.)
+8. Version bump merged to `main` — build from `main`, never a feature branch
+9. `CHANGELOG.md` has a dated entry for this version (not `[Unreleased]`)
+10. Release notes file `docs/releases/chrome-vX.Y.Z.md` written before the §4 build — see §15
+11. Listing screenshots exist at `docs/assets/store/screenshot-*.png`, format PNG, dimensions 1280×800. Mechanical check; agent reports the file list, sizes, and dimensions to the operator. (Visual content review for personal-info bleed is operator-only — see §3b.3.)
 
 ### 3b. Operator does (on the publishing machine)
 
-- [ ] §2 Account check passes — Publisher chip reads `ThriveTech.ai` and avatar email is `cto@thrivetech.ai`
-- [ ] The version isn't already in the dashboard — for Path B updates, check the Package tab's version-history. For Path A first submissions, Clio doesn't exist in the Items list yet, so this is auto-pass.
-- [ ] Listing screenshots ready at the required resolution (1280×800 PNG) with no operator-personal info visible
-- [ ] `docs/listing-copy.md` reviewed (or intentionally skipped) for any text changes since last submission
-- [ ] This runbook's version line matches `main` (see "How to verify you have the latest copy" above)
+1. §2 Account check passes — Publisher chip reads `ThriveTech.ai` and avatar email is `cto@thrivetech.ai`
+2. The version isn't already in the dashboard. For Path B updates, check the Package tab's version history. For Path A first submissions, Clio doesn't exist in the Items list yet, so this is auto-pass.
+3. Operator visually reviews the listing screenshots that §3a.11 confirmed exist — no operator-personal info, no embarrassing browser tabs/extensions, no sensitive conversation content visible
+4. `docs/listing-copy.md`'s redirect target (the runbook §7 / §8 / §9 inlined copy) reviewed (or intentionally skipped) for any text changes since last submission
+5. This runbook's version line matches `main` (see "How to verify you have the latest copy" above)
 
-If any agent box is unchecked, the agent rebuilds before handing off the ZIP. If any operator box is unchecked, the operator pauses before clicking Upload.
+If any §3a item is unchecked, the agent fixes it before producing the ZIP. If any §3b item is unchecked, the operator pauses before clicking Upload.
 
-## 4. Build the ZIP
+## 4. Build the ZIP (agent does this)
+
+**Agent runs §4. Operator receives the ZIP path and uploads it at §5 (Path A) or §6 (Path B).**
 
 **CRITICAL:** Use `zip` from MSYS2 / Git Bash. Never PowerShell `Compress-Archive` — it writes backslash separators, which the CWS reviewer flags as malformed.
 
@@ -109,6 +112,8 @@ unzip -p dist/clio-chrome-vX.Y.Z.zip manifest.json | grep '"version"'
 
 The reported version must match the ZIP filename.
 
+The agent hands the operator a single line: the path to `dist/clio-chrome-vX.Y.Z.zip`. The operator opens it at the dashboard upload step.
+
 ## 5. First submission upload (Path A — Clio not yet in the dashboard)
 
 Use this section only if Clio does **not** appear in the dashboard's Items list. (Confirmation cue: the Items list shows Aletheia but no Clio row.)
@@ -130,28 +135,113 @@ Use this section only if Clio appears as a row in the Items list.
 
 ## 7. Store listing
 
-Update fields if changed. Canonical text lives in `docs/listing-copy.md` — paste from there rather than typing.
+Update fields if changed. All text below is paste-ready — copy into the matching CWS form field.
 
-| Field | Value / Source |
-|-------|---------------|
-| Name | Clio |
-| Short Description | 132 char max — see `docs/listing-copy.md` |
-| Long Description | See `docs/listing-copy.md` |
-| Category | Productivity |
-| Language | English |
+### 7a. Name
+
+```
+Clio
+```
+
+### 7b. Short Description
+
+*CWS limit: 132 characters. Current copy: 105 chars.*
+
+```
+Export Claude, Gemini, and ChatGPT conversations to JSON + images. One click, fully local, no telemetry.
+```
+
+### 7c. Long Description
+
+*CWS limit: 16,000 characters. Plain text, no HTML.*
+
+```
+Clio is a Chrome extension that exports your conversations with Claude, Gemini, and ChatGPT to structured JSON files — for archival, research, citation, or personal record-keeping.
+
+HOW IT WORKS
+
+1. Open any conversation on claude.ai, gemini.google.com, or chatgpt.com
+2. Click the Clio icon in your toolbar
+3. The conversation downloads as a ZIP containing structured JSON (every turn, role, model identifier where available) plus all the images you've sent or received in that conversation
+
+PRIVACY-FIRST BY DESIGN
+
+Clio processes everything locally in your browser. Your conversations are NEVER sent to a server, never uploaded, never analyzed by any third party, never used to train any model. There is no Clio account, no signup, no telemetry. The extension makes no network requests outside of fetching images already embedded in your conversation (from the LLM provider's own image hosts).
+
+WHAT GETS EXTRACTED
+
+- Every user message and assistant response, in order
+- Each turn's text content (preserving code blocks with language tags)
+- Embedded images (saved alongside the JSON in the ZIP)
+- Conversation title and ID
+- Model identifier where the site exposes it (e.g. gpt-4o, claude-opus-4-7, gemini-2.5-pro)
+- Thinking / reasoning content where applicable (Claude extended thinking, ChatGPT o-series reasoning labels)
+
+USE CASES
+
+- Personal archive of your LLM conversations across providers
+- Backup before clearing your conversation history
+- Feeding old conversations into your own tooling (RAG, search, fine-tuning datasets you control)
+- Citing specific exchanges in writing or research
+- Comparing how different models handled the same question
+
+SUPPORTED SITES
+
+- claude.ai — Anthropic Claude
+- gemini.google.com — Google Gemini
+- chatgpt.com — OpenAI ChatGPT
+
+WHAT CLIO IS NOT
+
+- Not a cloud backup service. Your conversations stay on your machine.
+- Not an automatic backup. You click the icon when you want to export.
+- Not a cross-conversation search tool (planned for a future version).
+- Not affiliated with Anthropic, Google, or OpenAI.
+
+OPEN SOURCE
+
+MIT licensed. Source code, issue tracker, and changelog at
+https://github.com/martymcenroe/Clio. Privacy policy at
+https://cliocast.com/privacy.
+```
+
+### 7d. Category
+
+```
+Productivity
+```
+
+### 7e. Language
+
+```
+English (United States)
+```
+
+### 7f. Support / contact email
+
+```
+cto@thrivetech.ai
+```
 
 ## 8. Privacy tab
 
 | Field | Value |
 |-------|-------|
-| Single Purpose | Extract LLM conversations from supported assistant sites (Gemini, Claude, ChatGPT) to local JSON files for user-side archival |
 | Privacy Policy URL | `https://cliocast.com/privacy` |
 | Handles user data? | Yes — page content (conversation text and images visible in the active tab) |
 | Sold to 3rd parties? | No |
 | Used for unrelated purposes? | No |
 | Used for creditworthiness or lending? | No |
 
-### Data usage disclosures (Chrome's mandatory checklist)
+### 8a. Single-purpose description
+
+*CWS asks: "Describe the single purpose of your extension." Paste:*
+
+```
+Export the user's own conversations with Claude, Gemini, and ChatGPT to a structured JSON file (plus any embedded images) on a single click, with no server-side component.
+```
+
+### 8b. Data usage disclosures (Chrome's mandatory checklist)
 
 | Data type | Collected? | Notes |
 |-----------|-----------|-------|
@@ -167,15 +257,39 @@ Update fields if changed. Canonical text lives in `docs/listing-copy.md` — pas
 
 ## 9. Permission justifications
 
-| Permission | Justification |
-|------------|---------------|
-| `activeTab` | Required to read the conversation DOM in the user's current tab when they press the extension's toolbar button. Activated by user gesture only; not a standing capability. |
-| `downloads` | Required to write the extracted ZIP to the user's local disk via Chrome's "Save As" dialog. The only way the extension writes data anywhere. |
-| `scripting` | Required for the auto-recovery path when the content script's listener has been torn down (typically after a tab reload). Used only after a "Receiving end does not exist" error, only on the active tab, only to inject Clio's own bundled scripts. |
-| `host_permissions: gemini.google.com, claude.ai, chatgpt.com` | The three LLM products Clio supports. Content scripts walk the DOM on these origins only to enumerate conversation turns. |
-| `host_permissions: https://*.googleusercontent.com/*` | Required to fetch images embedded in Gemini conversations for inclusion in the extracted ZIP. Read-only image fetches, only when extracting a Gemini conversation. |
+CWS requires a written justification for each declared permission and host permission. Each block below is paste-ready into the matching field.
 
-If a reviewer asks why the justifications are unusually short: because the extension genuinely does very little. The minimum-surface-area posture is documented in `SECURITY.md` and the wiki's Defense in Depth page.
+### 9a. `activeTab`
+
+```
+Used to read the DOM of the currently active conversation tab when the user clicks the Clio icon. The extension does not access any other tab. activeTab is granted at click time and revoked when the user leaves the tab — Chrome enforces this scoping by design. This permission is the minimum required for the extension's stated function (one-click conversation export).
+```
+
+### 9b. `downloads`
+
+```
+Used to save the extracted conversation as a ZIP file to the user's computer. The ZIP is created entirely in the browser (via JSZip, bundled in the extension) and saved through Chrome's standard download flow to whatever folder the user has configured. No external upload, no server involvement.
+```
+
+### 9c. `scripting`
+
+```
+Used solely as a recovery path. When the user clicks Clio on a tab that was opened before Clio was installed or last reloaded, Chrome's content script hasn't been injected into that tab — clicking the extract button would otherwise fail with the raw error "Could not establish connection." The scripting permission lets Clio re-inject its own content script (the same files declared in the manifest's content_scripts entries) into the active tab so the extraction can proceed. It is invoked only on this specific failure path, only into the currently active tab, and only with Clio's own bundled scripts. It is not used to inject code into any other tab or at any other time.
+```
+
+### 9d. Host permissions: `https://claude.ai/*`, `https://gemini.google.com/*`, `https://chatgpt.com/*`
+
+```
+The content script must be allowed to run on these three AI chat sites in order to read the conversation DOM and extract message content. The script does not run on any other site. These three hosts are the entirety of the extension's web-surface — Clio has no business logic, fetches no analytics, and makes no requests outside the user's already-loaded conversation.
+```
+
+### 9e. Host permissions: `https://*.googleusercontent.com/*`
+
+```
+Used to fetch user-uploaded image attachments from Gemini conversations. Gemini stores uploaded files at session-authenticated URLs on googleusercontent.com (e.g., lh3.googleusercontent.com). Without this host permission, the browser blocks the extension from fetching these images, leaving them missing from the ZIP. The extension only fetches images that are already embedded in the conversation the user is viewing — it does not read or modify any other content on these hosts. The wildcard covers the various lh3/lh4/lh5 subdomains Gemini may use depending on hash routing.
+```
+
+If a reviewer asks why the justifications are unusually short on any one permission: because the extension genuinely does very little. The minimum-surface-area posture is documented in `SECURITY.md` and the wiki's Defense in Depth page.
 
 ## 10. Pricing & distribution
 
@@ -240,17 +354,19 @@ Per-version release notes live in `docs/releases/` with the naming convention:
 Each file should contain:
 
 1. **Public-facing notes** — what users see in the store listing's "What's New" section
-2. **Reviewer notes** — what the CWS reviewer sees (permission justifications, testing instructions if non-obvious)
+2. **Reviewer notes** — what the CWS reviewer sees (permission justifications summary, smoke-test instructions, strict-local evidence)
 3. The previous version number and the submission date
 
-Create the release notes file **before** uploading — it serves as the source of truth for the dashboard's text fields, so you're not typing them live into a web form.
+Create the release notes file **before** §4 Build — it serves as the source of truth for the dashboard's text fields, so you're not typing them live into a web form.
+
+Current per-version files in this repo:
+- [`docs/releases/chrome-v1.4.1.md`](../releases/chrome-v1.4.1.md) — v1.4.1 (first submitted version)
 
 ## 16. Related documents
 
 - [`30001-development-runbook.md`](./30001-development-runbook.md) — dev-mode setup, test workflow, versioning policy
 - [`30003-cloudflare-pages-setup.md`](./30003-cloudflare-pages-setup.md) — CFP setup for cliocast.com
 - [`30004-cws-account-setup.md`](./30004-cws-account-setup.md) — CWS publisher account creation, registration, multi-account hazard, identity verification
-- `docs/listing-copy.md` — canonical store-listing text (name, descriptions, category)
 - `docs/releases/` — per-version release notes archive
 - `PRIVACY.md` — public privacy policy
 - `SECURITY.md` — threat model and vulnerability reporting
@@ -261,5 +377,6 @@ Create the release notes file **before** uploading — it serves as the source o
 
 | Version | Date | Change |
 |---------|------|--------|
+| 3 | 2026-05-28 | Numbered §3a items (1–11) and §3b items (1–5) so they can be referenced as "§3a.N" / "§3b.N". New §3a.11: agent confirms listing-screenshot file existence + 1280×800 PNG dimensions (mechanical check, moved out of operator scope). §3b.3 narrowed to visual privacy review of screenshot content. §4 Build the ZIP explicitly labeled as an agent task; operator only receives the ZIP path. §3a.4 refined: debug-tier console calls (`log`/`debug`/`info`/`warn`) banned, `console.error` inside try/catch that also surfaces to the user UI is intentional and allowed. §3a.7 softened: lint is aspirational; if no script, file a tracking issue (#165) and don't block ship. §7 / §8 / §9 inlined — paste-ready Short Description, Long Description, Single Purpose, and per-permission justification blocks. `docs/listing-copy.md` reduced to a stub redirect. Closes #162, #163, #164, #166. |
 | 2 | 2026-05-28 | Added version/date header and "how to verify you have the latest copy" section. Numbered all top-level sections §1–§17. Added §1 Quick Start with Path A / Path B / Path C reading-path matrix. Split §3 Pre-flight into §3a Agent and §3b Operator. Moved account-setup material (multi-account hazard, one-time developer registration, first-machine verification) to [`30004-cws-account-setup.md`](./30004-cws-account-setup.md); 30002 now keeps only the in-line §2 Account check. Added `scripting` and `*.googleusercontent.com` permission justifications to §9. Updated privacy-policy URL to `cliocast.com/privacy`. Closes #159, #160. |
 | 1 | 2026-05-22 | Initial Clio-adapted version (forked from Aletheia runbook 10905). |

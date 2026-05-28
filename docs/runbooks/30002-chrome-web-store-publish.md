@@ -1,7 +1,7 @@
 # 30002 — Chrome Web Store Publishing (Clio)
 
-> **Version:** 8
-> **Last updated:** 2026-05-28 3:45:01 PM Central
+> **Version:** 9
+> **Last updated:** 2026-05-28 4:15:22 PM Central
 > **Applies to:** Clio Chrome extension, every submission to the Chrome Web Store
 > **Tracking issue:** [martymcenroe/Clio#95](https://github.com/martymcenroe/Clio/issues/95)
 > **Account-setup material:** moved to [`30004-cws-account-setup.md`](./30004-cws-account-setup.md)
@@ -309,10 +309,12 @@ The **Additional fields** section. Four inputs.
 ### 9a. Official URL (dropdown)
 
 ```
-None
+thrivetech.ai
 ```
 
-To populate `cliocast.com` here, the publisher must first verify cliocast.com ownership in Google Search Console using the `cto@thrivetech.ai` Google account. Until that's done, `None` is the correct selection — `None` does not break the listing.
+`thrivetech.ai` is already Search-Console-verified under the publisher account, so it appears in the dropdown ready to select. Pick it: the Official URL represents the **publisher's** identity (ThriveTech.ai), while §9b Homepage URL is the **product's** landing page (`cliocast.com`). Two different fields, two different purposes.
+
+To later populate `cliocast.com` here as an alternative, the publisher would first verify cliocast.com ownership in Google Search Console using the `cto@thrivetech.ai` Google account. Not required — the current pairing (Official URL = publisher domain, Homepage URL = product domain) is the correct framing.
 
 ### 9b. Homepage URL
 
@@ -334,13 +336,81 @@ GitHub issue tracker — where users report bugs and request features. Matches t
 
 Leave **off**. Clio is a developer/research utility; no sexual, violent, or substance-related content.
 
-## 10. Store listing — item support
+## 10. Account Settings (publisher-level — affects all items)
 
-The **Item support** section is a single visibility toggle (`Change visibility here` link in the form). Per the dashboard's right-side help text, this controls whether the published listing surfaces an "item support" call-to-action linking to the §9c Support URL.
+The Item support setting on the per-item Store listing tab is just a **link** (`Change visibility here`) that navigates to the **publisher Account Settings page**. Account Settings holds publisher-level configuration that affects every extension this publisher owns — Clio, Aletheia, and any future ThriveTech.ai item. Several settings live on this page besides Item support; cover them all in dashboard order so the operator doesn't accidentally skip a one-time decision.
 
-**Recommended:** **On** (visible). Clio has an active GitHub issue tracker at the §9c URL; making it discoverable from the listing reduces the friction for a user to file a real issue instead of leaving a confused review.
+**How to get to Account Settings:**
+- From the per-item Store listing tab → Item support section → click `Change visibility here`
+- OR from the main dashboard → left sidebar under PUBLISHER → click **Settings**
+- Both land on the same page: `https://chrome.google.com/webstore/devconsole/account`
 
-If the dashboard's current help text contradicts this recommendation (CWS UI text changes occasionally), defer to the dashboard for this submission, then file a runbook-update issue with what the dashboard actually said so the next operator doesn't have to re-discover.
+The page sections, top to bottom:
+
+### 10a. Profile (one-time, already set)
+
+| Field | Value | Action |
+|---|---|---|
+| Publisher display name | `ThriveTech.ai` | None — rebranding only |
+| Publisher ID | `9f2b248a-0167-40b0-89d5-2ad84348a837` (auto-generated) | None |
+| Contact email address | `cto@thrivetech.ai` (verified) | None — change only on email rotation |
+
+### 10b. Trader declaration (one-time)
+
+Set to **This is a trader account**. Required under EEA (European Economic Area) consumer protection laws. ThriveTech.ai operates as a trader (commercial entity), so this is the correct selection. No action required for Clio submission.
+
+### 10c. Account verification (one-time)
+
+Verified as `Martin McEnroe`, address on file, DUNS number 119147385. Trader verification is a Google-side check; once verified, no action required unless contact info or DUNS changes.
+
+### 10d. Management — Trusted tester accounts
+
+Input field for email addresses (space- or comma-separated). Trusted testers can see unlisted/draft items before they're public.
+
+**For Clio v1.4.1 public release:** leave **empty**. Only populate during a deliberate beta phase where the listing is set to Private and only specified test accounts should access it.
+
+**Delete publisher account** button (also in this section): never click. Destroys all items under the publisher, including Aletheia.
+
+### 10e. Spotlight item (per-listing decision)
+
+The item highlighted on the publisher's public CWS page. Pick from items already published under the account.
+
+**Current state:** Aletheia.
+
+**Recommended action after Clio's first publication:**
+- If Aletheia remains the flagship: leave as-is
+- If Clio attracts more public interest (downloads, reviews) than Aletheia: rotate Clio in as spotlight
+- Operator decision per launch context. **Not a Clio v1.4.1 launch-blocker** — Clio can't be selected here until it's actually published anyway.
+
+### 10f. Service account
+
+Input field for a Google service-account email. Service accounts let CI/automation read item metadata via the CWS public API.
+
+**For Clio v1.4.1:** leave **empty**. Not used. Add only if automation (CI, batch tools) needs programmatic access to item metadata.
+
+### 10g. Organization publishing
+
+`Generate approval link` button. This is for enterprise-only listings — items distributed only to specific customer domains.
+
+**For Clio v1.4.1:** **skip**. Clio is a public listing, not enterprise-only.
+
+### 10h. Members
+
+Lists members of the publisher account with roles (Admin, Editor, Item manager, Viewer).
+
+**Current state:** Martin McEnroe (`cto.thrivetech.ai@gmail.com`) as Admin since 2026-01-08.
+
+**No action required** unless adding teammates. Invite via `+ Invite member` if needed; see the right-side help text for role definitions.
+
+### 10i. Item support — Visibility toggle
+
+**This is what the per-item Store listing tab's `Change visibility here` link surfaces.** A single toggle.
+
+**Recommended:** **ON** (visible). Clio has an active GitHub issue tracker at the §9c Support URL; making it discoverable from the published listing reduces friction (users file real issues instead of leaving confused reviews).
+
+**All-or-nothing across items.** This toggle is publisher-level; flipping it OFF would also hide Aletheia's support link. Cannot be set per-item. If the operator ever needs different support visibility for two items under the same publisher, that's a CWS limitation, not a runbook gap.
+
+If the dashboard's current right-side help text contradicts the ON recommendation (CWS UI text changes occasionally), defer to the dashboard, then file a runbook-update issue with what the dashboard actually said.
 
 ## 11. Privacy tab
 
@@ -503,6 +573,7 @@ Current per-version files in this repo:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 9 | 2026-05-28 4:15:22 PM Central | §10 restructured — was "Store listing — item support" framed as a per-item setting; corrected to "Account Settings (publisher-level — affects all items)" because the per-item page only has a `Change visibility here` link that navigates to the publisher Account Settings page. New §10a–§10i cover every section on Account Settings in dashboard order: Profile, Trader declaration, Account verification, Management/Trusted-testers, Spotlight item, Service account, Organization publishing, Members, Item support visibility. Each subsection states current value, recommended action, and one-time vs per-listing decision. Item support called out as all-or-nothing across items under the publisher. §9a Official URL paste-block changed from `None` to `thrivetech.ai` (already Search-Console-verified, available in dropdown); explainer notes that thrivetech.ai is the publisher identity and cliocast.com is the product home (two different fields). Closes #184. |
 | 8 | 2026-05-28 3:45:01 PM Central | Added three missing Store-listing tab sections in dashboard order: new §8 Graphic assets (store icon, promo video, screenshots, promo tiles); new §9 Additional fields (official URL, homepage URL, support URL, mature content); new §10 Item support (visibility toggle). All downstream sections renumbered: §8 Privacy → §11, §9 Permissions → §12, §10 Pricing → §13, §11 Submit → §14, §12 Post-publish → §15, §13 Version bump → §16, §14 Troubleshooting → §17, §15 Release notes → §18, §16 Related docs → §19, §17 Change log → §20. §0 invoke table updated: post-publish row references §15a (was §12a). §1 Reading paths expanded to include §8–§13 on Path A; Path B reframed to "review §7–§13 if listing copy changed." §3a.2 references §12 (was §9). §3a.10 references §18 (was §15). §3a.11 specifies 24-bit PNG no alpha (matches CWS requirement) and adds color-mode verification (RGB not RGBA). §3b.4 expanded to "§7 through §12 paste-blocks." §7 renamed `Store listing` → `Store listing — product details` to mirror §8/§9/§10's `Store listing — <subsection>` framing. §5 updated to point at §7 → §8 → §9 → §10 sequence. §17 Troubleshooting gains a row for screenshot alpha-channel rejection. Closes #182. |
 | 7 | 2026-05-28 3:40:27 PM Central | §7d Category corrected: `Productivity` is a CWS meta-header (not selectable). Paste-block changed to `Tools`. Added preamble explaining the meta-header structure and a rationale list naming each rejected option and why, so the choice survives future maintainers. Closes #180. |
 | 6 | 2026-05-28 3:26:11 PM Central | §4 restructured for symmetry with §3. Renamed `Build the ZIP` → `Build & verify the ZIP`. New §4a Build (the build_release.py invocation + fallback). Existing §4a Verify renumbered to §4b Verify. Both substeps carry the `(agent does this)` label explicitly. §0 invoke-table updated: `Run §4` triggers build + verify, not "build only". Closes #178. |

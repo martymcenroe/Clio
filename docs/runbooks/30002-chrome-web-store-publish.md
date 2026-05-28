@@ -1,7 +1,7 @@
 # 30002 — Chrome Web Store Publishing (Clio)
 
-> **Version:** 5
-> **Last updated:** 2026-05-28 3:23:56 PM Central
+> **Version:** 6
+> **Last updated:** 2026-05-28 3:26:11 PM Central
 > **Applies to:** Clio Chrome extension, every submission to the Chrome Web Store
 > **Tracking issue:** [martymcenroe/Clio#95](https://github.com/martymcenroe/Clio/issues/95)
 > **Account-setup material:** moved to [`30004-cws-account-setup.md`](./30004-cws-account-setup.md)
@@ -32,7 +32,7 @@ The operator types one of these phrases into the agent chat to trigger the match
 | Audit the runbook itself for gaps / drift | `Audit 30002` |
 | Run §3a pre-flight + §4 build in one go and hand back the ZIP path | `Run pre-flight` |
 | Run §3a only (no build) and report findings | `Run §3a` |
-| Run §4 build only (pre-flight already passed) | `Run §4` |
+| Run §4 build + verify (pre-flight already passed) | `Run §4` |
 | Comment submission date on #95 (uses current Central time, or pass `at YYYY-MM-DD HH:MM`) | `Submitted` |
 | After CWS approves: run §12a — README + `docs/index.html` install-link update PR, tag the commit, comment + close #95 | `Run post-publish <live CWS URL>` |
 
@@ -91,13 +91,15 @@ Split by responsibility. **Agent items** happen in the repo. **Operator items** 
 
 If any §3a item is unchecked, the agent fixes what it can (write missing release notes, file lint tracker, etc.) and surfaces the rest to the operator before producing the ZIP. If any §3b item is unchecked, the operator pauses before clicking Upload.
 
-## 4. Build the ZIP (agent does this)
+## 4. Build & verify the ZIP (agent does this)
 
-**Agent runs §4. Operator receives the ZIP path and uploads it at §5 (Path A) or §6 (Path B).**
+**Agent runs §4a + §4b. Operator receives the ZIP path and uploads it at §5 (Path A) or §6 (Path B).**
 
 **CRITICAL:** Use `zip` from MSYS2 / Git Bash. Never PowerShell `Compress-Archive` — it writes backslash separators, which the CWS reviewer flags as malformed.
 
 **CRITICAL:** `extensions/` must contain only extension files. No `docs/`, `tests/`, `tools/`, `node_modules/`, or other content. Verify before zipping.
+
+### 4a. Build (agent does this)
 
 ```bash
 cd /c/Users/mcwiz/Projects/Clio
@@ -115,7 +117,7 @@ cd extensions
 zip -r ../dist/clio-chrome-vX.Y.Z.zip . -x '.*' -x '*/.*' -x 'node_modules/*'
 ```
 
-### 4a. Verify the ZIP
+### 4b. Verify (agent does this)
 
 ```bash
 cd /c/Users/mcwiz/Projects/Clio
@@ -413,6 +415,7 @@ Current per-version files in this repo:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 6 | 2026-05-28 3:26:11 PM Central | §4 restructured for symmetry with §3. Renamed `Build the ZIP` → `Build & verify the ZIP`. New §4a Build (the build_release.py invocation + fallback). Existing §4a Verify renumbered to §4b Verify. Both substeps carry the `(agent does this)` label explicitly. §0 invoke-table updated: `Run §4` triggers build + verify, not "build only". Closes #178. |
 | 5 | 2026-05-28 3:23:56 PM Central | §7c Long Description gets new "IF CLIO HELPS YOU" closing section asking for a Chrome Web Store review or GitHub star. Framed as "help others discover this useful extension" — not begging-tone. Closes #175. |
 | 4 | 2026-05-28 2:52:36 PM Central | Added §0 "Invoke the agent" command table with canonical phrases (`Audit 30002`, `Run pre-flight`, `Run §3a`, `Run §4`, `Submitted`, `Run post-publish <URL>`). Added "Throughout this runbook" definitions stanza for operator/agent, and a tracking-issue header link to #95. §11.3 moved from operator to agent (`gh issue comment 95` for the submitted-on timestamp). §12 split into §12a Agent (README + docs/index.html install-link PRs, tag, comment+close #95) and §12b Operator (clean-profile install + three-site smoke tests + chrome://extensions verify). §3b.3 reframed: §3a.12 (new) has agent pre-describe screenshot content; operator approves the flag-list. §3a.13 (new): agent reports current `main` HEAD SHA and runbook version line so operator can verify printed copy without doing the pull themselves. §3b.4 simplified to "review §7/§8/§9 paste-blocks" (drop reference to the listing-copy.md redirect stub). §3a.1, §3a.2, §3a.4 tightened. §16 drops "Aletheia runbook 10905" — provenance stays in v1 changelog entry. §4 documents that `build_release.py` removes stale `dist/clio-chrome-v*.zip` files before producing the new artifact. Closes #168, #169, #170, #171. |
 | 3 | 2026-05-28 | Numbered §3a items (1–11) and §3b items (1–5). New §3a.11: agent confirms listing-screenshot files exist at 1280×800 PNG. §3b.3 narrowed to visual privacy review of screenshot content. §4 Build explicitly labeled an agent task; operator only receives the ZIP path. §3a.4 refined: debug-tier console calls banned, `console.error` in try/catch that also surfaces to user UI is allowed. §3a.7 softened: lint is aspirational; if no script, file a tracking issue (#165) and don't block ship. §7 / §8 / §9 inlined as paste-ready blocks. `docs/listing-copy.md` reduced to a stub redirect. Closes #162, #163, #164, #166. |

@@ -20,11 +20,23 @@ function sleep(ms) {
 const sanitize = (s) =>
   (s || 'untitled').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'untitled';
 
-/** Compose the per-conversation ZIP filename (current-design naming). */
+/** Compose the per-conversation ZIP path (organized under a clio-archive/ folder). */
 function zipName(conv, data) {
   const id = (conv.conversation_id || '').slice(0, 8);
   const title = sanitize(conv.title || (data && data.metadata && data.metadata.title) || 'untitled');
-  return `${conv.site}-${title}-${id}.zip`;
+  return `clio-archive/${conv.site}-${title}-${id}.zip`;
+}
+
+/** What the extractor saw for one conversation — recorded in the run report. */
+function extractionDiagnostics(resp) {
+  const data = (resp && resp.data) || {};
+  const meta = data.metadata || {};
+  const messages = data.messages || [];
+  return {
+    messageCount: meta.messageCount != null ? meta.messageCount : messages.length,
+    imageCount: meta.imageCount != null ? meta.imageCount : ((resp && resp.images) || []).length,
+    textLength: JSON.stringify(messages).length,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +145,7 @@ async function processOne(tabId, conv, deps = DEFAULT_DEPS) {
     const filename = zipName(conv, resp.data);
     await deps.downloadZip(blob, filename);
     await markDownloaded(keyObj, { zip_name: filename });
-    return { ok: true, filename };
+    return { ok: true, filename, ...extractionDiagnostics(resp) };
   } catch (err) {
     await markDownloadError(keyObj, (err && err.message) || String(err));
     return { ok: false, error: (err && err.message) || String(err) };
@@ -180,6 +192,7 @@ async function seedQueue(convs, site, account_label) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     zipName, sanitize, buildZip, navigateAndExtract, waitForTabComplete, sendExtract,
-    downloadZip, processOne, runBatch, seedQueue, scriptsForSite, CONTENT_SCRIPTS, DEFAULT_DEPS,
+    downloadZip, processOne, runBatch, seedQueue, scriptsForSite, CONTENT_SCRIPTS,
+    extractionDiagnostics, DEFAULT_DEPS,
   };
 }

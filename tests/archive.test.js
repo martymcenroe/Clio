@@ -11,6 +11,8 @@ const db = require('../extensions/src/storage/db.js');
 // <script>s in the extension). Expose them for the node test.
 Object.assign(global, {
   getConversation: db.getConversation,
+  upsertConversation: db.upsertConversation,
+  enqueueExtraction: db.enqueueExtraction,
   markDownloaded: db.markDownloaded,
   markDownloadError: db.markDownloadError,
   dequeueNext: db.dequeueNext,
@@ -53,7 +55,7 @@ describe('processOne', () => {
     const deps = okDeps();
     const r = await archive.processOne(1, C1, deps);
     expect(r).toEqual({ ok: true, filename: 'claude-One-aaa.zip' });
-    expect(deps.navigateAndExtract).toHaveBeenCalledWith(1, C1.url);
+    expect(deps.navigateAndExtract).toHaveBeenCalledWith(1, C1.url, 'claude');
     expect(deps.downloadZip).toHaveBeenCalledWith('BLOB', 'claude-One-aaa.zip');
     const conv = await db.getConversation(C1);
     expect(conv.download_status).toBe('done');
@@ -69,6 +71,25 @@ describe('processOne', () => {
     const conv = await db.getConversation(C1);
     expect(conv.download_status).toBe('error');
     expect(conv.download_error).toBe('render timeout');
+  });
+});
+
+describe('seedQueue', () => {
+  test('upserts conversations and enqueues them, then the worker drains them', async () => {
+    // fresh DB with nothing seeded (override the beforeEach seeding)
+    globalThis.indexedDB = new (require('fake-indexeddb').IDBFactory)();
+    db._resetDbCache();
+    const convs = [
+      { conversation_id: 'x1', url: 'https://claude.ai/chat/x1', title: 'X1' },
+      { conversation_id: 'x2', url: 'https://claude.ai/chat/x2', title: 'X2' },
+    ];
+    const res = await archive.seedQueue(convs, 'claude', 'personal');
+    expect(res).toEqual({ enumerated: 2, queued: 2 });
+    expect(await db.statusCounts()).toMatchObject({ total: 2, pending: 2 });
+
+    const walk = await archive.runBatch(
+      { tabId: 1, paceMs: 0, isPaused: () => false, isCancelled: () => false }, okDeps());
+    expect(walk).toEqual({ done: 2, failed: 0 });
   });
 });
 

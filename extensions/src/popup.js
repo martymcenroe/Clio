@@ -464,6 +464,22 @@ if (extractBtn) {
   });
 }
 
+// "Download All Conversations" opens the batch-download page for the current site.
+const downloadAllBtn = document.getElementById('downloadAllBtn');
+if (downloadAllBtn) {
+  downloadAllBtn.addEventListener('click', () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+      if (!tab || !tab.url || !isSupportedSite(tab.url)) {
+        setStatus('Open a Gemini, Claude, or ChatGPT tab first, then Download All.', 'warning');
+        return;
+      }
+      const site = getSitePrefix(tab.url);
+      chrome.tabs.create({ url: chrome.runtime.getURL(`src/archive.html?site=${encodeURIComponent(site)}`) });
+      window.close();
+    });
+  });
+}
+
 // ============================================================================
 // Exports for Testing
 // ============================================================================

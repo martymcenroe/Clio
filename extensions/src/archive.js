@@ -59,14 +59,32 @@ function sendExtract(tabId) {
   });
 }
 
+// The per-site content scripts, for re-injection when a navigation drops them.
+const CONTENT_SCRIPTS = {
+  gemini: ['src/selectors.js', 'src/content.js'],
+  claude: ['src/selectors-claude.js', 'src/content.js'],
+  chatgpt: ['src/selectors-chatgpt.js', 'src/content.js'],
+};
+const scriptsForSite = (site) => CONTENT_SCRIPTS[site] || CONTENT_SCRIPTS.claude;
+
 /** Navigate the worker tab to a conversation and run the existing extractor. */
-async function navigateAndExtract(tabId, url) {
+async function navigateAndExtract(tabId, url, site) {
   await chrome.tabs.update(tabId, { url });
   await waitForTabComplete(tabId);
   await sleep(1500); // let the SPA render + lazy content settle
-  const resp = await sendExtract(tabId);
-  if (!resp || !resp.success) throw new Error((resp && resp.error) || 'extraction failed');
-  return resp; // { success, data, images, warnings } — Clio's existing shape
+  try {
+    const resp = await sendExtract(tabId);
+    if (!resp || !resp.success) throw new Error((resp && resp.error) || 'extraction failed');
+    return resp; // { success, data, images, warnings } — Clio's existing shape
+  } catch (err) {
+    // The content script may not be present after a fresh navigation — inject it and retry once.
+    if (!/receiving end|Could not establish/i.test(err.message || '')) throw err;
+    await chrome.scripting.executeScript({ target: { tabId }, files: scriptsForSite(site) });
+    await sleep(800);
+    const resp = await sendExtract(tabId);
+    if (!resp || !resp.success) throw new Error((resp && resp.error) || 'extraction failed after reinject');
+    return resp;
+  }
 }
 
 /** Build the current-design ZIP (mirrors popup.js createZip). */
@@ -110,7 +128,7 @@ async function processOne(tabId, conv, deps = DEFAULT_DEPS) {
     conversation_id: conv.conversation_id,
   };
   try {
-    const resp = await deps.navigateAndExtract(tabId, conv.url);
+    const resp = await deps.navigateAndExtract(tabId, conv.url, conv.site);
     const blob = await deps.buildZip(resp.data, resp.images);
     const filename = zipName(conv, resp.data);
     await deps.downloadZip(blob, filename);
@@ -148,9 +166,20 @@ async function runBatch(control, deps = DEFAULT_DEPS) {
   return { done, failed };
 }
 
+/** Seed the ledger + queue from an enumerated conversation list (idempotent). */
+async function seedQueue(convs, site, account_label) {
+  let queued = 0;
+  for (const c of convs) {
+    await upsertConversation({ site, account_label, conversation_id: c.conversation_id, title: c.title, url: c.url });
+    await enqueueExtraction({ site, account_label, conversation_id: c.conversation_id });
+    queued += 1;
+  }
+  return { enumerated: convs.length, queued };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     zipName, sanitize, buildZip, navigateAndExtract, waitForTabComplete, sendExtract,
-    downloadZip, processOne, runBatch, DEFAULT_DEPS,
+    downloadZip, processOne, runBatch, seedQueue, scriptsForSite, CONTENT_SCRIPTS, DEFAULT_DEPS,
   };
 }

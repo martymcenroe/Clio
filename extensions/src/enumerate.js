@@ -104,6 +104,51 @@ async function enumerateAll(site, opts = {}) {
   return [...all.values()];
 }
 
+// The sidebar caps at ~recent conversations, so it cannot enumerate a large
+// archive by scrolling. For the COMPLETE list we read the account's own
+// conversation index (the same data the web app uses to render the list). This
+// returns every conversation id/title — each conversation's CONTENT is still
+// opened and DOM-extracted by the worker, so artifacts are not lost here.
+async function fetchConversationListClaude() {
+  const j = async (u) => {
+    const r = await fetch(u, { headers: { accept: 'application/json' }, credentials: 'include' });
+    return r.ok ? r.json() : null;
+  };
+  const orgs = await j('/api/organizations');
+  const org = (Array.isArray(orgs) ? orgs : []).find((o) => (o.capabilities || []).includes('chat')) || (orgs || [])[0];
+  if (!org) return [];
+  const out = [];
+  const seen = new Set();
+  for (let offset = 0; offset < 6000; offset += 100) {
+    const batch = await j(`/api/organizations/${org.uuid}/chat_conversations?limit=100&offset=${offset}`);
+    if (!Array.isArray(batch) || !batch.length) break;
+    let added = 0;
+    for (const c of batch) {
+      if (c.uuid && !seen.has(c.uuid)) {
+        seen.add(c.uuid);
+        out.push({ site: 'claude', conversation_id: c.uuid, url: `https://claude.ai/chat/${c.uuid}`, title: c.name || '' });
+        added += 1;
+      }
+    }
+    if (!added || batch.length < 100) break;
+  }
+  return out;
+}
+
+/** Full conversation list for a site: complete index where available, else scroll. */
+async function enumerateFull(site) {
+  if (site === 'claude') {
+    try {
+      const list = await fetchConversationListClaude();
+      if (list.length) return list;
+    } catch (e) { /* fall through to scroll */ }
+  }
+  return enumerateAll(site); // gemini / chatgpt (or claude fallback): scroll the visible list
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { collectConversations, enumerateAll, findListScroller, cleanTitle, SITE_LISTS };
+  module.exports = {
+    collectConversations, enumerateAll, enumerateFull, fetchConversationListClaude,
+    findListScroller, cleanTitle, SITE_LISTS,
+  };
 }

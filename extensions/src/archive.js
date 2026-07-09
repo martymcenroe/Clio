@@ -79,24 +79,41 @@ const CONTENT_SCRIPTS = {
 };
 const scriptsForSite = (site) => CONTENT_SCRIPTS[site] || CONTENT_SCRIPTS.claude;
 
-/** Navigate the worker tab to a conversation and run the existing extractor. */
+/**
+ * Navigate the worker tab to a conversation and run the existing extractor.
+ * Waits for the conversation's messages to actually render (SPA load is not
+ * instant) by retrying with growing delays. Two failure classes are handled:
+ *  - "receiving end / Could not establish" → content script dropped by the
+ *    navigation; re-inject and retry.
+ *  - "Missing selectors: messages" → messages haven't rendered yet; wait longer.
+ *    If it persists across all attempts the conversation is (likely) empty.
+ */
 async function navigateAndExtract(tabId, url, site) {
   await chrome.tabs.update(tabId, { url });
   await waitForTabComplete(tabId);
-  await sleep(1500); // let the SPA render + lazy content settle
-  try {
-    const resp = await sendExtract(tabId);
-    if (!resp || !resp.success) throw new Error((resp && resp.error) || 'extraction failed');
-    return resp; // { success, data, images, warnings } — Clio's existing shape
-  } catch (err) {
-    // The content script may not be present after a fresh navigation — inject it and retry once.
-    if (!/receiving end|Could not establish/i.test(err.message || '')) throw err;
-    await chrome.scripting.executeScript({ target: { tabId }, files: scriptsForSite(site) });
-    await sleep(800);
-    const resp = await sendExtract(tabId);
-    if (!resp || !resp.success) throw new Error((resp && resp.error) || 'extraction failed after reinject');
-    return resp;
+
+  let lastError = 'extraction failed';
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    await sleep(Math.min(1500 + attempt * 1500, 6000)); // 1.5s, 3s, 4.5s, 6s, 6s
+    let resp;
+    try {
+      resp = await sendExtract(tabId);
+    } catch (err) {
+      if (/receiving end|Could not establish/i.test(err.message || '')) {
+        // Content script isn't present after the navigation — inject and retry.
+        await chrome.scripting.executeScript({ target: { tabId }, files: scriptsForSite(site) });
+        continue;
+      }
+      throw err;
+    }
+    if (resp && resp.success) return resp; // { success, data, images, warnings }
+    lastError = (resp && resp.error) || 'extraction failed';
+    // A non-timing extractor error is real — surface it immediately.
+    if (!/missing selectors: messages/i.test(lastError)) throw new Error(lastError);
+    // else: messages not rendered yet — loop and wait longer.
   }
+  throw new Error(lastError); // exhausted retries: slow render or an empty conversation
 }
 
 /** Build the current-design ZIP (mirrors popup.js createZip). */

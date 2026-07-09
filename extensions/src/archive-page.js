@@ -89,11 +89,11 @@ async function enumerateInTab(tabId) {
   }).catch(() => {});
   await new Promise((r) => setTimeout(r, 1200));
 
-  // Inject the enumerator and run scroll-until-stable inside the tab.
+  // Inject the enumerator and get the COMPLETE conversation list inside the tab.
   await chrome.scripting.executeScript({ target: { tabId }, files: ['src/enumerate.js'] });
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId },
-    func: (site) => window.enumerateAll(site),
+    func: (site) => window.enumerateFull(site),
     args: [SITE],
   });
   return result || [];
@@ -113,7 +113,7 @@ async function main() {
   setPhase('Opening a worker tab…');
   const tabId = await ensureWorkerTab();
 
-  setPhase('Enumerating conversations (scrolling the list)…');
+  setPhase('Getting your full conversation list…');
   const convs = await enumerateInTab(tabId);
   runReport.startedAt = new Date().toISOString();
   runReport.enumerated = {

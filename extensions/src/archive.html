@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Clio — Download All Conversations</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; padding: 24px; max-width: 820px; margin: 0 auto;
+      color: #1a1a1a; background: #fafafa;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: #666; font-size: 13px; margin-bottom: 20px; }
+    .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+    #phase { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+    progress { width: 100%; height: 14px; border-radius: 7px; }
+    #counts { font-size: 14px; margin-top: 10px; }
+    #counts b { font-variant-numeric: tabular-nums; }
+    #current { font-size: 13px; color: #444; margin-top: 8px; min-height: 18px; }
+    .controls { display: flex; gap: 10px; margin-top: 16px; }
+    button {
+      font-size: 14px; padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc;
+      background: #fff; cursor: pointer;
+    }
+    button:hover { background: #f0f0f0; }
+    button#cancelBtn { border-color: #e0b4b4; color: #a33; }
+    #log {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12px; line-height: 1.5; max-height: 360px; overflow-y: auto;
+      background: #1e1e1e; color: #d4d4d4; border-radius: 8px; padding: 12px; white-space: pre-wrap;
+    }
+    .ok { color: #6a9955; } .xx { color: #e07a7a; }
+    .note { font-size: 12px; color: #888; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Clio — Download All Conversations</h1>
+  <div class="sub" id="site">…</div>
+
+  <div class="card">
+    <div id="phase">Starting…</div>
+    <progress id="bar" max="1" value="0"></progress>
+    <div id="counts"><b>0</b> downloaded · <b>0</b> failed · <b>0</b> left</div>
+    <div id="current"></div>
+    <div class="controls">
+      <button id="pauseBtn">Pause</button>
+      <button id="cancelBtn">Cancel</button>
+    </div>
+    <div class="note">Keep this tab open until it finishes. It walks each conversation, extracts it with Clio's normal extractor, and downloads one ZIP per conversation. Already-downloaded conversations are skipped, so you can safely stop and resume.</div>
+  </div>
+
+  <div id="log"></div>
+
+  <script src="../lib/jszip.min.js"></script>
+  <script src="storage/db.js"></script>
+  <script src="enumerate.js"></script>
+  <script src="archive.js"></script>
+  <script src="archive-page.js"></script>
+</body>
+</html>

@@ -16,6 +16,24 @@ const SITE_BASE = {
 }[SITE] || 'https://claude.ai/';
 
 const control = { paused: false, cancelled: false };
+
+// Self-instrumentation: a machine-readable record of the whole run, downloaded at
+// the end so the result can be verified against ground truth without any relay.
+const runReport = {
+  site: SITE, account: ACCOUNT, startedAt: null, finishedAt: null,
+  enumerated: null, results: [], summary: null,
+};
+
+function downloadReport() {
+  const blob = new Blob([JSON.stringify(runReport, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  chrome.downloads.download(
+    { url, filename: `clio-archive/clio-run-report-${SITE}-${ts}.json`, saveAs: false },
+    () => setTimeout(() => URL.revokeObjectURL(url), 2000),
+  );
+}
+
 const $ = (id) => document.getElementById(id);
 const setPhase = (t) => { $('phase').textContent = t; };
 
@@ -97,9 +115,16 @@ async function main() {
 
   setPhase('Enumerating conversations (scrolling the list)…');
   const convs = await enumerateInTab(tabId);
+  runReport.startedAt = new Date().toISOString();
+  runReport.enumerated = {
+    count: convs.length,
+    conversations: convs.map((c) => ({ id: c.conversation_id, title: c.title, url: c.url })),
+  };
   log(`Enumerated ${convs.length} conversations.`);
   if (!convs.length) {
     setPhase('No conversations found — make sure you are logged in and the sidebar is visible, then reload.');
+    runReport.summary = { done: 0, failed: 0, note: 'enumeration found nothing' };
+    downloadReport();
     return;
   }
 
@@ -112,14 +137,31 @@ async function main() {
     paceMs: 800,
     isPaused: () => control.paused,
     isCancelled: () => control.cancelled,
-    onProgress: (counts, last) => render(counts, last),
+    onProgress: (counts, last) => {
+      render(counts, last);
+      if (last && last.conv) {
+        runReport.results.push({
+          id: last.conv.conversation_id,
+          title: last.conv.title,
+          status: last.result.ok ? 'done' : 'error',
+          filename: last.result.filename || null,
+          messageCount: last.result.messageCount,
+          imageCount: last.result.imageCount,
+          textLength: last.result.textLength,
+          error: last.result.error || null,
+        });
+      }
+    },
   });
 
   render(await statusCounts({ site: SITE, account_label: ACCOUNT }));
+  runReport.finishedAt = new Date().toISOString();
+  runReport.summary = { done: res.done, failed: res.failed, cancelled: control.cancelled };
+  downloadReport();
   setPhase(control.cancelled
-    ? `Cancelled — ${res.done} downloaded, ${res.failed} failed.`
-    : `Done — ${res.done} downloaded, ${res.failed} failed.`);
-  log(`FINISHED: ${res.done} downloaded, ${res.failed} failed.`);
+    ? `Cancelled — ${res.done} downloaded, ${res.failed} failed. Run report saved to clio-archive/.`
+    : `Done — ${res.done} downloaded, ${res.failed} failed. Run report saved to clio-archive/.`);
+  log(`FINISHED: ${res.done} downloaded, ${res.failed} failed. Report + ZIPs in Downloads/clio-archive/.`);
   $('pauseBtn').disabled = true;
 }
 

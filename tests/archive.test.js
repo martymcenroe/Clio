@@ -42,8 +42,8 @@ beforeEach(async () => {
 });
 
 describe('zipName / sanitize', () => {
-  test('composes a current-design filename', () => {
-    expect(archive.zipName(C1, { metadata: { title: 'One' } })).toBe('claude-One-aaa.zip');
+  test('composes a current-design filename under clio-archive/', () => {
+    expect(archive.zipName(C1, { metadata: { title: 'One' } })).toBe('clio-archive/claude-One-aaa.zip');
   });
   test('sanitizes unsafe title chars', () => {
     expect(archive.sanitize('Can\'t Stop: the math!')).toBe('Can_t_Stop_the_math');
@@ -54,12 +54,13 @@ describe('processOne', () => {
   test('success path downloads and marks the ledger done', async () => {
     const deps = okDeps();
     const r = await archive.processOne(1, C1, deps);
-    expect(r).toEqual({ ok: true, filename: 'claude-One-aaa.zip' });
+    expect(r).toMatchObject({ ok: true, filename: 'clio-archive/claude-One-aaa.zip' });
+    expect(r).toHaveProperty('messageCount'); // diagnostics recorded for the run report
     expect(deps.navigateAndExtract).toHaveBeenCalledWith(1, C1.url, 'claude');
-    expect(deps.downloadZip).toHaveBeenCalledWith('BLOB', 'claude-One-aaa.zip');
+    expect(deps.downloadZip).toHaveBeenCalledWith('BLOB', 'clio-archive/claude-One-aaa.zip');
     const conv = await db.getConversation(C1);
     expect(conv.download_status).toBe('done');
-    expect(conv.zip_name).toBe('claude-One-aaa.zip');
+    expect(conv.zip_name).toBe('clio-archive/claude-One-aaa.zip');
   });
 
   test('failure path records an error in the ledger (fail-open, keeps walking)', async () => {

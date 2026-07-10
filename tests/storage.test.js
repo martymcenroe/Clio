@@ -102,4 +102,14 @@ describe('harvest runs + settings', () => {
     expect(await db.getSetting('rate_ms')).toBe(400);
     expect(await db.getSetting('missing')).toBeUndefined();
   });
+
+  test('clearAll wipes every store (Start over)', async () => {
+    await db.upsertConversation({ ...K, title: 'A' });
+    await db.enqueueExtraction(K);
+    await db.setSetting('x', 1);
+    await db.clearAll();
+    expect(await db.listConversations()).toEqual([]);
+    expect(await db.dequeueNext()).toBeNull();
+    expect(await db.getSetting('x')).toBeUndefined();
+  });
 });

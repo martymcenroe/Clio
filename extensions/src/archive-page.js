@@ -15,6 +15,10 @@ const SITE_BASE = {
   chatgpt: 'https://chatgpt.com/',
 }[SITE] || 'https://claude.ai/';
 
+// Per-run subfolder so this run's files can't collide with an earlier run's.
+const RUN = 'run-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+setRunTag(RUN);
+
 const control = { paused: false, cancelled: false };
 
 // Self-instrumentation: a machine-readable record of the whole run, downloaded at
@@ -27,9 +31,8 @@ const runReport = {
 function downloadReport() {
   const blob = new Blob([JSON.stringify(runReport, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  const ts = new Date().toISOString().replace(/[:.]/g, '-');
   chrome.downloads.download(
-    { url, filename: `clio-archive/clio-run-report-${SITE}-${ts}.json`, saveAs: false },
+    { url, filename: `clio-archive/${RUN}/clio-run-report-${SITE}.json`, saveAs: false },
     () => setTimeout(() => URL.revokeObjectURL(url), 2000),
   );
 }
@@ -103,13 +106,19 @@ async function enumerateInTab(tabId) {
 }
 
 async function main() {
-  $('site').textContent = `Site: ${SITE} · account: ${ACCOUNT}`;
+  $('site').textContent = `Site: ${SITE} · account: ${ACCOUNT} · saving to Downloads/clio-archive/${RUN}/`;
   $('pauseBtn').onclick = () => {
     control.paused = !control.paused;
     $('pauseBtn').textContent = control.paused ? 'Resume' : 'Pause';
     setPhase(control.paused ? 'Paused' : 'Walking & downloading…');
   };
   $('cancelBtn').onclick = () => { control.cancelled = true; setPhase('Cancelling…'); };
+  $('resetBtn').onclick = async () => {
+    if (!confirm('Clear saved progress and re-download EVERY conversation from scratch? Use this after an update so the fixes apply to all conversations.')) return;
+    control.cancelled = true;
+    await clearAll();
+    location.reload();
+  };
 
   await openDb();
 

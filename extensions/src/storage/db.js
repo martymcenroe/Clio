@@ -226,6 +226,18 @@ const recordRun = (run) =>
 const getSetting = async (key) => (await _get('settings', key))?.value;
 const setSetting = (key, value) => _put('settings', { key, value });
 
+/** Wipe all data (fresh start / "re-download everything"). */
+async function clearAll() {
+  const db = await openDb();
+  const names = Array.from(db.objectStoreNames);
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(names, 'readwrite');
+    for (const name of names) transaction.objectStore(name).clear();
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     DB_NAME, DB_VERSION, STORES,
@@ -234,6 +246,6 @@ if (typeof module !== 'undefined' && module.exports) {
     upsertConversation, getConversation, listConversations,
     markDownloaded, markDownloadError, statusCounts,
     enqueueExtraction, dequeueNext,
-    recordRun, getSetting, setSetting,
+    recordRun, getSetting, setSetting, clearAll,
   };
 }

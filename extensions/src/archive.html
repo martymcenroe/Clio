@@ -46,8 +46,9 @@
     <div class="controls">
       <button id="pauseBtn">Pause</button>
       <button id="cancelBtn">Cancel</button>
+      <button id="resetBtn">Start over</button>
     </div>
-    <div class="note">Keep this tab open until it finishes. It walks each conversation, extracts it with Clio's normal extractor, and downloads one ZIP per conversation. Already-downloaded conversations are skipped, so you can safely stop and resume.</div>
+    <div class="note">Keep this tab open until it finishes. It walks each conversation, runs Clio's normal extractor, and downloads one ZIP per conversation into <code>Downloads/clio-archive/</code>. Downloaded conversations are skipped, so you can pause and resume. <b>Start over</b> clears saved progress and re-downloads everything — use it after an update so fixes apply to all conversations.</div>
   </div>
 
   <div id="log"></div>

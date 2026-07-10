@@ -20,11 +20,17 @@ function sleep(ms) {
 const sanitize = (s) =>
   (s || 'untitled').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'untitled';
 
-/** Compose the per-conversation ZIP path (organized under a clio-archive/ folder). */
+// A per-run tag so a fresh run lands in its own subfolder and can't collide with
+// files from an earlier (e.g. buggy) run.
+let RUN_TAG = '';
+const setRunTag = (t) => { RUN_TAG = t || ''; };
+const archiveDir = () => (RUN_TAG ? `clio-archive/${RUN_TAG}` : 'clio-archive');
+
+/** Compose the per-conversation ZIP path (organized under the run's folder). */
 function zipName(conv, data) {
   const id = (conv.conversation_id || '').slice(0, 8);
   const title = sanitize(conv.title || (data && data.metadata && data.metadata.title) || 'untitled');
-  return `clio-archive/${conv.site}-${title}-${id}.zip`;
+  return `${archiveDir()}/${conv.site}-${title}-${id}.zip`;
 }
 
 /** What the extractor saw for one conversation — recorded in the run report. */
@@ -210,6 +216,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     zipName, sanitize, buildZip, navigateAndExtract, waitForTabComplete, sendExtract,
     downloadZip, processOne, runBatch, seedQueue, scriptsForSite, CONTENT_SCRIPTS,
-    extractionDiagnostics, DEFAULT_DEPS,
+    extractionDiagnostics, setRunTag, archiveDir, DEFAULT_DEPS,
   };
 }

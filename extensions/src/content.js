@@ -562,6 +562,11 @@ function extractTextContent(element) {
   // Clone to avoid modifying the DOM
   const clone = element.cloneNode(true);
 
+  // Strip non-content nodes that otherwise bleed into textContent. Claude's
+  // animated web-search "Research complete" widget injects <style> keyframes
+  // inside the message subtree, which would land in the extracted text (#206).
+  clone.querySelectorAll('style, script').forEach(el => el.remove());
+
   // Process code blocks - preserve with markdown formatting
   const codeBlocks = clone.querySelectorAll(SELECTORS.codeBlock);
   codeBlocks.forEach(code => {
@@ -1225,7 +1230,16 @@ async function extractConversation() {
 
     // Phase 4: Extract turns
     showProgress('Extracting conversation...');
-    const turns = await extractTurns();
+    const rawTurns = await extractTurns();
+    // Drop blank turns — thinking-only / artifact-only shells that produce an
+    // empty-content message (#208); re-index so positions stay contiguous.
+    const turns = rawTurns
+      .filter(t =>
+        (t.content && t.content.trim()) ||
+        (t.thinking && String(t.thinking).trim()) ||
+        (t.attachments && t.attachments.length) ||
+        (t.toolUse && t.toolUse.length))
+      .map((t, i) => ({ ...t, index: i }));
 
     // Phase 5: Extract images (Fail Open)
     const { images, errors } = await extractImages(turns);

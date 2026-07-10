@@ -11,8 +11,11 @@
 
 function cleanTitle(t) {
   t = (t || '').replace(/\s+/g, ' ').trim();
-  const h = t.length / 2; // sidebar rows sometimes duplicate the title (visible + tooltip)
+  // Some conversation names come back doubled — either exact ("XX") or
+  // whitespace-separated ("X X"). Collapse both (#209).
+  const h = t.length / 2;
   if (t.length && t.length % 2 === 0 && t.slice(0, h) === t.slice(h)) t = t.slice(0, h);
+  t = t.replace(/^(.+?)\s+\1$/, '$1');
   return t.trim();
 }
 
@@ -126,7 +129,7 @@ async function fetchConversationListClaude() {
     for (const c of batch) {
       if (c.uuid && !seen.has(c.uuid)) {
         seen.add(c.uuid);
-        out.push({ site: 'claude', conversation_id: c.uuid, url: `https://claude.ai/chat/${c.uuid}`, title: c.name || '' });
+        out.push({ site: 'claude', conversation_id: c.uuid, url: `https://claude.ai/chat/${c.uuid}`, title: cleanTitle(c.name || '') });
         added += 1;
       }
     }

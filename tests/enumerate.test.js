@@ -46,4 +46,11 @@ describe('cleanTitle', () => {
   test('de-duplicates a doubled title (visible + tooltip)', () => {
     expect(cleanTitle('API usage informationAPI usage information')).toBe('API usage information');
   });
+  test('de-duplicates a space-separated doubled title (#209)', () => {
+    expect(cleanTitle('CLOSED: clustering of PES-LRP-SC5 CLOSED: clustering of PES-LRP-SC5'))
+      .toBe('CLOSED: clustering of PES-LRP-SC5');
+  });
+  test('leaves a normal title untouched', () => {
+    expect(cleanTitle('A perfectly normal title')).toBe('A perfectly normal title');
+  });
 });

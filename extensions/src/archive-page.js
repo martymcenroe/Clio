@@ -70,7 +70,10 @@ function tabComplete(tabId) {
 }
 
 async function ensureWorkerTab() {
-  const tab = await chrome.tabs.create({ url: SITE_BASE, active: false }); // background; user watches this page
+  // The worker tab must be ACTIVE: a background tab doesn't trigger Claude's
+  // lazy-load of older messages, so scrollToLoadAllMessages only sees the last
+  // ~10 turns and long conversations get truncated (#204). Keep it foreground.
+  const tab = await chrome.tabs.create({ url: SITE_BASE, active: true });
   await tabComplete(tab.id);
   await new Promise((r) => setTimeout(r, 3000)); // let the app hydrate
   return tab.id;

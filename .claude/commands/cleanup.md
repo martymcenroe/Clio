@@ -119,6 +119,7 @@ Run these commands simultaneously in a single message with multiple Bash tool ca
 
    **Safety Criteria (ALL must be met to auto-delete):**
    - Branch is not `main`
+   - **Branch name does NOT match `graveyard/*`** (parked orphans, never auto-delete)
    - Remote tracking shows `gone` (was deleted on GitHub)
    - No worktree exists for this branch
 
@@ -127,7 +128,7 @@ Run these commands simultaneously in a single message with multiple Bash tool ca
    **Action based on `--no-auto-delete` flag:**
 
    a. If remote shows `gone` AND no worktree AND `--no-auto-delete` NOT set:
-      - Auto-delete: `git -C /c/Users/mcwiz/Projects/Clio branch -D {branch-name}`
+      - Delete via the **ADR-0217 graft recipe** — never `git branch -D` (banned). Graft the orphan tip onto its squash commit on `main`, then `git -C /c/Users/mcwiz/Projects/Clio branch -d {branch-name}`, then remove the graft. If the squash commit can't be identified, namespace the branch into `graveyard/<date>/{branch-name}` instead (ADR-0217 Option G').
       - Report: "AUTO-DELETE: Removed orphan branch {name} (remote gone)"
 
    b. If remote shows `gone` AND no worktree AND `--no-auto-delete` IS set:

@@ -37,3 +37,7 @@ docs/session-logs/
 # saved HTML pages for debugging, etc.). NEVER tracked. Always-on
 # broad rule supersedes the narrow per-file rules below.
 data/
+
+# Machine-local Claude Code config -- never track
+.claude/settings.local.json
+.claude/*.json.bak

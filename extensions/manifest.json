@@ -12,6 +12,7 @@
     "https://gemini.google.com/*",
     "https://claude.ai/*",
     "https://chatgpt.com/*",
+    "https://recorder.google.com/*",
     "https://*.googleusercontent.com/*"
   ],
   "action": {
@@ -39,6 +40,11 @@
     {
       "matches": ["https://chatgpt.com/*"],
       "js": ["src/selectors-chatgpt.js", "src/content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://recorder.google.com/*"],
+      "js": ["src/recorder.js"],
       "run_at": "document_idle"
     }
   ],

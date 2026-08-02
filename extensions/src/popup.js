@@ -157,7 +157,7 @@ function setButtonState(enabled, text = 'Extract Conversation') {
  */
 function isSupportedSite(url) {
   if (!url) return false;
-  return url.includes('gemini.google.com') || url.includes('claude.ai') || url.includes('chatgpt.com');
+  return url.includes('gemini.google.com') || url.includes('claude.ai') || url.includes('chatgpt.com') || url.includes('recorder.google.com');
 }
 
 /**
@@ -168,6 +168,7 @@ function isSupportedSite(url) {
 function getSitePrefix(url) {
   if (url && url.includes('claude.ai')) return 'claude';
   if (url && url.includes('chatgpt.com')) return 'chatgpt';
+  if (url && url.includes('recorder.google.com')) return 'recorder';
   return 'gemini';
 }
 
@@ -288,6 +289,7 @@ const RECEIVING_END_ERROR = /Receiving end does not exist|Could not establish co
 function scriptsForSite(site) {
   if (site === 'claude') return ['src/selectors-claude.js', 'src/content.js'];
   if (site === 'chatgpt') return ['src/selectors-chatgpt.js', 'src/content.js'];
+  if (site === 'recorder') return ['src/recorder.js'];
   return ['src/selectors.js', 'src/content.js']; // gemini (default)
 }
 
@@ -359,7 +361,7 @@ async function handleExtract() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab || !tab.url || !isSupportedSite(tab.url)) {
-      setStatus('Please open a Gemini, Claude, or ChatGPT conversation first.', 'error');
+      setStatus('Please open a Gemini, Claude, ChatGPT, or Recorder page first.', 'error');
       setButtonState(true);
       hideProgress();
       return;
@@ -456,7 +458,7 @@ if (extractBtn) {
   // page, disable the button and skip the restore entirely.
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (!tab || !tab.url || !isSupportedSite(tab.url)) {
-      setStatus('Open a Gemini, Claude, or ChatGPT conversation to extract.', 'warning');
+      setStatus('Open a Gemini, Claude, ChatGPT, or Recorder page to extract.', 'warning');
       setButtonState(false);
       return;
     }

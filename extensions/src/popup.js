@@ -462,7 +462,22 @@ if (extractBtn) {
       setButtonState(false);
       return;
     }
-    restoreLastResult(getSitePrefix(tab.url));
+    
+    // Custom UX for Recorder
+    if (tab.url.includes('recorder.google.com')) {
+      const downloadAllBtn = document.getElementById('downloadAllBtn');
+      if (downloadAllBtn) {
+        downloadAllBtn.style.display = 'none'; // Not needed for recorder
+      }
+      const descText = document.querySelector('p');
+      if (descText) {
+        descText.textContent = 'Downloads all audio recordings on this page.';
+      }
+      document.getElementById('extractBtn').textContent = 'Extract Recordings';
+      setStatus('Ready to extract recordings.', 'info');
+    } else {
+      restoreLastResult(getSitePrefix(tab.url));
+    }
   });
 }
 

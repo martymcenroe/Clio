@@ -1,6 +1,6 @@
 /**
  * Content script for recorder.google.com
- * Injects a control panel to automate bulk downloading of recordings.
+ * Automates bulk downloading of recordings.
  */
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -19,112 +19,127 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
       },
       images: [],
-      warnings: ["Check the page for the Clio Recorder Bulk Download panel."]
+      warnings: []
     });
     
-    injectControlPanel();
+    // Automatically start the process without needing a second click
+    startAutomaticExtraction();
     return true;
   }
 });
 
-function injectControlPanel() {
-  if (document.getElementById('clio-recorder-panel')) return;
+let statusBanner = null;
 
-  const panel = document.createElement('div');
-  panel.id = 'clio-recorder-panel';
-  panel.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 300px;
-    background: #1e1e1e;
-    color: #fff;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 16px;
-    z-index: 999999;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    font-family: system-ui, -apple-system, sans-serif;
-  `;
-
-  panel.innerHTML = `
-    <h3 style="margin: 0 0 12px; font-size: 16px; border-bottom: 1px solid #444; padding-bottom: 8px;">Clio Bulk Downloader</h3>
-    <div id="clio-recorder-status" style="font-size: 13px; margin-bottom: 12px; color: #aaa;">
-      Ready. Scroll down to load all recordings, then click Start.
-    </div>
-    <button id="clio-recorder-start" style="
-      width: 100%; padding: 8px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;
-    ">Start Bulk Download</button>
-    <button id="clio-recorder-close" style="
-      width: 100%; padding: 8px; background: #444; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 8px;
-    ">Close Panel</button>
-  `;
-
-  document.body.appendChild(panel);
-
-  document.getElementById('clio-recorder-close').addEventListener('click', () => {
-    panel.remove();
-  });
-
-  document.getElementById('clio-recorder-start').addEventListener('click', async () => {
-    const btn = document.getElementById('clio-recorder-start');
-    const status = document.getElementById('clio-recorder-status');
-    btn.disabled = true;
-    btn.style.background = '#555';
-    
-    try {
-      await runBulkDownload(status);
-    } catch (e) {
-      status.textContent = 'Error: ' + e.message;
-    }
-    
-    btn.disabled = false;
-    btn.style.background = '#007bff';
-  });
+function showStatus(text) {
+  if (!statusBanner) {
+    statusBanner = document.createElement('div');
+    statusBanner.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 300px;
+      background: #1e1e1e;
+      color: #fff;
+      border: 1px solid #007bff;
+      border-radius: 8px;
+      padding: 16px;
+      z-index: 999999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+    `;
+    document.body.appendChild(statusBanner);
+  }
+  statusBanner.innerHTML = `<strong>Clio Bulk Downloader</strong><br/><br/>${text}`;
 }
 
-async function runBulkDownload(statusEl) {
-  statusEl.textContent = 'Scanning for recordings...';
+async function autoScrollToBottom() {
+  showStatus('Scrolling to load all older recordings...');
+  let lastHeight = 0;
+  let attempts = 0;
   
-  // Strategy: Google Recorder list items usually have role="row" or specific class names.
-  // We can look for divs that have an aria-label containing "Duration" or similar.
-  // Alternatively, just finding all list items by looking at the structure.
+  while (attempts < 5) {
+    // Scroll the main content area. Google Recorder might have a specific scroll container.
+    // We try to scroll document.scrollingElement, document.body, or look for a scrollable div.
+    const scrollContainers = [
+      document.scrollingElement,
+      document.body,
+      ...Array.from(document.querySelectorAll('div')).filter(div => {
+        const style = window.getComputedStyle(div);
+        return style.overflowY === 'auto' || style.overflowY === 'scroll';
+      })
+    ];
+
+    let scrolled = false;
+    for (const container of scrollContainers) {
+      if (container && container.scrollHeight > container.clientHeight) {
+        container.scrollTo(0, container.scrollHeight);
+        scrolled = true;
+      }
+    }
+
+    if (!scrolled) {
+      window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    await new Promise(r => setTimeout(r, 1500)); // wait for network load
+    
+    const newHeight = document.body.scrollHeight;
+    if (newHeight === lastHeight) {
+      attempts++;
+    } else {
+      attempts = 0;
+      lastHeight = newHeight;
+    }
+  }
+}
+
+async function startAutomaticExtraction() {
+  if (document.getElementById('clio-recorder-processing')) return;
+  document.body.insertAdjacentHTML('beforeend', '<div id="clio-recorder-processing"></div>');
   
-  // Let's use a broad selector that targets interactive elements in the main list.
-  // Often they are role="row" or elements inside a main content area.
+  try {
+    // 1. Auto-scroll first
+    await autoScrollToBottom();
+    
+    // 2. Extract
+    await runBulkDownload();
+    
+    showStatus('✅ Finished processing all recordings! You may close this tab.');
+    setTimeout(() => {
+      if (statusBanner) statusBanner.remove();
+    }, 10000);
+  } catch (e) {
+    showStatus('❌ Error: ' + e.message);
+  }
+}
+
+async function runBulkDownload() {
+  showStatus('Scanning for recordings...');
+  
   const rows = Array.from(document.querySelectorAll('div[role="row"]'));
   
   if (rows.length === 0) {
-    statusEl.textContent = 'No recordings found. Make sure you are on the list view.';
-    return;
+    throw new Error('No recordings found. Make sure you are on the list view.');
   }
-
-  statusEl.textContent = \`Found \${rows.length} recordings. Starting download loop...\`;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    statusEl.textContent = \`Processing \${i + 1} of \${rows.length}...\`;
+    showStatus(`Downloading ${i + 1} of ${rows.length}...`);
     
-    // Click the row to open the detail view
     row.click();
-    
-    // Wait for the detail view to load
     await new Promise(r => setTimeout(r, 1500));
     
-    // Now we need to find the "More options" button (three dots)
-    // It usually has an aria-label="More options" or similar
     const moreBtn = document.querySelector('button[aria-label="More options"], button[aria-label="Options"]');
     if (moreBtn) {
       moreBtn.click();
-      await new Promise(r => setTimeout(r, 500)); // Wait for menu to open
+      await new Promise(r => setTimeout(r, 500));
       
-      // Look for "Download audio" menu item
       const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"], li[role="menuitem"]'));
       const downloadAudioBtn = menuItems.find(el => el.textContent.toLowerCase().includes('download audio'));
       
       if (downloadAudioBtn) {
         downloadAudioBtn.click();
-        statusEl.textContent = \`Triggered download \${i + 1}...\`;
       } else {
         console.warn('Could not find Download Audio button for item', i);
       }
@@ -132,21 +147,15 @@ async function runBulkDownload(statusEl) {
       console.warn('Could not find More Options button for item', i);
     }
     
-    // Wait for download to trigger, then go back
     await new Promise(r => setTimeout(r, 1000));
     
-    // Find the back button to return to the list
     const backBtn = document.querySelector('button[aria-label="Back"], button[aria-label="Navigate up"]');
     if (backBtn) {
       backBtn.click();
     } else {
-      // Fallback: press Escape
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     }
     
-    // Wait for list to reload
     await new Promise(r => setTimeout(r, 1000));
   }
-  
-  statusEl.textContent = \`Finished processing \${rows.length} recordings!\`;
 }

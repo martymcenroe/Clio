@@ -3,7 +3,7 @@
 ## FIRST: Read Core Rules
 
 **Before doing any work, read the AgentOS core rules:**
-`C:\Users\mcwiz\Projects\AgentOS\CLAUDE.md`
+`C:\Users\mcwiz\Projects\AssemblyZero\CLAUDE.md`
 
 That file contains core rules that apply to ALL projects and ALL agents:
 - Bash command rules (no &&, |, ;)

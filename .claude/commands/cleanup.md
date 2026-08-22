@@ -104,7 +104,7 @@ Run these commands simultaneously in a single message with multiple Bash tool ca
 **Full mode adds (10 parallel calls total):**
 - git -C /c/Users/mcwiz/Projects/Clio branch -vv
 - git -C /c/Users/mcwiz/Projects/Clio branch -r
-- poetry run --directory /c/Users/mcwiz/Projects/AgentOS python /c/Users/mcwiz/Projects/AgentOS/tools/agentos-permissions.py --quick-check --project Clio
+- poetry run --directory /c/Users/mcwiz/Projects/AssemblyZero python /c/Users/mcwiz/Projects/AssemblyZero/tools/agentos-permissions.py --quick-check --project Clio
 
 ## Phase 2: Conditional Fixes
 

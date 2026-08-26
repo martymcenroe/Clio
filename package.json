@@ -13,6 +13,7 @@
     "test:e2e": "npm run build:viewer && playwright test",
     "test:e2e:headed": "npm run build:viewer && playwright test --headed",
     "test:e2e:dom-discovery": "npm run build:viewer && playwright test dom-discovery --debug",
+    "test:e2e:notebook-recon": "playwright test notebook-recon --project=chromium --debug",
     "test:all": "npm run build:viewer && npm run test && npm run test:e2e"
   },
   "devDependencies": {

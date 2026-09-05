@@ -374,21 +374,62 @@ function findScrollContainer() {
  * data-message-id. Values are detached deep clones, which the per-turn
  * extractors read exactly like live nodes.
  *
- * @type {Map<string, {el: Element, turn: number, seq: number}>}
+ * @type {Map<string, {el: Element, seq: number, fromBottom: number|null,
+ *                     measuredSettled: boolean}>}
  */
 let MESSAGE_CACHE = new Map();
 let MESSAGE_CACHE_SEQ = 0;
 
-/** Turn index from the wrapper's data-testid ("conversation-turn-7" -> 7). */
-function turnIndexOf(el) {
-  const wrapper = el.closest && el.closest('[data-testid^="conversation-turn"]');
-  if (!wrapper) return Number.MAX_SAFE_INTEGER;
-  const m = (wrapper.getAttribute('data-testid') || '').match(/(\d+)\s*$/);
-  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+/**
+ * The scroller the ordering key is measured against, fixed for one scroll pass.
+ * findScrollContainer() walks the whole document, which is far too expensive to
+ * repeat inside a MutationObserver, so it is resolved once and cached.
+ * @type {Element|null}
+ */
+let MESSAGE_SCROLLER = null;
+
+/** Fix the scroller for this scroll pass (and let tests supply a fake). */
+function setMessageScroller(el) {
+  MESSAGE_SCROLLER = el || null;
 }
 
 /**
- * Snapshot every message currently rendered that we have not already kept.
+ * Distance from the BOTTOM of the scroller to the top of this element.
+ *
+ * This is the ordering key, and it is the only one that survives lazy loading
+ * (#264). The obvious candidates both fail:
+ *
+ *   data-testid="conversation-turn-N"  is provisional while the conversation
+ *       loads — observed taking values 1..14 mid-scroll and 1..288 once
+ *       settled, so a message captured early carries a stale small number and
+ *       the transcript sorts into a handful of buckets.
+ *   DOM position  describes one window; virtualization evicts the rest.
+ *
+ * Distance from the bottom is invariant because prepending older content above
+ * increases scrollHeight by D and pushes every existing element's offset down
+ * by the same D, so (scrollHeight - offsetTop) does not move. Larger = further
+ * from the end = earlier in the conversation.
+ *
+ * @param {Element} el
+ * @param {Element|null} scroller
+ * @returns {number|null} null when it cannot be measured honestly
+ */
+function measureFromBottom(el, scroller) {
+  if (!scroller || !el || typeof el.getBoundingClientRect !== 'function') return null;
+  // A container that does not actually scroll gives a meaningless key.
+  if (!(scroller.scrollHeight > scroller.clientHeight)) return null;
+  const r = el.getBoundingClientRect();
+  // Height 0 means the node is in the DOM but not yet laid out — a measurement
+  // here is junk, and junk that outranks "unknown" is worse than no key at all.
+  if (!r || !r.height) return null;
+  const sr = scroller.getBoundingClientRect();
+  const offsetTop = r.top - sr.top + scroller.scrollTop;
+  return scroller.scrollHeight - offsetTop;
+}
+
+/**
+ * Snapshot every message currently rendered that we have not already kept, and
+ * measure where it sits.
  * Cheap and idempotent — safe to call on every scroll tick and every mutation.
  * @returns {number} how many new messages were captured
  */
@@ -396,15 +437,46 @@ function captureRenderedMessages() {
   let added = 0;
   for (const el of document.querySelectorAll(SELECTORS.allMessages)) {
     const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
-    if (!id || MESSAGE_CACHE.has(id)) continue;
+    if (!id) continue;
+    captureMessageArtifacts(el, id);
+    if (MESSAGE_CACHE.has(id)) continue;
     MESSAGE_CACHE.set(id, {
       el: el.cloneNode(true),
-      turn: turnIndexOf(el),
-      seq: MESSAGE_CACHE_SEQ++
+      seq: MESSAGE_CACHE_SEQ++,
+      fromBottom: measureFromBottom(el, MESSAGE_SCROLLER),
+      measuredSettled: false
     });
     added++;
   }
   return added;
+}
+
+/**
+ * Re-measure everything currently rendered, from a settled DOM.
+ *
+ * captureRenderedMessages() measures at first sight, and first sight is a
+ * MutationObserver callback — which fires DURING a framework update, when a
+ * node can be in the DOM but not yet in its final position. One bad
+ * measurement is permanent and silently corrupts the order, reporting success
+ * the whole way. So the driver calls this between scroll rounds, when layout
+ * has settled, and the settled value wins.
+ *
+ * @returns {number} how many cached messages were re-measured
+ */
+function remeasureRenderedMessages() {
+  if (!MESSAGE_SCROLLER) return 0;
+  let n = 0;
+  for (const el of document.querySelectorAll(SELECTORS.allMessages)) {
+    const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
+    const entry = id && MESSAGE_CACHE.get(id);
+    if (!entry) continue;
+    const measured = measureFromBottom(el, MESSAGE_SCROLLER);
+    if (measured === null) continue;
+    entry.fromBottom = measured;
+    entry.measuredSettled = true;
+    n++;
+  }
+  return n;
 }
 
 /**
@@ -417,15 +489,172 @@ function getCapturedMessageEls() {
   if (MESSAGE_CACHE.size === 0) {
     return Array.from(document.querySelectorAll(SELECTORS.allMessages));
   }
-  return Array.from(MESSAGE_CACHE.values())
-    .sort((a, b) => (a.turn - b.turn) || (a.seq - b.seq))
-    .map(entry => entry.el);
+  const entries = Array.from(MESSAGE_CACHE.values());
+  const measured = entries.filter(e => typeof e.fromBottom === 'number');
+  // Anything that could never be measured is appended rather than dropped — a
+  // capture that cannot be ordered must still not go missing — and counted, so
+  // an ordering failure cannot masquerade as success. Capture order is the only
+  // thing left to sort them by; with no scroll pass at all that is DOM order,
+  // which is correct.
+  const unmeasured = entries.filter(e => typeof e.fromBottom !== 'number');
+  measured.sort((a, b) => (b.fromBottom - a.fromBottom) || (a.seq - b.seq));
+  unmeasured.sort((a, b) => a.seq - b.seq);
+  return measured.concat(unmeasured).map(e => e.el);
+}
+
+/**
+ * How trustworthy the reconstructed order is, for the export's metadata.
+ * @returns {{captured: number, withOrderKey: number, withoutOrderKey: number,
+ *            measuredOnSettledDom: number, neverMeasuredOnSettledDom: number}}
+ */
+function getCaptureOrderStats() {
+  let withOrderKey = 0;
+  let measuredOnSettledDom = 0;
+  for (const entry of MESSAGE_CACHE.values()) {
+    if (typeof entry.fromBottom === 'number') withOrderKey++;
+    if (entry.measuredSettled) measuredOnSettledDom++;
+  }
+  return {
+    captured: MESSAGE_CACHE.size,
+    withOrderKey,
+    withoutOrderKey: MESSAGE_CACHE.size - withOrderKey,
+    measuredOnSettledDom,
+    neverMeasuredOnSettledDom: MESSAGE_CACHE.size - measuredOnSettledDom
+  };
 }
 
 /** Drop the cache (called at the start of each scroll, and by tests). */
 function resetMessageCache() {
   MESSAGE_CACHE = new Map();
   MESSAGE_CACHE_SEQ = 0;
+  MESSAGE_ARTIFACTS = new Map();
+  MESSAGE_SCROLLER = null;
+}
+
+// ============================================================================
+// Attached-file capture during scroll (#262)
+// ============================================================================
+
+/**
+ * Files attached to a message, accumulated across the scroll.
+ *
+ * Keyed by message id; each entry holds two maps deduped by their own natural
+ * key, because the same message is swept many times.
+ *
+ * @type {Map<string, {files: Map<string, Object>, downloads: Map<string, Object>}>}
+ */
+let MESSAGE_ARTIFACTS = new Map();
+
+/** Download labels that are site chrome rather than a conversation artifact. */
+const DOWNLOAD_LABEL_NOISE = /^download\s+(apps?|the\s+app)$/i;
+
+/**
+ * Text lines of an element, without depending on innerText.
+ *
+ * innerText is what a browser gives for "the rendered lines", but jsdom does
+ * not implement it, so a fixture test of a two-line file card would silently
+ * read one run-together string. Falling back to leaf nodes gives the same
+ * lines in both.
+ *
+ * @param {Element} el
+ * @returns {string[]}
+ */
+function elementTextLines(el) {
+  if (el && typeof el.innerText === 'string' && el.innerText.trim()) {
+    return el.innerText.split('\n').map(s => s.trim()).filter(Boolean);
+  }
+  const leaves = Array.from(el.querySelectorAll('*'))
+    .filter(e => e.children.length === 0 && (e.textContent || '').trim())
+    .map(e => e.textContent.trim());
+  if (leaves.length) return leaves;
+  const text = (el.textContent || '').trim();
+  return text ? [text] : [];
+}
+
+/**
+ * Record every file affordance visible on this message right now.
+ *
+ * Timing is the whole point (#262). A pass that runs after the scroll sees only
+ * the oldest window, because virtualization has evicted everything else — which
+ * is why a conversation carrying artifacts throughout produced zero. This runs
+ * on every sweep, from LIVE nodes rather than the cached clone, because a
+ * download control can render after the message is first seen.
+ *
+ * Two classes, and they are not equivalent:
+ *
+ *   uploaded    [data-testid="library-file-icon"] cards, all in user messages.
+ *               Probed on the live page: no button, no link, no clickable
+ *               ancestor, and the icon sits under a `pointer-events-none`
+ *               wrapper. The name and kind are recoverable; the bytes are not
+ *               reachable from the transcript at all.
+ *   generated   real "Download <name>" controls on assistant output, which
+ *               exist only while their message is rendered.
+ *
+ * @param {Element} el - the LIVE message element
+ * @param {string} id  - its data-message-id
+ */
+function captureMessageArtifacts(el, id) {
+  if (!SELECTORS.uploadedFileCard && !SELECTORS.downloadAffordance) return;
+
+  let entry = MESSAGE_ARTIFACTS.get(id);
+  if (!entry) {
+    entry = { files: new Map(), downloads: new Map() };
+    MESSAGE_ARTIFACTS.set(id, entry);
+  }
+
+  if (SELECTORS.uploadedFileCard) {
+    for (const icon of el.querySelectorAll(SELECTORS.uploadedFileCard)) {
+      // Walk up to the card: the icon itself carries no text.
+      let card = icon;
+      for (let i = 0; i < 6 && card.parentElement && card.parentElement !== el; i++) {
+        card = card.parentElement;
+        if ((card.textContent || '').trim().length > 3) break;
+      }
+      const lines = elementTextLines(card);
+      const name = lines[0];
+      if (!name || entry.files.has(name)) continue;
+      entry.files.set(name, {
+        type: 'file',
+        name,
+        kind: lines[1] || null,
+        // Stated, not implied: these cards expose no way to reach the bytes.
+        downloadable: false,
+        filename: null
+      });
+    }
+  }
+
+  if (SELECTORS.downloadAffordance) {
+    for (const control of el.querySelectorAll(SELECTORS.downloadAffordance)) {
+      const label = (control.getAttribute('aria-label') ||
+                     control.textContent || '').trim();
+      if (!/^download\b/i.test(label)) continue;
+      if (DOWNLOAD_LABEL_NOISE.test(label)) continue;
+      if (entry.downloads.has(label)) continue;
+      // "Download SAM-Codex-Recon-Runtime-Promote-v1.0.2.py" carries the name;
+      // the generic "Download file" does not, and must not invent one.
+      const rest = label.replace(/^download\s+/i, '').trim();
+      const looksLikeFilename = /^[^\s]+\.[A-Za-z0-9]{1,10}$/.test(rest);
+      entry.downloads.set(label, {
+        type: 'artifact',
+        name: looksLikeFilename ? rest : null,
+        label,
+        downloadable: true,
+        filename: null
+      });
+    }
+  }
+}
+
+/**
+ * Everything captured for one message, as attachment records.
+ * @param {string} id
+ * @returns {Array<Object>}
+ */
+function getMessageArtifacts(id) {
+  const entry = MESSAGE_ARTIFACTS.get(id);
+  if (!entry) return [];
+  return [...entry.files.values(), ...entry.downloads.values()];
 }
 
 /**
@@ -475,6 +704,10 @@ async function scrollToLoadAllMessages(onProgress) {
   // The list is virtualized: messages loaded early in the scroll are evicted
   // before the scroll ends, so they must be kept as they render (#256).
   resetMessageCache();
+  // Fix the scroller BEFORE the first sweep: it is what the ordering key is
+  // measured against, and the opening window would otherwise be captured with
+  // no key at all (#264).
+  setMessageScroller(scrollContainer);
   captureRenderedMessages();
 
   let mutationDetected = false;
@@ -562,6 +795,11 @@ async function scrollToLoadAllMessages(onProgress) {
       const loadingAfter = !!document.querySelector(SELECTORS.loadingIndicator);
       const afterCount = countMessages();
 
+      // Layout has settled for this round: overwrite any ordering key taken
+      // inside the observer, mid-framework-update (#264).
+      captureRenderedMessages();
+      remeasureRenderedMessages();
+
       // Check current state
       const currentScrollTop = scrollContainer.scrollTop;
       const atTop = currentScrollTop === 0;
@@ -589,6 +827,7 @@ async function scrollToLoadAllMessages(onProgress) {
         // If we're at top/stuck AND no mutations detected, we're done
         if (!mutationDetected && consecutiveNoMovement >= 2) {
           captureRenderedMessages();
+          remeasureRenderedMessages();
           const finalCount = Math.max(countMessages(), MESSAGE_CACHE.size);
           logScroll('COMPLETE', { finalMessages: finalCount, totalScrolls: scrollAttempts });
           reportProgress(`Loaded ${finalCount} messages`);
@@ -623,6 +862,7 @@ async function scrollToLoadAllMessages(onProgress) {
 
   // Hit max attempts - return what we have
   captureRenderedMessages();
+  remeasureRenderedMessages();
   const finalCount = Math.max(countMessages(), MESSAGE_CACHE.size);
   return {
     success: true,
@@ -684,6 +924,226 @@ function extractConversationId() {
 // Turn Extraction
 // ============================================================================
 
+// Words that appear in a code block's header alongside (or instead of) the
+// language. A header reading "python  Copy  Edit" must not yield "Copy".
+const CODE_HEADER_NOISE = new Set([
+  'copy', 'copied', 'edit', 'run', 'share', 'download', 'expand', 'collapse',
+  'wrap', 'unwrap', 'preview', 'code', 'copy code', 'ask chatgpt'
+]);
+
+// Spellings of the same language, normalised so an export picks one extension.
+const LANGUAGE_ALIASES = {
+  py: 'python', python3: 'python',
+  js: 'javascript', node: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript',
+  sh: 'bash', shell: 'bash', zsh: 'bash', console: 'bash',
+  ps: 'powershell', ps1: 'powershell', pwsh: 'powershell',
+  yml: 'yaml', md: 'markdown', rb: 'ruby', 'c++': 'cpp', 'c#': 'csharp'
+};
+
+/** Interpreters worth trusting from a shebang line. */
+const SHEBANG_LANGUAGES = {
+  python: 'python', bash: 'bash', sh: 'bash', zsh: 'bash', dash: 'bash',
+  node: 'javascript', deno: 'javascript', ruby: 'ruby', perl: 'perl',
+  pwsh: 'powershell'
+};
+
+/**
+ * The OUTERMOST <pre> around an element.
+ *
+ * `closest('pre')` is not enough, and this is the whole reason #263 survived a
+ * first repair. ChatGPT nests its code blocks:
+ *
+ *   pre.overflow-visible > … > div.cm-editor > div.cm-scroller > pre.cm-content > code
+ *
+ * so `closest('pre')` stops at the INNER CodeMirror pre. Any header sits above
+ * the editor, in the outer pre — outside that scope entirely. Searching the
+ * inner pre for a label can never find one no matter how good the selector is.
+ * Verified on the live page 2026-09-05: 64 of 64 blocks had this shape.
+ *
+ * @param {Element} el
+ * @returns {Element|null}
+ */
+function outermostPre(el) {
+  if (!el || typeof el.closest !== 'function') return null;
+  let outer = el.closest('pre');
+  if (!outer) return null;
+  while (outer.parentElement) {
+    const above = outer.parentElement.closest('pre');
+    if (!above) break;
+    outer = above;
+  }
+  return outer;
+}
+
+/**
+ * Best available language for a code block.
+ *
+ * Tried in descending order of proof:
+ *   1. a `language-*` class or data-language attribute — an explicit statement;
+ *   2. the block's header label, read from the OUTER pre;
+ *   3. the code itself, sniffed, and only where the evidence is unambiguous.
+ *
+ * Step 3 is not a nicety. Probed on the live page over 64 blocks, ChatGPT's
+ * current markup carries no class, no data attribute and no header at all —
+ * there is nothing to read, which is why 540 of 606 blocks came back
+ * unlabelled. Where a label exists it still wins; where none does, the content
+ * is the only remaining evidence.
+ *
+ * @param {Element} code - the <code> (or CodeMirror content) element
+ * @param {Element} pre  - its enclosing <pre>
+ * @returns {string} the language, lowercased and normalised, or '' when unknown
+ */
+function detectCodeLanguage(code, pre) {
+  // Look in the outer block, not the inner CodeMirror pre — see outermostPre.
+  const scope = outermostPre(code) || outermostPre(pre) || pre;
+
+  const fromClass = (el) => {
+    if (!el || !el.classList) return '';
+    for (const cls of el.classList) {
+      const m = cls.match(/^(?:language|lang|highlight)[-_](.+)$/i);
+      if (m && m[1]) return m[1];
+    }
+    return '';
+  };
+  const attr = (el, name) => (el && typeof el.getAttribute === 'function'
+    ? el.getAttribute(name) : null);
+  const firstText = (el, sel) => {
+    const hit = el && el.querySelector && el.querySelector(sel);
+    return hit ? (attr(hit, 'data-language') || hit.textContent) : '';
+  };
+
+  const declared =
+    fromClass(code) ||
+    fromClass(pre) ||
+    fromClass(scope) ||
+    attr(code, 'data-language') ||
+    attr(pre, 'data-language') ||
+    attr(scope, 'data-language') ||
+    firstText(scope, '[data-language]') ||
+    firstText(scope, '.language-label') ||
+    headerLabel(scope) ||
+    '';
+
+  const cleaned = normaliseLanguage(declared);
+  if (cleaned) return cleaned;
+
+  return sniffCodeLanguage(code ? code.textContent : '');
+}
+
+/**
+ * Reduce a raw label to a language, or '' if it is not one.
+ * @param {string} raw
+ * @returns {string}
+ */
+function normaliseLanguage(raw) {
+  const cleaned = String(raw || '').trim().toLowerCase();
+  if (!cleaned || CODE_HEADER_NOISE.has(cleaned)) return '';
+  // A label is one token; anything with whitespace in it is header prose.
+  if (/\s/.test(cleaned)) return '';
+  if (!/^[a-z0-9+#._-]{1,20}$/.test(cleaned)) return '';
+  return LANGUAGE_ALIASES[cleaned] || cleaned;
+}
+
+/**
+ * Pull a language out of a code block's header strip.
+ *
+ * A header is presentational: it carries the language plus button captions
+ * ("bash Copy Edit"), and sometimes carries no language at all, only UI prose
+ * ("Always show details" on ChatGPT's analysis blocks). Prefer the first leaf
+ * node that reduces to a single non-control token — the label is its own
+ * element, and reading the whole header's text is what let "Copy" through.
+ *
+ * @param {Element} pre
+ * @returns {string}
+ */
+function headerLabel(pre) {
+  if (!pre || typeof pre.querySelector !== 'function') return '';
+  const header = pre.querySelector('[class*="sticky"], header, [class*="header"]');
+  if (!header) return '';
+
+  // The label node first: a leaf whose whole text is one non-control word.
+  const leaves = Array.from(header.querySelectorAll('*'))
+    .filter(el => el.children.length === 0 && (el.textContent || '').trim());
+  for (const leaf of leaves) {
+    const token = normaliseLanguage(leaf.textContent);
+    if (token) return token;
+  }
+
+  // Otherwise the header as a whole, but only if one word survives the noise
+  // filter. Two or more leftover words is prose, and taking the first yields
+  // nonsense like "always".
+  const tokens = (header.textContent || '')
+    .trim()
+    .split(/[\s\n\r\t]+/)
+    .map(t => t.trim().toLowerCase())
+    .filter(t => t && !CODE_HEADER_NOISE.has(t));
+  return tokens.length === 1 ? normaliseLanguage(tokens[0]) : '';
+}
+
+/**
+ * Infer a language from the code itself.
+ *
+ * Deliberately narrow. A wrong label is worse than none: it picks a wrong file
+ * extension and asserts something untrue about the content, and nothing
+ * downstream can tell a guess from a read label. So this only fires on
+ * evidence that is close to proof — a shebang, a body that actually parses as
+ * JSON, unified-diff markers — or on structural markers strong enough that a
+ * false positive would need code deliberately written to look like another
+ * language. Anything ambiguous returns '' and stays unlabelled.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function sniffCodeLanguage(text) {
+  const body = String(text || '');
+  const lines = body.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return '';
+  const first = lines[0];
+
+  // A shebang states the interpreter outright.
+  const shebang = first.match(/^#!\s*(?:\S*\/env\s+)?(\S+)/);
+  if (shebang) {
+    const interp = shebang[1].split(/[\\/]/).pop().replace(/[0-9.]+$/, '').toLowerCase();
+    if (SHEBANG_LANGUAGES[interp]) return SHEBANG_LANGUAGES[interp];
+  }
+
+  // Parsing is proof, not a guess. Guarded by a cheap shape check so a large
+  // non-JSON block is not handed to the parser.
+  if (/^[{[]/.test(first) && /[}\]]$/.test(lines[lines.length - 1])) {
+    try {
+      JSON.parse(body);
+      return 'json';
+    } catch (e) { /* not JSON — fall through */ }
+  }
+
+  if (/^(diff --git |index [0-9a-f]{7,}|--- |\+\+\+ )/.test(first) ||
+      lines.some(l => /^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/.test(l))) {
+    return 'diff';
+  }
+
+  if (/^<(!doctype\s+html|html[\s>])/i.test(first)) return 'html';
+
+  if (/^\s*select\b[\s\S]*\bfrom\b/i.test(body) &&
+      /;\s*$/.test(body.trim())) {
+    return 'sql';
+  }
+
+  // Structural markers, each of which would be a syntax error in the languages
+  // it is being distinguished from.
+  if (lines.some(l => /^(def|class)\s+[A-Za-z_]\w*\s*[(:]/.test(l)) ||
+      lines.some(l => /^from\s+[\w.]+\s+import\s+/.test(l)) ||
+      lines.some(l => /^import\s+[\w.]+$/.test(l) && !/;/.test(l))) {
+    return 'python';
+  }
+
+  // PowerShell: `param(` opening a script, or two or more Verb-Noun cmdlets.
+  const cmdlets = (body.match(/\b(?:Get|Set|New|Remove|Write|Test|Start|Stop|Add|Select|Where|ForEach|Invoke|Import|Export|Register|Unregister|Copy|Move|Join|Split|Convert|Out)-[A-Z][A-Za-z]+\b/g) || []);
+  if (/^param\s*\(/im.test(body) || cmdlets.length >= 2) return 'powershell';
+
+  return '';
+}
+
 /**
  * Extract text content from an element, preserving code blocks.
  * @param {Element} element
@@ -703,14 +1163,17 @@ function extractTextContent(element) {
   // Process code blocks - preserve with markdown formatting
   const codeBlocks = clone.querySelectorAll(SELECTORS.codeBlock);
   codeBlocks.forEach(code => {
-    const pre = code.closest('pre') || code;
-    // Try to get language from data attribute on code element first, then parent
-    const lang = code.getAttribute('data-language') ||
-                 code.dataset?.language ||
-                 pre.getAttribute('data-language') ||
-                 pre.querySelector('[data-language]')?.getAttribute('data-language') ||
-                 pre.querySelector('.language-label')?.textContent ||
-                 '';
+    // Replace the OUTER block, not the inner CodeMirror pre. Replacing the
+    // inner one leaves the outer block's chrome behind, so the "Copy" button's
+    // caption lands in the extracted text next to the fence.
+    //
+    // A block matches the selector twice (once as pre.cm-content, once as the
+    // <code> inside it). The first replacement detaches the second, and
+    // replaceWith on a node with no parent is a no-op, so the fence is still
+    // emitted exactly once — asserted in tests/code-language.test.js rather
+    // than assumed.
+    const pre = outermostPre(code) || code;
+    const lang = detectCodeLanguage(code, pre);
     const codeText = code.textContent;
     const replacement = document.createTextNode(`\n\`\`\`${lang}\n${codeText}\n\`\`\`\n`);
     pre.replaceWith(replacement);
@@ -1067,6 +1530,21 @@ async function extractTurnsChatGPT() {
       turns.push(extractUserTurn(element, turnIndex++));
     } else if (turnType === 'assistant') {
       turns.push(extractAssistantTurnChatGPT(messageEl, turnIndex++));
+    } else {
+      continue;
+    }
+
+    // Files seen on this message during the scroll (#262). They are merged
+    // here rather than inside the per-role extractors because a user turn is
+    // extracted from its .whitespace-pre-wrap content element, and the file
+    // cards sit outside it — on the message element, which only this loop
+    // still holds.
+    const messageId = messageEl.getAttribute('data-message-id') ||
+                      messageEl.getAttribute('data-turn-id');
+    const files = messageId ? getMessageArtifacts(messageId) : [];
+    if (files.length) {
+      const turn = turns[turns.length - 1];
+      turn.attachments = (turn.attachments || []).concat(files);
     }
 
     if (i > 0 && i % 20 === 0) {
@@ -1380,6 +1858,14 @@ async function extractConversation() {
     // Phase 5: Extract images (Fail Open)
     const { images, errors } = await extractImages(turns);
 
+    // How the transcript was ordered, and how well (#264). A scrambled export
+    // looks complete and passes a size check, so the confidence in the order
+    // travels with the data rather than being asserted in a log line nobody
+    // reads. A non-zero withoutOrderKey is the tell that ordering degraded.
+    const orderStats = getCaptureOrderStats();
+    const fileAttachments = turns.reduce((n, t) => n +
+      (t.attachments || []).filter(a => a.type === 'file' || a.type === 'artifact').length, 0);
+
     // Collect warnings
     const warnings = [];
     if (scrollResult.warning) {
@@ -1387,6 +1873,10 @@ async function extractConversation() {
     }
     if (errors.length > 0) {
       warnings.push(`${errors.length} image(s) failed to download`);
+    }
+    if (orderStats.withoutOrderKey > 0) {
+      warnings.push(
+        `${orderStats.withoutOrderKey} message(s) could not be positioned and were appended in capture order`);
     }
 
     // Build result
@@ -1398,11 +1888,20 @@ async function extractConversation() {
         url,
         messageCount: turns.length,
         imageCount: images.length,
+        fileCount: fileAttachments,
         extractionErrors: errors,
-        partialSuccess: errors.length > 0 || !!scrollResult.warning,
+        partialSuccess: errors.length > 0 || !!scrollResult.warning ||
+                        orderStats.withoutOrderKey > 0,
         scrollInfo: {
           messagesLoaded: scrollResult.messagesLoaded,
           scrollAttempts: scrollResult.scrollAttempts
+        },
+        orderInfo: {
+          orderedBy: 'distance from the scroller bottom, measured at capture time',
+          capturedMessages: orderStats.captured,
+          withOrderKey: orderStats.withOrderKey,
+          withoutOrderKey: orderStats.withoutOrderKey,
+          neverMeasuredOnSettledDom: orderStats.neverMeasuredOnSettledDom
         }
       },
       messages: turns
@@ -1470,6 +1969,9 @@ if (typeof module !== 'undefined' && module.exports) {
     extractTitle,
     extractConversationId,
     extractTextContent,
+    detectCodeLanguage,
+    sniffCodeLanguage,
+    outermostPre,
     extractUserTurn,
     extractAssistantTurn,
     extractAssistantTurnClaude,
@@ -1492,9 +1994,17 @@ if (typeof module !== 'undefined' && module.exports) {
     findScrollContainer,
     waitForLoadingComplete,
     scrollToLoadAllMessages,
-    // Virtualized-list capture (#256)
+    // Virtualized-list capture (#256) and bottom-anchored ordering (#264)
     captureRenderedMessages,
+    remeasureRenderedMessages,
     getCapturedMessageEls,
-    resetMessageCache
+    getCaptureOrderStats,
+    resetMessageCache,
+    setMessageScroller,
+    measureFromBottom,
+    // Attached-file capture during the scroll (#262)
+    captureMessageArtifacts,
+    getMessageArtifacts,
+    elementTextLines
   };
 }

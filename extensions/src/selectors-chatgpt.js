@@ -23,8 +23,18 @@ const SELECTORS = {
   // Session title — ChatGPT uses document.title directly (no suffix)
   sessionTitle: null,
 
-  // Scroll container
-  scrollContainer: 'main [class*="overflow-y-auto"], main',
+  // Scroll container.
+  //
+  // VERIFIED against the live page 2026-09-05 (#255): the element that actually
+  // scrolls is `div.@w-sm/main:[...].group/scroll-root`, an ANCESTOR of <main>
+  // two levels up — not a descendant. <main> is tall (4261px inside an 898px
+  // box) but has overflow:visible, so assigning scrollTop to it does nothing,
+  // and conversations exported with only the messages already on screen.
+  //
+  // `scroll-root` is listed first so it is chosen directly. The others are kept
+  // as fallbacks for other builds; findScrollContainer() walks this list in
+  // order and rejects any entry that does not genuinely scroll.
+  scrollContainer: '[class*="scroll-root"], main [class*="overflow-y-auto"], main',
 
   // Message elements — current ChatGPT renders each turn as a div
   // bearing `data-message-author-role="user"` or `="assistant"`.

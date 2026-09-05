@@ -279,34 +279,153 @@ function countMessages() {
  * Find the scrollable container for the conversation.
  * @returns {Element|null} - The scroll container element
  */
+/**
+ * Does this element actually scroll?
+ *
+ * `scrollHeight > clientHeight` alone is NOT enough: it is true of any element
+ * taller than its box, scrolling or not. ChatGPT's <main> measures 4261px in an
+ * 898px box but has overflow:visible, so assigning scrollTop is a no-op — which
+ * is exactly how conversations exported with only the visible messages (#255).
+ *
+ * @param {Element} el
+ * @returns {boolean}
+ */
+function isRealScroller(el) {
+  if (!el) return false;
+  if (el === document.documentElement || el === document.body) {
+    return el.scrollHeight > el.clientHeight;
+  }
+  const overflowY = window.getComputedStyle(el).overflowY;
+  return (overflowY === 'auto' || overflowY === 'scroll') &&
+         el.scrollHeight > el.clientHeight;
+}
+
+/**
+ * Find the scrollable container for the conversation.
+ * @returns {Element|null} - The scroll container element
+ */
 function findScrollContainer() {
-  // Try scroll container selector first
-  const container = document.querySelector(SELECTORS.scrollContainer);
-  if (container && container.scrollHeight > container.clientHeight) {
-    return container;
+  // Selector matches, in SELECTOR order. querySelector() with a selector list
+  // returns the first match in DOCUMENT order, so for a list like
+  // 'main [class*="overflow-y-auto"], main' the ancestor <main> always won and
+  // the intended first choice was dead code (#255). Iterate instead.
+  const matches = SELECTORS.scrollContainer
+    ? Array.from(document.querySelectorAll(SELECTORS.scrollContainer))
+    : [];
+  for (const el of matches) {
+    if (isRealScroller(el)) return el;
   }
 
-  // Fallback: find the first scrollable ancestor of conversation content
   const conversationContainer = document.querySelector(SELECTORS.conversationContainer);
-  if (!conversationContainer) return null;
 
-  let element = conversationContainer;
-  while (element && element !== document.body) {
-    const style = window.getComputedStyle(element);
-    const overflowY = style.overflowY;
-    if ((overflowY === 'auto' || overflowY === 'scroll') &&
-        element.scrollHeight > element.clientHeight) {
-      return element;
+  if (!conversationContainer) {
+    // No conversation on this page. A merely-tall selector match is still
+    // better than nothing (the pre-#255 behaviour); otherwise there is nothing
+    // to scroll and saying so beats handing back <body>.
+    for (const el of matches) {
+      if (el.scrollHeight > el.clientHeight) return el;
     }
-    element = element.parentElement;
+    return null;
   }
 
-  // Last resort: use document.documentElement or body
+  {
+    // Walk UP. On ChatGPT the real scroller is `div.group/scroll-root`, two
+    // levels ABOVE <main> — an ancestor, not a descendant.
+    let element = conversationContainer;
+    while (element && element !== document.body) {
+      if (isRealScroller(element)) return element;
+      element = element.parentElement;
+    }
+
+    // Then DOWN, for layouts that put the scroller inside the conversation
+    // container. Prefer one that actually holds messages.
+    const inside = Array.from(conversationContainer.querySelectorAll('*'))
+      .filter(isRealScroller);
+    const withMessages = inside.filter(el => el.querySelector(SELECTORS.allMessages));
+    if (withMessages.length) return withMessages[0];
+    if (inside.length) return inside[0];
+  }
+
+  // Legacy permissive behaviour, kept as a fallback so Gemini and Claude cannot
+  // regress if a real scroller is not identified above.
+  for (const el of matches) {
+    if (el.scrollHeight > el.clientHeight) return el;
+  }
+
   if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
     return document.documentElement;
   }
 
   return document.body;
+}
+
+// ============================================================================
+// Message capture during scroll (#256)
+// ============================================================================
+
+/**
+ * ChatGPT virtualizes the message list: as older messages load during a
+ * scroll-back, newer ones are REMOVED from the DOM. Measured on a real
+ * conversation: 53 distinct messages passed through the DOM, never more than 22
+ * present at once. Reading the DOM after the scroll therefore sees one window,
+ * not the conversation.
+ *
+ * So messages are captured as they render and kept here, keyed by
+ * data-message-id. Values are detached deep clones, which the per-turn
+ * extractors read exactly like live nodes.
+ *
+ * @type {Map<string, {el: Element, turn: number, seq: number}>}
+ */
+let MESSAGE_CACHE = new Map();
+let MESSAGE_CACHE_SEQ = 0;
+
+/** Turn index from the wrapper's data-testid ("conversation-turn-7" -> 7). */
+function turnIndexOf(el) {
+  const wrapper = el.closest && el.closest('[data-testid^="conversation-turn"]');
+  if (!wrapper) return Number.MAX_SAFE_INTEGER;
+  const m = (wrapper.getAttribute('data-testid') || '').match(/(\d+)\s*$/);
+  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Snapshot every message currently rendered that we have not already kept.
+ * Cheap and idempotent — safe to call on every scroll tick and every mutation.
+ * @returns {number} how many new messages were captured
+ */
+function captureRenderedMessages() {
+  let added = 0;
+  for (const el of document.querySelectorAll(SELECTORS.allMessages)) {
+    const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
+    if (!id || MESSAGE_CACHE.has(id)) continue;
+    MESSAGE_CACHE.set(id, {
+      el: el.cloneNode(true),
+      turn: turnIndexOf(el),
+      seq: MESSAGE_CACHE_SEQ++
+    });
+    added++;
+  }
+  return added;
+}
+
+/**
+ * Every message seen during the scroll, in conversation order.
+ * Falls back to the live DOM when nothing was captured (sites without
+ * data-message-id, or extraction invoked without a scroll phase).
+ * @returns {Element[]}
+ */
+function getCapturedMessageEls() {
+  if (MESSAGE_CACHE.size === 0) {
+    return Array.from(document.querySelectorAll(SELECTORS.allMessages));
+  }
+  return Array.from(MESSAGE_CACHE.values())
+    .sort((a, b) => (a.turn - b.turn) || (a.seq - b.seq))
+    .map(entry => entry.el);
+}
+
+/** Drop the cache (called at the start of each scroll, and by tests). */
+function resetMessageCache() {
+  MESSAGE_CACHE = new Map();
+  MESSAGE_CACHE_SEQ = 0;
 }
 
 /**
@@ -353,8 +472,16 @@ async function scrollToLoadAllMessages(onProgress) {
   let consecutiveNoMovement = 0;
 
   // Track DOM mutations to detect content loading (handles virtualized lists)
+  // The list is virtualized: messages loaded early in the scroll are evicted
+  // before the scroll ends, so they must be kept as they render (#256).
+  resetMessageCache();
+  captureRenderedMessages();
+
   let mutationDetected = false;
   const observer = new MutationObserver((mutations) => {
+    // Capture first — an evicted message is gone by the next tick.
+    captureRenderedMessages();
+
     // Any childList mutation with added nodes indicates content is changing
     for (const mutation of mutations) {
       if (mutation.type === 'childList' &&
@@ -389,6 +516,10 @@ async function scrollToLoadAllMessages(onProgress) {
     while (scrollAttempts < SCROLL_CONFIG.maxScrollAttempts) {
       scrollAttempts++;
       mutationDetected = false;
+
+      // Belt and braces alongside the observer: a mutation batch can be
+      // coalesced, and a message evicted in the same batch would be lost.
+      captureRenderedMessages();
 
       const beforeCount = countMessages();
       const beforeScroll = scrollContainer.scrollTop;
@@ -457,7 +588,8 @@ async function scrollToLoadAllMessages(onProgress) {
 
         // If we're at top/stuck AND no mutations detected, we're done
         if (!mutationDetected && consecutiveNoMovement >= 2) {
-          const finalCount = countMessages();
+          captureRenderedMessages();
+          const finalCount = Math.max(countMessages(), MESSAGE_CACHE.size);
           logScroll('COMPLETE', { finalMessages: finalCount, totalScrolls: scrollAttempts });
           reportProgress(`Loaded ${finalCount} messages`);
           return {
@@ -490,7 +622,8 @@ async function scrollToLoadAllMessages(onProgress) {
   }
 
   // Hit max attempts - return what we have
-  const finalCount = countMessages();
+  captureRenderedMessages();
+  const finalCount = Math.max(countMessages(), MESSAGE_CACHE.size);
   return {
     success: true,
     messagesLoaded: finalCount,
@@ -917,7 +1050,10 @@ async function extractTurnsChatGPT() {
   const turns = [];
   let turnIndex = 0;
 
-  const messageEls = document.querySelectorAll(SELECTORS.allMessages);
+  // Every message seen during the scroll, not just the window still rendered.
+  // ChatGPT evicts as it loads, so reading the live DOM here would return one
+  // window of a long conversation (#256).
+  const messageEls = getCapturedMessageEls();
 
   for (let i = 0; i < messageEls.length; i++) {
     const messageEl = messageEls[i];
@@ -1352,8 +1488,13 @@ if (typeof module !== 'undefined' && module.exports) {
     setScrollConfig,
     resetScrollConfig,
     countMessages,
+    isRealScroller,
     findScrollContainer,
     waitForLoadingComplete,
-    scrollToLoadAllMessages
+    scrollToLoadAllMessages,
+    // Virtualized-list capture (#256)
+    captureRenderedMessages,
+    getCapturedMessageEls,
+    resetMessageCache
   };
 }

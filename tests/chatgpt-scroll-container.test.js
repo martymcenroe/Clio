@@ -156,14 +156,23 @@ describe('message capture under virtualization (#256)', () => {
     expect(getCapturedMessageEls().length).toBe(3);
   });
 
-  test('orders by conversation turn, not by the order things rendered', () => {
-    buildChatGPTLayout();          // turns 2 and 3
+  // This test originally asserted ordering by the conversation-turn testid.
+  // #264 established that testid is numbered relative to the rendered window,
+  // not the conversation, so that expectation was encoding the bug. Ordering
+  // now comes from stitching overlapping windows, and the window below overlaps
+  // on m-1 the way a real scroll-back always does.
+  test('places an older window ahead of a newer one via their overlap', () => {
+    buildChatGPTLayout();          // m-1, m-2
     captureRenderedMessages();
+
     document.querySelector('#main').innerHTML = `
-      <div data-testid="conversation-turn-0">
+      <div data-testid="conversation-turn-1">
         <div data-message-author-role="user" data-message-id="m-0">older</div>
+      </div>
+      <div data-testid="conversation-turn-2">
+        <div data-message-author-role="user" data-message-id="m-1">first</div>
       </div>`;
-    captureRenderedMessages();     // turn 0, captured last
+    captureRenderedMessages();
 
     const ids = getCapturedMessageEls().map(el => el.getAttribute('data-message-id'));
     expect(ids).toEqual(['m-0', 'm-1', 'm-2']);

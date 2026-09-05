@@ -377,33 +377,67 @@ function findScrollContainer() {
  * @type {Map<string, {el: Element, turn: number, seq: number}>}
  */
 let MESSAGE_CACHE = new Map();
-let MESSAGE_CACHE_SEQ = 0;
 
-/** Turn index from the wrapper's data-testid ("conversation-turn-7" -> 7). */
-function turnIndexOf(el) {
-  const wrapper = el.closest && el.closest('[data-testid^="conversation-turn"]');
-  if (!wrapper) return Number.MAX_SAFE_INTEGER;
-  const m = (wrapper.getAttribute('data-testid') || '').match(/(\d+)\s*$/);
-  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+/**
+ * Global conversation order, rebuilt by stitching overlapping windows (#264).
+ * @type {string[]}
+ */
+let MESSAGE_ORDER = [];
+
+/**
+ * Splice one rendered window's ids into the global order.
+ *
+ * DOM order WITHIN a window is reliable; the wrapper's
+ * data-testid="conversation-turn-N" is NOT — it is numbered relative to the
+ * window, and took only 14 distinct values across 155 real messages, so sorting
+ * on it scrambles the transcript. What makes stitching sound is that
+ * consecutive windows overlap, so already-placed ids act as anchors.
+ *
+ * @param {string[]} windowIds ids in DOM order, as currently rendered
+ */
+function stitchMessageOrder(windowIds) {
+  const pos = new Map(MESSAGE_ORDER.map((id, i) => [id, i]));
+  for (let i = 0; i < windowIds.length; i++) {
+    const id = windowIds[i];
+    if (pos.has(id)) continue;
+
+    let at = -1;
+    // Nearest already-placed id AFTER this one: it belongs immediately before.
+    for (let j = i + 1; j < windowIds.length; j++) {
+      if (pos.has(windowIds[j])) { at = pos.get(windowIds[j]); break; }
+    }
+    if (at === -1) {
+      // Else the nearest already-placed id BEFORE it.
+      for (let j = i - 1; j >= 0; j--) {
+        if (pos.has(windowIds[j])) { at = pos.get(windowIds[j]) + 1; break; }
+      }
+    }
+    if (at === -1) at = MESSAGE_ORDER.length;   // the first window seen
+
+    MESSAGE_ORDER.splice(at, 0, id);
+    for (let k = at; k < MESSAGE_ORDER.length; k++) pos.set(MESSAGE_ORDER[k], k);
+  }
 }
 
 /**
- * Snapshot every message currently rendered that we have not already kept.
+ * Snapshot every message currently rendered that we have not already kept, and
+ * record where this window sits in the conversation.
  * Cheap and idempotent — safe to call on every scroll tick and every mutation.
  * @returns {number} how many new messages were captured
  */
 function captureRenderedMessages() {
   let added = 0;
-  for (const el of document.querySelectorAll(SELECTORS.allMessages)) {
+  const nodes = Array.from(document.querySelectorAll(SELECTORS.allMessages));
+  const ids = [];
+  for (const el of nodes) {
     const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
-    if (!id || MESSAGE_CACHE.has(id)) continue;
-    MESSAGE_CACHE.set(id, {
-      el: el.cloneNode(true),
-      turn: turnIndexOf(el),
-      seq: MESSAGE_CACHE_SEQ++
-    });
+    if (!id) continue;
+    ids.push(id);
+    if (MESSAGE_CACHE.has(id)) continue;
+    MESSAGE_CACHE.set(id, el.cloneNode(true));
     added++;
   }
+  stitchMessageOrder(ids);
   return added;
 }
 
@@ -417,15 +451,22 @@ function getCapturedMessageEls() {
   if (MESSAGE_CACHE.size === 0) {
     return Array.from(document.querySelectorAll(SELECTORS.allMessages));
   }
-  return Array.from(MESSAGE_CACHE.values())
-    .sort((a, b) => (a.turn - b.turn) || (a.seq - b.seq))
-    .map(entry => entry.el);
+  const out = [];
+  const seen = new Set();
+  for (const id of MESSAGE_ORDER) {
+    const el = MESSAGE_CACHE.get(id);
+    if (el && !seen.has(id)) { seen.add(id); out.push(el); }
+  }
+  // Anything the stitcher never placed is appended rather than dropped — a
+  // capture that cannot be ordered must still not go missing.
+  for (const [id, el] of MESSAGE_CACHE) if (!seen.has(id)) out.push(el);
+  return out;
 }
 
 /** Drop the cache (called at the start of each scroll, and by tests). */
 function resetMessageCache() {
   MESSAGE_CACHE = new Map();
-  MESSAGE_CACHE_SEQ = 0;
+  MESSAGE_ORDER = [];
 }
 
 /**
@@ -684,6 +725,79 @@ function extractConversationId() {
 // Turn Extraction
 // ============================================================================
 
+// Words that appear in a code block's header alongside (or instead of) the
+// language. A header reading "python  Copy  Edit" must not yield "Copy".
+const CODE_HEADER_NOISE = new Set([
+  'copy', 'copied', 'edit', 'run', 'share', 'download', 'expand', 'collapse',
+  'wrap', 'unwrap', 'preview', 'code', 'copy code', 'ask chatgpt'
+]);
+
+/**
+ * Best available language label for a code block.
+ *
+ * Order matters. The `language-*` class on <code> is the highlighter
+ * convention and is by far the most reliable; the header label is a fallback
+ * because it is presentational and carries button captions. Reading only the
+ * header is why 563 of 636 blocks came back unlabelled on a real conversation
+ * (#263).
+ *
+ * @param {Element} code - the <code> (or CodeMirror content) element
+ * @param {Element} pre  - its enclosing <pre>
+ * @returns {string} the language, lowercased, or '' when unknown
+ */
+function detectCodeLanguage(code, pre) {
+  const fromClass = (el) => {
+    if (!el || !el.classList) return '';
+    for (const cls of el.classList) {
+      const m = cls.match(/^(?:language|lang|highlight)[-_](.+)$/i);
+      if (m && m[1]) return m[1];
+    }
+    return '';
+  };
+
+  const candidate =
+    fromClass(code) ||
+    fromClass(pre) ||
+    code.getAttribute('data-language') ||
+    (code.dataset && code.dataset.language) ||
+    pre.getAttribute('data-language') ||
+    (pre.querySelector('[data-language]') &&
+      pre.querySelector('[data-language]').getAttribute('data-language')) ||
+    (pre.querySelector('.language-label') && pre.querySelector('.language-label').textContent) ||
+    headerLabel(pre) ||
+    '';
+
+  const cleaned = String(candidate).trim().toLowerCase();
+  if (!cleaned || CODE_HEADER_NOISE.has(cleaned)) return '';
+  // A label should be a single token; anything longer is header prose.
+  if (/\s/.test(cleaned)) return '';
+  return cleaned;
+}
+
+/**
+ * Pull a language out of a code block's header strip.
+ *
+ * A header is presentational: it carries the language plus button captions
+ * ("bash Copy Edit"), and sometimes carries no language at all, only UI prose
+ * ("Always show details" on ChatGPT's analysis blocks). Strip the known control
+ * words; what remains is a language ONLY if it is a single token. Two or more
+ * leftover words is prose, and taking the first of them yields nonsense like
+ * "always".
+ *
+ * @param {Element} pre
+ * @returns {string}
+ */
+function headerLabel(pre) {
+  const header = pre.querySelector('[class*="sticky"], header, [class*="header"]');
+  if (!header) return '';
+  const tokens = (header.textContent || '')
+    .trim()
+    .split(/[\s\n\r\t]+/)
+    .map(t => t.trim().toLowerCase())
+    .filter(t => t && !CODE_HEADER_NOISE.has(t));
+  return tokens.length === 1 ? tokens[0] : '';
+}
+
 /**
  * Extract text content from an element, preserving code blocks.
  * @param {Element} element
@@ -704,13 +818,7 @@ function extractTextContent(element) {
   const codeBlocks = clone.querySelectorAll(SELECTORS.codeBlock);
   codeBlocks.forEach(code => {
     const pre = code.closest('pre') || code;
-    // Try to get language from data attribute on code element first, then parent
-    const lang = code.getAttribute('data-language') ||
-                 code.dataset?.language ||
-                 pre.getAttribute('data-language') ||
-                 pre.querySelector('[data-language]')?.getAttribute('data-language') ||
-                 pre.querySelector('.language-label')?.textContent ||
-                 '';
+    const lang = detectCodeLanguage(code, pre);
     const codeText = code.textContent;
     const replacement = document.createTextNode(`\n\`\`\`${lang}\n${codeText}\n\`\`\`\n`);
     pre.replaceWith(replacement);
@@ -1470,6 +1578,7 @@ if (typeof module !== 'undefined' && module.exports) {
     extractTitle,
     extractConversationId,
     extractTextContent,
+    detectCodeLanguage,
     extractUserTurn,
     extractAssistantTurn,
     extractAssistantTurnClaude,
@@ -1492,9 +1601,10 @@ if (typeof module !== 'undefined' && module.exports) {
     findScrollContainer,
     waitForLoadingComplete,
     scrollToLoadAllMessages,
-    // Virtualized-list capture (#256)
+    // Virtualized-list capture (#256) and window stitching (#264)
     captureRenderedMessages,
     getCapturedMessageEls,
-    resetMessageCache
+    resetMessageCache,
+    stitchMessageOrder
   };
 }

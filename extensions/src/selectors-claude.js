@@ -72,6 +72,12 @@ const SELECTORS = {
   // Images
   image: 'img',
 
+  // Attached-file capture (#262) is ChatGPT-only for now: no equivalent card
+  // or download control has been verified on this site's DOM. Left null so the
+  // scan is skipped rather than guessing at selectors nobody has probed.
+  uploadedFileCard: null,
+  downloadAffordance: null,
+
   // Streaming indicator
   streamingIndicator: 'button[aria-label*="Stop"], [data-streaming="true"]',
 

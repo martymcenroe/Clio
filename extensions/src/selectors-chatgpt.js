@@ -72,6 +72,22 @@ const SELECTORS = {
   // Images
   image: 'img:not([class*="icon"]):not([alt="Profile image"])',
 
+  // Files attached to a message (#262). Two distinct classes, VERIFIED against
+  // the live page 2026-09-05.
+  //
+  // uploadedFileCard — the icon inside an operator-uploaded file card. All 58
+  // seen were in USER messages, and every one reported no button, no link and
+  // no clickable ancestor, with the icon under a `pointer-events-none` wrapper.
+  // The name and kind are recoverable; the bytes are not reachable from the
+  // transcript, so no click strategy will ever download them.
+  //
+  // downloadAffordance — the controls to scan for a "Download <name>" label on
+  // generated artifacts. Kept broad because the control is sometimes a button
+  // and sometimes a menu item; the label test is in content.js, and scoping the
+  // query to a message element already excludes the sidebar's "Download apps".
+  uploadedFileCard: '[data-testid="library-file-icon"]',
+  downloadAffordance: 'button, a, [role="menuitem"]',
+
   // Streaming indicator
   streamingIndicator: 'button[aria-label*="Stop"], [data-streaming="true"], [class*="result-streaming"]',
 

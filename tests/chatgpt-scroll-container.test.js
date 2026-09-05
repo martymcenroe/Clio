@@ -17,12 +17,21 @@ const {
   findScrollContainer,
   captureRenderedMessages,
   getCapturedMessageEls,
-  resetMessageCache
+  resetMessageCache,
+  setMessageScroller
 } = require('../extensions/src/content.js');
 
 const { SELECTORS } = require('../extensions/src/selectors-chatgpt.js');
 
 global.SELECTORS = SELECTORS;
+
+/** Put each message at a known offset; jsdom lays nothing out on its own. */
+function placeAt(offsets) {
+  for (const [id, top] of Object.entries(offsets)) {
+    const el = document.querySelector(`[data-message-id="${id}"]`);
+    if (el) el.getBoundingClientRect = () => ({ top, height: 100 });
+  }
+}
 
 /** jsdom reports 0 for layout metrics; state them explicitly. */
 function sized(el, { scrollHeight, clientHeight, overflowY }) {
@@ -159,12 +168,24 @@ describe('message capture under virtualization (#256)', () => {
   // This test originally asserted ordering by the conversation-turn testid.
   // #264 established that testid is numbered relative to the rendered window,
   // not the conversation, so that expectation was encoding the bug. Ordering
-  // now comes from stitching overlapping windows, and the window below overlaps
-  // on m-1 the way a real scroll-back always does.
-  test('places an older window ahead of a newer one via their overlap', () => {
-    buildChatGPTLayout();          // m-1, m-2
+  // now comes from each message's distance from the scroller's bottom, which is
+  // invariant under the prepending a scroll-back does. The mechanism is covered
+  // in depth by tests/message-order.test.js; this pins that the two ChatGPT
+  // repairs work together — the scroller found by #255 is the one #264 measures
+  // against.
+  test('places an older window ahead of a newer one by distance from the end', () => {
+    const { root } = buildChatGPTLayout();          // m-1, m-2, at the bottom
+    sized(root, { scrollHeight: 200, clientHeight: 100, overflowY: 'auto' });
+    root.scrollTop = 0;
+    root.getBoundingClientRect = () => ({ top: 0, height: 100 });
+    placeAt({ 'm-1': 0, 'm-2': 100 });
+
+    setMessageScroller(findScrollContainer());
+    expect(findScrollContainer()).toBe(root);       // not <main>, per #255
     captureRenderedMessages();
 
+    // An older message loads in above. Its height is added to scrollHeight AND
+    // to every existing element's offset, which is exactly why the key holds.
     document.querySelector('#main').innerHTML = `
       <div data-testid="conversation-turn-1">
         <div data-message-author-role="user" data-message-id="m-0">older</div>
@@ -172,6 +193,9 @@ describe('message capture under virtualization (#256)', () => {
       <div data-testid="conversation-turn-2">
         <div data-message-author-role="user" data-message-id="m-1">first</div>
       </div>`;
+    sized(root, { scrollHeight: 300, clientHeight: 100, overflowY: 'auto' });
+    root.getBoundingClientRect = () => ({ top: 0, height: 100 });
+    placeAt({ 'm-0': 0, 'm-1': 100 });
     captureRenderedMessages();
 
     const ids = getCapturedMessageEls().map(el => el.getAttribute('data-message-id'));

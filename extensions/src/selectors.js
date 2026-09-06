@@ -68,6 +68,10 @@ const SELECTORS = {
   // Attached-file capture (#262) is ChatGPT-only for now: no equivalent card
   // or download control has been verified on this site's DOM. Left null so the
   // scan is skipped rather than guessing at selectors nobody has probed.
+  // Turns are read from the live DOM here, not from the capture cache, so the
+  // cache's ordering confidence is not about this site's export (#272).
+  ordersFromCapture: false,
+
   uploadedFileCard: null,
   downloadAffordance: null,
 

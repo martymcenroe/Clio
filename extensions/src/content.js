@@ -1874,7 +1874,14 @@ async function extractConversation() {
     if (errors.length > 0) {
       warnings.push(`${errors.length} image(s) failed to download`);
     }
-    if (orderStats.withoutOrderKey > 0) {
+    // Only where the export's order actually comes from the capture cache
+    // (#272). The shared scroll path populates the cache on every site, but
+    // Gemini and Claude read turns from the live DOM and never consult it — so
+    // a complaint about the cache's ordering would be describing something that
+    // did not affect their export at all. A check that cries wolf on the
+    // most-used path is worse than no check.
+    const ordersFromCapture = !!SELECTORS.ordersFromCapture;
+    if (ordersFromCapture && orderStats.withoutOrderKey > 0) {
       warnings.push(
         `${orderStats.withoutOrderKey} message(s) could not be positioned and were appended in capture order`);
     }
@@ -1891,21 +1898,26 @@ async function extractConversation() {
         fileCount: fileAttachments,
         extractionErrors: errors,
         partialSuccess: errors.length > 0 || !!scrollResult.warning ||
-                        orderStats.withoutOrderKey > 0,
+                        (ordersFromCapture && orderStats.withoutOrderKey > 0),
         scrollInfo: {
           messagesLoaded: scrollResult.messagesLoaded,
           scrollAttempts: scrollResult.scrollAttempts
-        },
-        orderInfo: {
-          orderedBy: 'distance from the scroller bottom, measured at capture time',
-          capturedMessages: orderStats.captured,
-          withOrderKey: orderStats.withOrderKey,
-          withoutOrderKey: orderStats.withoutOrderKey,
-          neverMeasuredOnSettledDom: orderStats.neverMeasuredOnSettledDom
         }
       },
       messages: turns
     };
+
+    // Present only where it describes this export, rather than always present
+    // and meaningless on two sites out of three (#272).
+    if (ordersFromCapture) {
+      data.metadata.orderInfo = {
+        orderedBy: 'distance from the scroller bottom, measured at capture time',
+        capturedMessages: orderStats.captured,
+        withOrderKey: orderStats.withOrderKey,
+        withoutOrderKey: orderStats.withoutOrderKey,
+        neverMeasuredOnSettledDom: orderStats.neverMeasuredOnSettledDom
+      };
+    }
 
     hideProgress();
 

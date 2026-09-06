@@ -85,6 +85,13 @@ const SELECTORS = {
   // generated artifacts. Kept broad because the control is sometimes a button
   // and sometimes a menu item; the label test is in content.js, and scoping the
   // query to a message element already excludes the sidebar's "Download apps".
+  // Ordering comes from the capture cache on this site and only this site:
+  // ChatGPT virtualizes, so extractTurnsChatGPT() reads getCapturedMessageEls()
+  // rather than the live DOM. Gemini and Claude read the DOM directly, so the
+  // cache's ordering confidence says nothing about their exports and must not
+  // be reported or warned about there (#272).
+  ordersFromCapture: true,
+
   uploadedFileCard: '[data-testid="library-file-icon"]',
   downloadAffordance: 'button, a, [role="menuitem"]',
 

@@ -25,8 +25,17 @@ const {
   getCaptureOrderStats,
   resetMessageCache,
   setMessageScroller,
-  measureFromBottom
+  measureFromBottom,
+  extractConversation,
+  setScrollConfig,
+  resetScrollConfig
 } = require('../extensions/src/content.js');
+
+// Each selectors file assigns window.SELECTORS on load, so the other two must
+// be required BEFORE the ChatGPT one — otherwise whichever loads last silently
+// becomes the global and every test in this file runs against the wrong site.
+const geminiSelectors = require('../extensions/src/selectors.js').SELECTORS;
+const claudeSelectors = require('../extensions/src/selectors-claude.js').SELECTORS;
 
 const { SELECTORS } = require('../extensions/src/selectors-chatgpt.js');
 global.SELECTORS = SELECTORS;
@@ -76,6 +85,7 @@ const captured = () =>
 beforeEach(() => {
   resetMessageCache();
   document.body.innerHTML = '';
+  global.SELECTORS = SELECTORS;
 });
 
 describe('bottom-anchored ordering (#264)', () => {
@@ -205,5 +215,98 @@ describe('bottom-anchored ordering (#264)', () => {
   test('the live DOM is used when nothing was captured', () => {
     renderWindow(0, 3);
     expect(captured()).toEqual(['m0', 'm1', 'm2', 'm3']);
+  });
+});
+
+// ============================================================================
+// The ordering report belongs only to the site that uses it (#272)
+// ============================================================================
+
+/**
+ * The shared scroll path populates the capture cache on every site, but only
+ * ChatGPT extracts from it — extractTurnsGemini and extractTurnsClaude read the
+ * live DOM. So the cache's ordering confidence says nothing about a Gemini or
+ * Claude export, and reporting it there, or warning about it, describes
+ * something that did not happen.
+ *
+ * Today nothing is cached on those sites because their messages carry no
+ * data-message-id or data-turn-id. That makes the behaviour correct by accident
+ * of a DOM this repo does not control: the day Gemini adds one, every export
+ * from the most-used path would start declaring a degraded extraction. These
+ * tests hold the property instead of the attribute.
+ */
+describe('order reporting is scoped to the site that orders from capture (#272)', () => {
+  // jsdom lays nothing out, so every captured message is unmeasurable and
+  // withoutOrderKey is non-zero by construction — which is exactly the
+  // condition under test.
+  const FAST = {
+    scrollStep: 100, scrollDelay: 5, loadingAppearDelay: 5, mutationTimeout: 10,
+    maxScrollAttempts: 3, loadingCheckInterval: 5, maxLoadingWait: 20,
+    progressUpdateInterval: 2
+  };
+
+  beforeEach(() => setScrollConfig(FAST));
+  afterEach(() => {
+    resetScrollConfig();
+    global.SELECTORS = SELECTORS;
+  });
+
+  test('each site states whether its export is ordered from the capture cache', () => {
+    expect(SELECTORS.ordersFromCapture).toBe(true);
+    expect(geminiSelectors.ordersFromCapture).toBe(false);
+    expect(claudeSelectors.ordersFromCapture).toBe(false);
+  });
+
+  test('a Gemini message carrying an id is cached but raises no false alarm', async () => {
+    // The future being guarded against: Gemini gains a data-message-id, so its
+    // messages become cacheable, and unmeasurable ones would otherwise report a
+    // positioning failure on an export that never consulted the cache.
+    global.SELECTORS = geminiSelectors;
+    document.body.innerHTML = `
+      <div class="conversation-container">
+        <user-query data-message-id="g1"><div class="query-text">hello</div></user-query>
+        <model-response data-message-id="g2"><message-content>hi there</message-content></model-response>
+      </div>`;
+
+    const result = await extractConversation();
+
+    expect(result.success).toBe(true);
+    // The condition that would trigger the warning is genuinely present...
+    expect(getCaptureOrderStats().withoutOrderKey).toBeGreaterThan(0);
+    // ...and is correctly not reported, because this export did not use it.
+    expect(result.warnings.join(' ')).not.toContain('could not be positioned');
+    expect(result.data.metadata.orderInfo).toBeUndefined();
+  });
+
+  test('on ChatGPT the same condition IS reported', async () => {
+    global.SELECTORS = SELECTORS;
+    document.body.innerHTML = `
+      <main>
+        <div data-message-author-role="user" data-message-id="c1">
+          <div class="whitespace-pre-wrap">hello</div>
+        </div>
+        <div data-message-author-role="assistant" data-message-id="c2">
+          <div class="markdown">hi there</div>
+        </div>
+      </main>`;
+
+    const result = await extractConversation();
+
+    expect(result.success).toBe(true);
+    expect(result.warnings.join(' ')).toContain('could not be positioned');
+    expect(result.data.metadata.orderInfo.withoutOrderKey).toBeGreaterThan(0);
+    expect(result.data.metadata.partialSuccess).toBe(true);
+  });
+
+  test('a clean ChatGPT capture reports its confidence without warning', async () => {
+    // The counterpart that keeps the assertion above honest: orderInfo must be
+    // present whenever the site orders from capture, not only when something
+    // went wrong, and a fully measured capture must not warn.
+    global.SELECTORS = SELECTORS;
+    setMessageScroller(renderWindow(0, 3));
+    captureRenderedMessages();
+
+    expect(getCaptureOrderStats().withoutOrderKey).toBe(0);
+    expect(getCaptureOrderStats().withOrderKey).toBe(4);
   });
 });

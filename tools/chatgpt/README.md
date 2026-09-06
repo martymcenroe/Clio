@@ -46,6 +46,7 @@ conversations are operator content and Clio is public (#250).
 
 | script | what it does |
 |---|---|
+| `open-session.js` | **run this first.** Opens the window everything else attaches to: real Chrome, on the profile, with the debugging port set, spawned **detached** so it outlives the launcher. A no-op if something already answers on the port. Playwright's `launchPersistentContext` cannot do this job — it kills the browser when the driver process exits, so a launcher built that way takes the window away the moment it returns, and the next probe silently opens a second one. |
 | `harvest.js` | the working harvester: bottom-anchored ordering, settled-DOM re-measurement, per-round download clicking, patience-based scroll loop. Attaches over CDP. |
 | `verify-order.js` | ordering oracle built from ChatGPT's own response numbering (`92A.`, `143E.`). Exits 1 on any inversion. Independent of every signal the scraper uses, which is the whole point — it caught a scrambled file that a message count and a turn-continuity check both passed. |
 | `verify-live.js` | injects the real `extensions/src/content.js` into the live page and measures ordering, language coverage and file capture. The closest thing to an end-to-end test that actually runs. |

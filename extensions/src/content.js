@@ -388,6 +388,26 @@ let MESSAGE_CACHE_SEQ = 0;
  */
 let MESSAGE_SCROLLER = null;
 
+/**
+ * How many citation favicons were dropped this extraction (#279).
+ *
+ * Counted rather than merely skipped. Silently discarding 152 images per
+ * capture would swap one unreadable number for no number at all, and the point
+ * of the change is that the export should say what it did, not say less.
+ * @type {number}
+ */
+let DECORATION_SKIPPED = 0;
+
+/** Reset the decoration counter (called per extraction, and by tests). */
+function resetDecorationCount() {
+  DECORATION_SKIPPED = 0;
+}
+
+/** How many citation favicons were skipped since the last reset. */
+function getDecorationCount() {
+  return DECORATION_SKIPPED;
+}
+
 /** Fix the scroller for this scroll pass (and let tests supply a fake). */
 function setMessageScroller(el) {
   MESSAGE_SCROLLER = el || null;
@@ -1196,17 +1216,79 @@ function extractThinking(element) {
 }
 
 /**
+ * Favicon services, as URL tests (#279).
+ *
+ * The backstop half of the decoration test. The role half — SELECTORS
+ * .citationDecoration — is the one that survives a provider swap, but it is
+ * only defined where the citation markup has actually been verified, and it
+ * cannot catch a favicon rendered outside a citation affordance. Between them:
+ * a known favicon host is dropped on every site, and an unknown provider is
+ * still dropped wherever the citation container is known.
+ *
+ * Deliberately a closed list of favicon SERVICES rather than a size or an
+ * `alt=""` heuristic. "Small image with no alt text" describes a favicon and
+ * also describes an inline diagram a user pasted, and the cost of confusing
+ * them is a silently missing image — the failure this whole batch is about.
+ */
+const FAVICON_URL_TESTS = [
+  /\/s2\/favicons\b/i,          // https://www.google.com/s2/favicons?domain=…
+  /\/s2\/u\/\d+\/favicons\b/i,  // signed-in variant of the same service
+  /\/faviconV2\b/i,             // https://t*.gstatic.com/faviconV2?url=…
+  /^https?:\/\/icons\.duckduckgo\.com\//i,
+  /^https?:\/\/[^/]*\/favicon\.ico(\?|$)/i
+];
+
+/**
+ * Is this <img> decoration for a cited source rather than conversation content?
+ *
+ * Decoration is not fetched and is not recorded as an attachment: it carries no
+ * information the transcript does not already hold in the citation URL, and
+ * fetching it cross-origin from an extension context cannot succeed.
+ *
+ * @param {Element} img
+ * @returns {boolean}
+ */
+function isCitationDecoration(img) {
+  const src = img.getAttribute('src') || img.src || '';
+  if (src && FAVICON_URL_TESTS.some(re => re.test(src))) return true;
+
+  // closest() is missing on some jsdom-constructed nodes and on SVG image
+  // elements; a decoration test that throws would fail the whole extraction,
+  // and images fail open by design.
+  const roleSel = SELECTORS.citationDecoration;
+  if (roleSel && typeof img.closest === 'function') {
+    try {
+      if (img.closest(roleSel)) return true;
+    } catch (e) {
+      // A malformed selector must not take the extraction down with it.
+    }
+  }
+  return false;
+}
+
+/**
  * Find all images in an element and return their metadata.
+ *
+ * Citation decoration is excluded here rather than at fetch time so it never
+ * becomes an attachment: an attachment list where 152 of 294 entries are
+ * favicons more than doubles every count a consumer reads off it (#279).
+ *
  * @param {Element} element
  * @param {number} turnIndex
  * @returns {Array<{src: string, turnIndex: number}>}
  */
 function findImages(element, turnIndex) {
   const images = element.querySelectorAll(SELECTORS.image);
-  return Array.from(images).map(img => ({
-    src: img.src,
-    turnIndex
-  }));
+  return Array.from(images)
+    .filter(img => {
+      if (!isCitationDecoration(img)) return true;
+      DECORATION_SKIPPED++;
+      return false;
+    })
+    .map(img => ({
+      src: img.src,
+      turnIndex
+    }));
 }
 
 /**
@@ -1844,6 +1926,7 @@ async function extractConversation() {
 
     // Phase 4: Extract turns
     showProgress('Extracting conversation...');
+    resetDecorationCount();
     const rawTurns = await extractTurns();
     // Drop blank turns — thinking-only / artifact-only shells that produce an
     // empty-content message (#208); re-index so positions stay contiguous.
@@ -1896,6 +1979,10 @@ async function extractConversation() {
         messageCount: turns.length,
         imageCount: images.length,
         fileCount: fileAttachments,
+        // What was deliberately not fetched, so the drop is auditable and a
+        // regression in the decoration test is visible as a number moving
+        // rather than as images quietly going missing (#279).
+        decorationSkipped: getDecorationCount(),
         extractionErrors: errors,
         partialSuccess: errors.length > 0 || !!scrollResult.warning ||
                         (ordersFromCapture && orderStats.withoutOrderKey > 0),
@@ -1996,6 +2083,11 @@ if (typeof module !== 'undefined' && module.exports) {
     isStreaming,
     expandAllContent,
     extractImages,
+    // Citation decoration (#279)
+    findImages,
+    isCitationDecoration,
+    resetDecorationCount,
+    getDecorationCount,
     extractConversation,
     // Auto-scroll exports
     SCROLL_CONFIG,

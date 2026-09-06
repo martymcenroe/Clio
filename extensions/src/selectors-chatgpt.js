@@ -72,6 +72,25 @@ const SELECTORS = {
   // Images
   image: 'img:not([class*="icon"]):not([alt="Profile image"])',
 
+  // Citation decoration (#279) — the little site icons rendered beside web
+  // search citations, one per cited source, so a research-heavy conversation
+  // accumulates them fast. A single 233-message capture collected 152: every
+  // one a cross-origin fetch to Google's favicon service that cannot succeed
+  // from an extension context, every one failing, and every one landing in
+  // extractionErrors.
+  //
+  // They carry no conversation content. The domain each one depicts is already
+  // in the citation URL in the message text.
+  //
+  // Matched by ROLE rather than by URL, because a URL test has already gone
+  // stale once here: a 2026-05 snapshot renders the same favicon with
+  // class="icon-sm", which SELECTORS.image's :not([class*="icon"]) excluded on
+  // its own. That is why this stayed invisible until the markup dropped the
+  // class and 152 of them started reaching the fetcher. Keying on the citation
+  // affordance survives the next such rename; the favicon-host list in
+  // content.js is the backstop for the reverse case.
+  citationDecoration: '[aria-label="Sources"], [class*="footnote"], [data-testid*="citation"]',
+
   // Files attached to a message (#262). Two distinct classes, VERIFIED against
   // the live page 2026-09-05.
   //

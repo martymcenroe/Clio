@@ -65,6 +65,13 @@ const SELECTORS = {
   // Images
   image: 'img',
 
+  // Citation decoration (#279). Null because no citation-favicon markup has
+  // been verified against this site's DOM, and a guessed selector here would
+  // silently drop real images. The favicon-host URL test in content.js still
+  // applies on every site, so a Google-favicon fetch cannot leak through here
+  // either; this selector only adds the role-based half where it is known.
+  citationDecoration: null,
+
   // Attached-file capture (#262) is ChatGPT-only for now: no equivalent card
   // or download control has been verified on this site's DOM. Left null so the
   // scan is skipped rather than guessing at selectors nobody has probed.

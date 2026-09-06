@@ -352,25 +352,36 @@ describe('extractConversation with image errors', () => {
     resetScrollConfig();
   });
 
-  test('reports partialSuccess when https images fail', async () => {
+  // Rewritten for #280. These two tests previously asserted that a failed
+  // image fetch set partialSuccess and landed in extractionErrors — which is
+  // precisely the behaviour that made the flag unreadable: it fired on a
+  // capture that lost nothing and on one that lost 78% of the conversation,
+  // identically. An image that cannot be downloaded is Fail Open by design and
+  // costs no conversation content.
+  //
+  // The failure must still be REPORTED — that is what these assert — it simply
+  // no longer claims the transcript is incomplete.
+  test('a failed https image is reported as a media error, not content loss', async () => {
     // Mock fetch to fail for https images
     global.fetch = jest.fn().mockRejectedValue(new Error('Blocked'));
 
     const result = await extractConversation();
 
     expect(result.success).toBe(true);
-    expect(result.data.metadata.partialSuccess).toBe(true);
-    expect(result.data.metadata.extractionErrors.length).toBeGreaterThan(0);
+    expect(result.data.metadata.mediaErrors.length).toBeGreaterThan(0);
+    // Still surfaced to the user...
     expect(result.warnings.length).toBeGreaterThan(0);
+    // ...but the transcript itself did not lose anything.
+    expect(result.data.metadata.extractionErrors).toEqual([]);
   });
 
-  test('includes extraction errors in metadata for https failures', async () => {
+  test('includes the image failure detail in mediaErrors', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('Network failure'));
 
     const result = await extractConversation();
 
     expect(result.success).toBe(true);
-    expect(result.data.metadata.extractionErrors).toEqual(
+    expect(result.data.metadata.mediaErrors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'image_fetch',

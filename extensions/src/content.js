@@ -1969,6 +1969,36 @@ async function extractConversation() {
         `${orderStats.withoutOrderKey} message(s) could not be positioned and were appended in capture order`);
     }
 
+    // Loss of CONTENT, separated from loss of media (#280).
+    //
+    // The old partialSuccess was true for a capture that lost nothing and true
+    // for one that lost 78% of the conversation, because a failed image fetch
+    // and a truncated transcript both set it. A boolean that fires on almost
+    // every capture stops being read, and the one time it means "most of your
+    // conversation is missing" it looks exactly like the hundred times it meant
+    // "a favicon 404'd".
+    //
+    // So the reasons are enumerated rather than OR'd into a bit. A consumer
+    // gates on contentComplete; incompleteReasons says what to do about it.
+    const incompleteReasons = [];
+    if (scrollResult.warning) {
+      incompleteReasons.push(scrollResult.warning);
+    }
+    if (ordersFromCapture && orderStats.withoutOrderKey > 0) {
+      incompleteReasons.push(
+        `${orderStats.withoutOrderKey} of ${orderStats.captured} message(s) could not be positioned and were appended in capture order`);
+    }
+    const contentComplete = incompleteReasons.length === 0;
+
+    // Image fetches are Fail Open by design — the transcript is unaffected when
+    // a picture cannot be downloaded — so they are reported, and they do not
+    // make the capture incomplete. extractionErrors is left for things that
+    // cost conversation content; nothing produces one today, which is the
+    // point: "no errors" has to be a reachable state or the field cannot be
+    // trusted when it is finally non-empty.
+    const mediaErrors = errors.filter(e => e && e.type === 'image_fetch');
+    const contentErrors = errors.filter(e => !e || e.type !== 'image_fetch');
+
     // Build result
     const data = {
       metadata: {
@@ -1983,9 +2013,15 @@ async function extractConversation() {
         // regression in the decoration test is visible as a number moving
         // rather than as images quietly going missing (#279).
         decorationSkipped: getDecorationCount(),
-        extractionErrors: errors,
-        partialSuccess: errors.length > 0 || !!scrollResult.warning ||
-                        (ordersFromCapture && orderStats.withoutOrderKey > 0),
+        // Did the capture get the whole conversation? The field to gate on.
+        contentComplete,
+        incompleteReasons,
+        extractionErrors: contentErrors,
+        mediaErrors,
+        // Retained so existing consumers keep working, and now meaning what
+        // its name always implied: content was lost. It is the negation of
+        // contentComplete and nothing else (#280).
+        partialSuccess: !contentComplete,
         scrollInfo: {
           messagesLoaded: scrollResult.messagesLoaded,
           scrollAttempts: scrollResult.scrollAttempts

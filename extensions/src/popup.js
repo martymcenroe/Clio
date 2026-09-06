@@ -44,8 +44,8 @@ function showImageFetchWarning(failedCount) {
   if (failedCount > 0) {
     if (text) {
       text.textContent = failedCount === 1
-        ? '1 image could not be saved (provider blocked the download). See conversation.json metadata.extractionErrors for details.'
-        : `${failedCount} images could not be saved (provider blocked the download). See conversation.json metadata.extractionErrors for details.`;
+        ? '1 image could not be saved (provider blocked the download). See conversation.json metadata.mediaErrors for details.'
+        : `${failedCount} images could not be saved (provider blocked the download). See conversation.json metadata.mediaErrors for details.`;
     }
     el.style.display = 'block';
   } else {
@@ -86,12 +86,34 @@ function showResult(messageCount, images, errors, scrollInfo, isLastResult = fal
  *   site match. Without it, the cached card is shown only when no
  *   current-site argument is supplied (test path).
  */
+/**
+ * Everything that failed, across both lists (#280).
+ *
+ * Since #280 an image that could not be fetched lives in `mediaErrors` rather
+ * than `extractionErrors`, because it is Fail Open by design and costs no
+ * conversation content. The counter on the card still has to show it: a card
+ * reading "0 errors" beside a warning row saying five images could not be saved
+ * is the same untrustworthy signal in the other direction.
+ *
+ * Falls back to the single pre-#280 list so a result saved by an older build
+ * still renders its real count.
+ *
+ * @param {Object} metadata
+ * @returns {number}
+ */
+function totalFailureCount(metadata) {
+  if (!metadata) return 0;
+  const content = (metadata.extractionErrors || []).length;
+  const media = metadata.mediaErrors ? metadata.mediaErrors.length : 0;
+  return content + media;
+}
+
 function saveLastResult(data, site) {
   try {
     const lastResult = {
       messageCount: data.metadata.messageCount,
       imageCount: data.metadata.imageCount,
-      errorCount: data.metadata.extractionErrors.length,
+      errorCount: totalFailureCount(data.metadata),
       scrollInfo: data.metadata.scrollInfo,
       title: data.metadata.title,
       site: site || null,
@@ -389,16 +411,20 @@ async function handleExtract() {
     showResult(
       data.metadata.messageCount,
       data.metadata.imageCount,
-      data.metadata.extractionErrors.length,
+      totalFailureCount(data.metadata),
       data.metadata.scrollInfo
     );
 
     // Surface image-fetch failures explicitly (the bare error count
-    // doesn't communicate what kind of failure it was). Counts only
-    // image_fetch type errors — other extraction warnings appear via
-    // the warnings array below (#141).
-    const imageFetchFailures = (data.metadata.extractionErrors || [])
-      .filter(e => e && e.type === 'image_fetch').length;
+    // doesn't communicate what kind of failure it was). These live in
+    // mediaErrors since #280: an image that fails to fetch is Fail Open by
+    // design and does not cost conversation content, so it is reported here
+    // and does not make the capture incomplete. The extractionErrors fallback
+    // keeps a result saved by an older build rendering correctly (#141, #280).
+    const imageFetchFailures = (
+      data.metadata.mediaErrors ||
+      (data.metadata.extractionErrors || []).filter(e => e && e.type === 'image_fetch')
+    ).length;
     showImageFetchWarning(imageFetchFailures);
 
     // Save to localStorage for persistence (popup may close during download).
@@ -513,6 +539,7 @@ if (typeof module !== 'undefined' && module.exports) {
     hideProgress,
     showResult,
     showImageFetchWarning,
+    totalFailureCount,
     setButtonState,
     createZip,
     downloadBlob,

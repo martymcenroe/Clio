@@ -56,6 +56,7 @@ conversations are operator content and Clio is public (#250).
 | `probe-order.js` | DOM order vs visual order, turn-id ranges |
 | `probe-files.js` | uploaded-file card structure |
 | `probe-artifacts.js` | download affordances and canvas elements |
+| `probe-reasoning.js` | is reasoning content reachable at all? Finds the affordance by label or by attribute, dumps its ancestor chain, then measures text length **before and after clicking** — which is what decides whether a selector alone is enough or the capture has to click. Discovery logic lives in `reasoning-dom.js` so jsdom can exercise it (`tests/reasoning-dom.test.js`). Written for #316, where 5,644 captured messages all carry an empty `thinking` field. |
 | `inspect-codeblocks.js` | offline: language coverage and truncation tells in a harvested `conversation.json` |
 | `e2e-real-extension.js` | loads the packed extension and triggers a real extraction. **Does not currently work:** Chrome 137+ removed `--load-extension`, and Chrome 152 exits immediately on `--enable-unsafe-extension-debugging`. Kept because the finding is worth not rediscovering; a working version needs a supported load path. |
 

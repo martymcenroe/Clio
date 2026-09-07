@@ -232,7 +232,26 @@ let SCROLL_CONFIG = {
   // Consecutive quiet rounds AT offset zero before the walk may claim it
   // reached the beginning. Measured on the live site: a real conversation sat
   // at offset zero, unchanged, for four rounds and then prepended more (#278).
-  topSettleRounds: 6
+  topSettleRounds: 6,
+  // The quiet stretch at the top must also exceed this multiple of the longest
+  // gap between new messages observed during THIS walk (#300). Measured live:
+  // arrival latency has a median near 3s but a maximum that still produced
+  // content of 27.6s, 31.4s and 21.5s across three runs an hour apart, against
+  // a fixed patience of about 18s. Any constant is a bet on a distribution that
+  // moves between sessions.
+  patienceFactor: 1.5,
+  // Absolute floor on the quiet stretch at the top, in ms.
+  //
+  // The adaptive term alone is not enough: it can only scale with gaps the walk
+  // has ALREADY seen, so a run whose longest stall so far is 12s demands only
+  // 18s of quiet -- and a live run that did exactly that stopped at 125
+  // messages while further scrolling immediately produced more. Measured across
+  // sessions the longest gap that still produced content was 31.4s, so the
+  // floor is 1.5x that. A capture takes minutes; this costs seconds at the end
+  // and is the difference between a complete transcript and a plausible one.
+  minTopWaitMs: 45000,
+  // Ceiling, so a pathological session cannot wait forever.
+  maxTopWaitMs: 180000
 };
 
 /**
@@ -256,7 +275,10 @@ function resetScrollConfig() {
     maxLoadingWait: 15000,
     progressUpdateInterval: 5,
     stuckRetries: 5,
-    topSettleRounds: 6
+    topSettleRounds: 6,
+    patienceFactor: 1.5,
+    minTopWaitMs: 45000,
+    maxTopWaitMs: 180000
   };
 }
 
@@ -891,6 +913,10 @@ async function scrollToLoadAllMessages(onProgress) {
   let quietRounds = 0;
   // High-water marks. Growth in either is proof history is still loading, and
   // is the only thing that resets patience.
+  // How long this walk has actually had to wait for new content, which is what
+  // the patience at the top scales with (#300).
+  let lastGrowthAt = Date.now();
+  let longestGapMs = 0;
   let lastHeight = scrollContainer.scrollHeight || 0;
   let lastCount = 0;
 
@@ -1066,17 +1092,40 @@ async function scrollToLoadAllMessages(onProgress) {
 
       if (grew) {
         // History is still arriving. Nothing here is a stopping condition.
+        const now = Date.now();
+        const gap = now - lastGrowthAt;
+        if (gap > longestGapMs) longestGapMs = gap;
+        lastGrowthAt = now;
         quietRounds = 0;
         stuckRounds = 0;
-        logScroll('Growing', { height: currentHeight, messages: currentCount });
+        logScroll('Growing', { height: currentHeight, messages: currentCount, gap });
       } else if (atTop) {
         quietRounds++;
         logScroll('Quiet at top', { quietRounds });
 
-        // Only after the conversation has stopped growing for topSettleRounds
-        // consecutive rounds AT offset zero. The live measurement above is why
-        // this is not 2.
-        if (quietRounds >= SCROLL_CONFIG.topSettleRounds) {
+        // Two conditions, and the second is the one that matters on a real
+        // conversation (#300).
+        //
+        // The round count alone is a constant — six quiet rounds, about 18
+        // seconds. Measured across three instrumented captures, the longest gap
+        // that STILL produced content was 27.6s, 31.4s and 21.5s. Every run
+        // could out-wait the loop, and one of them stopped 110,000px short and
+        // lost 41 consecutive messages while reporting it had reached the top.
+        //
+        // So the quiet stretch must also exceed a multiple of the longest gap
+        // this walk has actually seen. A session that has stalled for 31s waits
+        // proportionally longer; one that has never stalled finishes as fast as
+        // it does today. Where nothing ever arrived there is no observed gap and
+        // the time condition is vacuous, which is what keeps short conversations
+        // and the offline tests at their current speed.
+        const requiredQuietMs = Math.min(
+          SCROLL_CONFIG.maxTopWaitMs,
+          Math.max(SCROLL_CONFIG.minTopWaitMs || 0,
+                   Math.round(longestGapMs * SCROLL_CONFIG.patienceFactor)));
+        const quietForMs = Date.now() - lastGrowthAt;
+
+        if (quietRounds >= SCROLL_CONFIG.topSettleRounds &&
+            quietForMs >= requiredQuietMs) {
           captureRenderedMessages();
           remeasureRenderedMessages();
           const finalCount = Math.max(countMessages(), MESSAGE_CACHE.size);
@@ -1090,7 +1139,11 @@ async function scrollToLoadAllMessages(onProgress) {
             terminationReason: 'reached-top',
             finalScrollTop: currentScrollTop,
             finalScrollHeight: currentHeight,
-            quietRoundsAtTop: quietRounds
+            quietRoundsAtTop: quietRounds,
+            // The evidence behind the patience actually applied (#300).
+            longestArrivalGapMs: longestGapMs,
+            requiredQuietMs,
+            quietForMs
           };
         }
       } else if (noMovement) {
@@ -1110,6 +1163,7 @@ async function scrollToLoadAllMessages(onProgress) {
             scrollAttempts,
             reachedTop: false,
             terminationReason: 'stuck',
+            longestArrivalGapMs: longestGapMs,
             finalScrollTop: currentScrollTop,
             finalScrollHeight: currentHeight,
             warning: `Scrolling stopped ${Math.round(currentScrollTop)}px from the top of the conversation after ${scrollAttempts} attempt(s); earlier messages are missing.`
@@ -1145,6 +1199,7 @@ async function scrollToLoadAllMessages(onProgress) {
     scrollAttempts,
     reachedTop: false,
     terminationReason: 'max-attempts',
+    longestArrivalGapMs: longestGapMs,
     finalScrollTop: scrollContainer.scrollTop,
     warning: `Reached maximum scroll attempts (${SCROLL_CONFIG.maxScrollAttempts}). Conversation may be incomplete.`
   };
@@ -2358,6 +2413,17 @@ async function extractConversation() {
             : null,
           quietRoundsAtTop: typeof scrollResult.quietRoundsAtTop === 'number'
             ? scrollResult.quietRoundsAtTop
+            : null,
+          // How long this walk had to wait for content, and how much silence it
+          // therefore insisted on before calling the top (#300). A capture that
+          // stopped short can then be argued about from the file rather than
+          // re-run: a longestArrivalGapMs close to requiredQuietMs says the walk
+          // finished right on the edge of its own patience.
+          longestArrivalGapMs: typeof scrollResult.longestArrivalGapMs === 'number'
+            ? scrollResult.longestArrivalGapMs
+            : null,
+          requiredQuietMs: typeof scrollResult.requiredQuietMs === 'number'
+            ? scrollResult.requiredQuietMs
             : null
         }
       },

@@ -33,7 +33,7 @@ global.SELECTORS = SELECTORS;
 const FAST = {
   scrollStep: 100, scrollDelay: 10, loadingAppearDelay: 5, mutationTimeout: 20,
   maxScrollAttempts: 40, loadingCheckInterval: 10, maxLoadingWait: 100,
-  progressUpdateInterval: 2, stuckRetries: 3, topSettleRounds: 2
+  progressUpdateInterval: 2, stuckRetries: 3, topSettleRounds: 2, minTopWaitMs: 0
 };
 
 function conversationDom() {

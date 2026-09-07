@@ -31,7 +31,9 @@ const FAST_SCROLL_CONFIG = {
   maxScrollAttempts: 20,
   loadingCheckInterval: 10,
   maxLoadingWait: 100,
-  progressUpdateInterval: 2
+  progressUpdateInterval: 2,
+  // Offline: the live 45s floor on quiet-at-top would just be dead wait (#300).
+  minTopWaitMs: 0
 };
 
 describe('SCROLL_CONFIG (v2.0)', () => {

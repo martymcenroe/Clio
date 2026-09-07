@@ -327,7 +327,9 @@ describe('extractConversation with image errors', () => {
       maxScrollAttempts: 20,
       loadingCheckInterval: 10,
       maxLoadingWait: 100,
-      progressUpdateInterval: 2
+      progressUpdateInterval: 2,
+      // Offline: the live 45s floor on quiet-at-top would just be dead wait (#300).
+      minTopWaitMs: 0
     });
 
     // Create a fixture with https images that will be fetched

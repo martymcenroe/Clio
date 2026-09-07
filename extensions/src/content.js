@@ -393,6 +393,13 @@ let MESSAGE_CACHE = new Map();
 let MESSAGE_CACHE_SEQ = 0;
 
 /**
+ * Messages rescued from an eviction the live-DOM sweep could never see (#291).
+ * Counted so the rescue is visible as a number rather than an invisible
+ * behaviour change.
+ */
+let MESSAGE_RESCUED = 0;
+
+/**
  * The scroller the ordering key is measured against, fixed for one scroll pass.
  * findScrollContainer() walks the whole document, which is far too expensive to
  * repeat inside a MutationObserver, so it is resolved once and cached.
@@ -481,6 +488,127 @@ function captureRenderedMessages() {
     added++;
   }
   return added;
+}
+
+/**
+ * Rescue message elements that a live-DOM sweep can never see (#291).
+ *
+ * captureRenderedMessages() queries `document`, so it only ever finds messages
+ * that are attached when it runs. A message added and then evicted inside the
+ * SAME MutationObserver batch is gone from the document by the time the
+ * callback fires — the observer's own comment says "an evicted message is gone
+ * by the next tick" and then looks in the one place it cannot be. The element
+ * is right there in the mutation record, still whole, and was never read.
+ *
+ * Measured, not theorised: two full extractions of one conversation minutes
+ * apart, both reporting contentComplete and reachedTop, produced 252 and 250
+ * messages — the first holding 5 the second lacked, the second holding 3 the
+ * first lacked. Neither was a superset of the other, which is precisely the
+ * complaint in #278 that started this.
+ *
+ * ORDERING. A detached node has no layout, so it cannot be measured against the
+ * scroller. Its position is interpolated from the siblings it sat between,
+ * which are still attached and usually already cached. That is a real position
+ * rather than a guess. Where no cached neighbour exists the entry is kept with
+ * a null key — getCapturedMessageEls() appends those rather than dropping them,
+ * because a message that cannot be positioned must still not go missing.
+ *
+ * @param {NodeList|Array} nodes  addedNodes or removedNodes from one record
+ * @param {MutationRecord} record the record they came from
+ * @returns {number} how many messages were rescued
+ */
+function captureDetachedMessages(nodes, record) {
+  if (!nodes || !nodes.length) return 0;
+  let rescued = 0;
+
+  for (const node of nodes) {
+    if (!node || node.nodeType !== 1) continue;
+
+    // The node may BE a message, or contain several.
+    const candidates = [];
+    try {
+      if (node.matches && node.matches(SELECTORS.allMessages)) candidates.push(node);
+      if (node.querySelectorAll) {
+        for (const inner of node.querySelectorAll(SELECTORS.allMessages)) candidates.push(inner);
+      }
+    } catch (e) {
+      continue; // a malformed selector must not take the scroll down
+    }
+
+    for (const el of candidates) {
+      const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
+      if (!id || MESSAGE_CACHE.has(id)) continue;
+
+      captureMessageArtifacts(el, id);
+      // Attached nodes can still be measured directly; detached ones cannot.
+      let fromBottom = measureFromBottom(el, MESSAGE_SCROLLER);
+      if (fromBottom === null) fromBottom = interpolateFromSiblings(record);
+
+      MESSAGE_CACHE.set(id, {
+        el: el.cloneNode(true),
+        seq: MESSAGE_CACHE_SEQ++,
+        fromBottom,
+        measuredSettled: false,
+        rescuedFromEviction: true
+      });
+      MESSAGE_RESCUED++;
+      rescued++;
+    }
+  }
+  return rescued;
+}
+
+/**
+ * A position for a node that was removed, taken from where it sat.
+ *
+ * The record's previousSibling and nextSibling were NOT removed, so they are
+ * still in the document and usually already in the cache. A node between two
+ * known positions takes the midpoint; with only one neighbour it takes that
+ * neighbour's position nudged to the correct side — messages earlier in the
+ * conversation sit further from the scroller bottom, so a larger key sorts
+ * earlier.
+ *
+ * @param {MutationRecord} record
+ * @returns {number|null}
+ */
+function interpolateFromSiblings(record) {
+  if (!record) return null;
+
+  const keyOf = (start, dir) => {
+    let n = start;
+    for (let i = 0; n && i < 12; i++, n = n[dir]) {
+      if (n.nodeType !== 1) continue;
+      const el = (n.matches && n.matches(SELECTORS.allMessages))
+        ? n
+        : (n.querySelector ? n.querySelector(SELECTORS.allMessages) : null);
+      if (!el) continue;
+      const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
+      const entry = id && MESSAGE_CACHE.get(id);
+      if (entry && typeof entry.fromBottom === 'number') return entry.fromBottom;
+    }
+    return null;
+  };
+
+  let before, after;
+  try {
+    before = keyOf(record.previousSibling, 'previousSibling');
+    after = keyOf(record.nextSibling, 'nextSibling');
+  } catch (e) {
+    return null;
+  }
+
+  // Keys are distance from the scroller BOTTOM, so a larger key sorts EARLIER.
+  if (before !== null && after !== null) return (before + after) / 2;
+  // The rescued node sat after previousSibling, so it is nearer the bottom.
+  if (before !== null) return before - 0.5;
+  // ...and before nextSibling, so it is further from the bottom.
+  if (after !== null) return after + 0.5;
+  return null;
+}
+
+/** How many messages were rescued from eviction since the last reset (#291). */
+function getRescuedCount() {
+  return MESSAGE_RESCUED;
 }
 
 /**
@@ -576,6 +704,7 @@ function wasMeasuredOnSettledDom(id) {
 function resetMessageCache() {
   MESSAGE_CACHE = new Map();
   MESSAGE_CACHE_SEQ = 0;
+  MESSAGE_RESCUED = 0;
   MESSAGE_ARTIFACTS = new Map();
   MESSAGE_SCROLLER = null;
 }
@@ -777,16 +906,25 @@ async function scrollToLoadAllMessages(onProgress) {
 
   let mutationDetected = false;
   const observer = new MutationObserver((mutations) => {
-    // Capture first — an evicted message is gone by the next tick.
+    // Sweep the live DOM for everything still attached.
     captureRenderedMessages();
 
-    // Any childList mutation with added nodes indicates content is changing
     for (const mutation of mutations) {
-      if (mutation.type === 'childList' &&
-          (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)) {
+      if (mutation.type !== 'childList') continue;
+      if (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0) {
         mutationDetected = true;
-        break;
       }
+      // Then the nodes that sweep CANNOT reach (#291). By the time this
+      // callback runs the DOM already reflects every record in the batch, so a
+      // message added and evicted within one batch is absent from the document
+      // and present only here — which is why the old comment "an evicted
+      // message is gone by the next tick" sat directly above a call that looked
+      // in the one place it could not be.
+      //
+      // The loop also used to `break` on the first childList record, so even
+      // the records were only ever read until the flag was set.
+      captureDetachedMessages(mutation.removedNodes, mutation);
+      captureDetachedMessages(mutation.addedNodes, mutation);
     }
   });
 
@@ -2235,6 +2373,12 @@ async function extractConversation() {
         withOrderKey: orderStats.withOrderKey,
         withoutOrderKey: orderStats.withoutOrderKey,
         neverMeasuredOnSettledDom: orderStats.neverMeasuredOnSettledDom,
+        // Messages that existed only inside a MutationObserver record, having
+        // been rendered and evicted between two live-DOM sweeps (#291). Before
+        // they were rescued they were simply absent — which is how two captures
+        // of one conversation could each hold messages the other lacked while
+        // both reported complete.
+        rescuedFromEviction: getRescuedCount(),
         // The counter said 35 of 233 and nothing told anyone (#282). A reader
         // had to know the field existed, find it inside orderInfo, and already
         // know what a non-zero value implies. This says it instead.
@@ -2344,6 +2488,9 @@ if (typeof module !== 'undefined' && module.exports) {
     scrollToLoadAllMessages,
     // Virtualized-list capture (#256) and bottom-anchored ordering (#264)
     captureRenderedMessages,
+    captureDetachedMessages,
+    interpolateFromSiblings,
+    getRescuedCount,
     remeasureRenderedMessages,
     getCapturedMessageEls,
     getCaptureOrderStats,

@@ -86,6 +86,43 @@ function showIncompleteWarning(metadata) {
   }
 }
 
+/**
+ * Say when some messages were ordered from an unsettled measurement (#282).
+ *
+ * The counter existed and nothing reported it: one export carried
+ * neverMeasuredOnSettledDom: 35 of 233, and a reader had to know the field was
+ * there, find it inside orderInfo, and already know what a non-zero value
+ * implied.
+ *
+ * Informational, and deliberately a separate row from the incomplete warning.
+ * The ordering oracle found zero inversions in a capture carrying nine of
+ * these, so this is "worth knowing" rather than "your export is wrong" — and
+ * #280 exists precisely because a warning that overstates its case stops being
+ * read.
+ *
+ * @param {Object|null} metadata export metadata
+ */
+function showOrderConfidence(metadata) {
+  const el = document.getElementById('orderNote');
+  if (!el) return;
+  const text = document.getElementById('orderNoteText');
+  const info = metadata && metadata.orderInfo;
+  const n = info && typeof info.neverMeasuredOnSettledDom === 'number'
+    ? info.neverMeasuredOnSettledDom
+    : 0;
+
+  if (info && n > 0) {
+    if (text) {
+      text.textContent =
+        `${n} of ${info.capturedMessages} messages were ordered from a measurement ` +
+        'taken before the page settled. Re-capture if exact order matters.';
+    }
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 function showResult(messageCount, images, errors, scrollInfo, isLastResult = false) {
   const resultEl = document.getElementById('result');
   resultEl.classList.add('visible');
@@ -470,6 +507,9 @@ async function handleExtract() {
     // (#278).
     showIncompleteWarning(data.metadata);
 
+    // Ordering confidence: recorded since #264, reported since #282.
+    showOrderConfidence(data.metadata);
+
     // Save to localStorage for persistence (popup may close during download).
     // Pass site so the next popup-open on a different site doesn't surface
     // these stats (#138).
@@ -583,6 +623,7 @@ if (typeof module !== 'undefined' && module.exports) {
     showResult,
     showImageFetchWarning,
     showIncompleteWarning,
+    showOrderConfidence,
     totalFailureCount,
     setButtonState,
     createZip,

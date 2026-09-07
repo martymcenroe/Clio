@@ -555,6 +555,23 @@ function getCaptureOrderStats() {
   };
 }
 
+/**
+ * Was this message's ordering key taken on a settled DOM? (#282)
+ *
+ * A counter saying "35 of 233 were not" raises a question it cannot answer:
+ * are those 35 misplaced, or is the counter conservative? Only an oracle can
+ * settle that, and an oracle needs to know WHICH 35 — so the suspects are
+ * marked individually rather than only totalled.
+ *
+ * @param {string} id data-message-id / data-turn-id
+ * @returns {boolean} false when the message is unknown, which is the
+ *   conservative answer: an unknown message has no settled measurement.
+ */
+function wasMeasuredOnSettledDom(id) {
+  const entry = id && MESSAGE_CACHE.get(id);
+  return !!(entry && entry.measuredSettled);
+}
+
 /** Drop the cache (called at the start of each scroll, and by tests). */
 function resetMessageCache() {
   MESSAGE_CACHE = new Map();
@@ -801,6 +818,14 @@ async function scrollToLoadAllMessages(onProgress) {
       // Belt and braces alongside the observer: a mutation batch can be
       // coalesced, and a message evicted in the same batch would be lost.
       captureRenderedMessages();
+      // The previous round ended on a wait and nothing has been scrolled yet
+      // this round, so the DOM is quiet — one of the few genuinely settled
+      // moments in the loop. A message captured mid-update by the observer
+      // keeps that unsettled ordering key forever if it is evicted before any
+      // remeasure sees it, which is exactly what neverMeasuredOnSettledDom
+      // counts (#282). Every settled moment is another chance to catch one
+      // while it is still in the DOM.
+      remeasureRenderedMessages();
 
       const beforeCount = countMessages();
       const beforeScroll = scrollContainer.scrollTop;
@@ -877,6 +902,9 @@ async function scrollToLoadAllMessages(onProgress) {
       // handler returns.
       await sleep(SCROLL_CONFIG.mutationTimeout);
       captureRenderedMessages();
+      // Settled again after the wait, so take the ordering key properly for
+      // anything the observer grabbed mid-update (#282).
+      remeasureRenderedMessages();
 
       // GROWTH, not mutations, is the signal that history is still arriving.
       //
@@ -1721,6 +1749,16 @@ async function extractTurnsChatGPT() {
       turn.attachments = (turn.attachments || []).concat(files);
     }
 
+    // Mark the messages whose position rests on a measurement taken while the
+    // page was still moving (#282). Present only on the suspects, so a reader
+    // — or the numbering oracle in tools/chatgpt/verify-order.js — can check
+    // exactly those rather than re-deriving them from a count. Ordering is the
+    // one property of a transcript that cannot be repaired after the fact, so
+    // "which ones" is worth more than "how many".
+    if (messageId && !wasMeasuredOnSettledDom(messageId)) {
+      turns[turns.length - 1].orderFromUnsettledMeasurement = true;
+    }
+
     if (i > 0 && i % 20 === 0) {
       showProgress(`Extracting turn ${i}/${messageEls.length}...`);
       await sleep(0);
@@ -2166,7 +2204,19 @@ async function extractConversation() {
         capturedMessages: orderStats.captured,
         withOrderKey: orderStats.withOrderKey,
         withoutOrderKey: orderStats.withoutOrderKey,
-        neverMeasuredOnSettledDom: orderStats.neverMeasuredOnSettledDom
+        neverMeasuredOnSettledDom: orderStats.neverMeasuredOnSettledDom,
+        // The counter said 35 of 233 and nothing told anyone (#282). A reader
+        // had to know the field existed, find it inside orderInfo, and already
+        // know what a non-zero value implies. This says it instead.
+        //
+        // Deliberately not alarming and deliberately not a completeness
+        // failure: the ordering oracle in tools/chatgpt/verify-order.js found
+        // zero inversions across 22 transitions in a capture carrying nine of
+        // these, so the counter looks conservative rather than a report of
+        // damage. It is enough for someone to decide whether to re-capture.
+        orderConfidence: orderStats.neverMeasuredOnSettledDom > 0
+          ? `${orderStats.neverMeasuredOnSettledDom} of ${orderStats.captured} messages were ordered from a measurement taken before the page settled; they are marked with orderFromUnsettledMeasurement`
+          : 'every message was ordered from a settled measurement'
       };
     }
 
@@ -2267,6 +2317,7 @@ if (typeof module !== 'undefined' && module.exports) {
     remeasureRenderedMessages,
     getCapturedMessageEls,
     getCaptureOrderStats,
+    wasMeasuredOnSettledDom,
     resetMessageCache,
     setMessageScroller,
     measureFromBottom,

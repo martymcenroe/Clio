@@ -26,7 +26,13 @@ const LABEL = /^\s*(\d{1,4})([A-Za-z])\s*[.)—-]/;
 const labelled = [];
 msgs.forEach((m, i) => {
   if (m.role !== 'assistant') return;
-  const head = (m.text || '').trim().split('\n').slice(0, 3).join('\n');
+  // `content` first: that is what the EXTENSION emits, and verifying the
+  // extension's own export is the point of this tool. `text` is the harvester's
+  // field name (tools/chatgpt/harvest.js). Reading only `text` meant that
+  // pointing this at a real export found zero labelled messages and reported
+  // "not enough labelled responses" — a clean-looking pass that had in fact
+  // verified nothing.
+  const head = (m.content || m.text || '').trim().split('\n').slice(0, 3).join('\n');
   const mt = head.match(LABEL);
   if (!mt) return;
   labelled.push({
@@ -41,7 +47,19 @@ console.log(`messages: ${msgs.length}   assistant messages carrying a step label
 console.log('');
 
 if (labelled.length < 3) {
-  console.log('Not enough labelled responses to verify ordering.');
+  // "No numbering in this conversation" and "I read the wrong key" produce the
+  // same output otherwise, and the second one exits 0 having checked nothing.
+  // That is the failure this tool exists to catch, in the tool itself.
+  const withAnyText = msgs.filter(m => m.content || m.text).length;
+  if (msgs.length > 0 && withAnyText === 0) {
+    const keys = [...new Set(msgs.flatMap(m => Object.keys(m)))].sort();
+    console.log('ERROR: no message carries `content` or `text`. Keys present: ' +
+                keys.join(', '));
+    console.log('This file cannot be checked, which is NOT the same as passing.');
+    process.exit(2);
+  }
+  console.log(`Not enough labelled responses to verify ordering ` +
+              `(${withAnyText} of ${msgs.length} messages had readable text).`);
   process.exit(0);
 }
 

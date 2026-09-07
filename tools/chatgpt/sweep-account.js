@@ -25,18 +25,29 @@
 //   --run <name>        run label; output lands in <harvest>/sweep-<name>/
 //   --save-ids <file>   write the enumerated conversation ids and stop
 //   --ids-file <file>   take the population from a file instead of the sidebar
-//   --sample <n>        deterministic subset of n conversations (same in every run)
-//   --seed <s>          sampling seed (default "clio")
 //   --limit <n>         stop after n conversations (sizing a first pass)
 //   --max-minutes <n>   stop when the wall clock passes n minutes
 //   --per-conv-min <n>  give up on one conversation after n minutes (default 12)
 //   --list              enumerate and print, capture nothing
 //   --out <dir>         override the harvest root
 //
-// Pin the population with --save-ids once, then --ids-file for all three runs.
-// The sidebar is not stable between visits -- one enumeration found 115
-// conversations and another 227 -- and runs over different populations cannot
-// be differenced.
+// Pin the population with --save-ids once, then --ids-file for all three runs
+// (#305). The sidebar is not stable between visits -- three enumerations of one
+// account returned 115, 227 and 340 -- and runs over different populations
+// cannot be differenced.
+//
+// THE FULL POPULATION, EVERY RUN. There is deliberately no sampling flag (#304).
+// The measurement is not an average loss rate, which would survive a subset
+// comfortably; it is the size of the all-missed bucket, which at a ~4% rate over
+// three runs is p^3 -- a handful of messages out of tens of thousands. Shrink
+// the population and that bucket falls below one, at which point a systematic
+// cause and a pure race produce the same observation and the experiment answers
+// nothing. The rare bucket IS the signal, and sampling is the one operation that
+// destroys it.
+//
+// --limit and --max-minutes bound a SESSION, not the population. The sweep is
+// resumable, so time-boxed chunks converge on the same complete result: that is
+// interruption, not selection.
 
 const { chromium } = require('@playwright/test');
 const fs = require('fs');
@@ -216,23 +227,6 @@ async function main() {
     say('enumerating conversations...');
     convs = await enumerateConversations(page);
     say(`found ${convs.length} conversation(s)`);
-  }
-
-  // A deterministic subset, so three runs sample the SAME conversations without
-  // having to coordinate. Ordering by a hash of the id rather than by position
-  // means the choice does not depend on enumeration order, which is itself
-  // unstable. 340 conversations times three runs is roughly a day of wall
-  // clock; forty is a few hours and is ample for a rate.
-  const SAMPLE = Number(arg('sample', 0));
-  if (SAMPLE > 0 && SAMPLE < convs.length) {
-    const seed = String(arg('seed', 'clio'));
-    const key = (s) => {
-      let h = 2166136261;
-      for (const ch of seed + s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
-      return h >>> 0;
-    };
-    convs = [...convs].sort((a, b) => key(a.id) - key(b.id)).slice(0, SAMPLE);
-    say(`sampled ${convs.length} conversation(s) (seed "${seed}")`);
   }
 
   const SAVE_IDS = arg('save-ids', null);

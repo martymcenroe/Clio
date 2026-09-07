@@ -57,13 +57,35 @@ The extension creates a zip file containing:
     "conversationId": "abc123",
     "title": "My Conversation",
     "extractedAt": "2026-01-19T12:34:56.789Z",
-    "url": "https://gemini.google.com/app/abc123",
-    "turnCount": 24,
+    "url": "https://chatgpt.com/c/abc123",
+    "messageCount": 24,
     "imageCount": 3,
+    "fileCount": 1,
+    "decorationSkipped": 12,
+    "contentComplete": true,
+    "incompleteReasons": [],
     "extractionErrors": [],
-    "partialSuccess": false
+    "mediaErrors": [],
+    "partialSuccess": false,
+    "scrollInfo": {
+      "messagesLoaded": 24,
+      "scrollAttempts": 31,
+      "reachedTop": true,
+      "terminationReason": "reached-top",
+      "finalScrollTop": 0,
+      "finalScrollHeight": 48210,
+      "quietRoundsAtTop": 6
+    },
+    "orderInfo": {
+      "orderedBy": "distance from the scroller bottom, measured at capture time",
+      "capturedMessages": 24,
+      "withOrderKey": 24,
+      "withoutOrderKey": 0,
+      "neverMeasuredOnSettledDom": 0,
+      "orderConfidence": "every message was ordered from a settled measurement"
+    }
   },
-  "turns": [
+  "messages": [
     {
       "index": 0,
       "role": "user",
@@ -74,8 +96,9 @@ The extension creates a zip file containing:
     {
       "index": 1,
       "role": "assistant",
-      "content": "Of course! Here's how...\n\n```python\nprint('hello')\n```",
+      "content": "Of course! Here is how...",
       "thinking": "Let me analyze this request...",
+      "modelSlug": "gpt-5",
       "attachments": [
         { "type": "image", "filename": "images/001.png", "originalSrc": "..." }
       ]
@@ -83,6 +106,31 @@ The extension creates a zip file containing:
   ]
 }
 ```
+
+`orderInfo` appears only on sites whose export is ordered from the scroll capture
+cache — ChatGPT today. Gemini and Claude read turns from the live DOM, so the
+cache's ordering confidence would say nothing about their exports and the key is
+omitted rather than reported as meaningless zeros.
+
+### Reading the metadata
+
+Several fields answer "can I trust this file", and they answer different
+questions.
+
+| field | what it means |
+|---|---|
+| `contentComplete` | **The field to gate on.** Did the capture get the whole conversation? `incompleteReasons` says why not, in words, and is empty exactly when this is `true`. |
+| `extractionErrors` | Things that cost conversation content. A human would act on these. |
+| `mediaErrors` | Image fetches that failed. *Fail Open by design* — the transcript is unaffected — so these are reported and do **not** make the capture incomplete. |
+| `partialSuccess` | Retained for existing consumers. It is the negation of `contentComplete` and nothing else. |
+| `decorationSkipped` | Citation favicons deliberately not fetched. Not a failure; recorded so the drop stays auditable. |
+| `scrollInfo.reachedTop` | Whether the walk reached the beginning of the conversation. A capture that stopped short sets `contentComplete: false` and names the gap. |
+| `orderInfo.neverMeasuredOnSettledDom` | Messages positioned from a measurement taken before the page settled. Each one is marked `orderFromUnsettledMeasurement` in `messages`. |
+
+`scrollInfo.reachedTop` is a patience-bounded claim rather than a proof: the site
+can always pause longer than the extension waits. `finalScrollHeight` and
+`quietRoundsAtTop` record the evidence behind it, so it can be weighed instead of
+taken on trust.
 
 ## Development
 

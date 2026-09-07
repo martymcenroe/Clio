@@ -224,6 +224,14 @@
     <span id="imageFetchWarningText"></span>
   </div>
 
+  <!-- Ordering confidence (#282): recorded since #264, reported since now.
+       Informational rather than a warning — the numbering oracle found zero
+       inversions in a capture carrying nine of these, so overstating it would
+       just be a new always-on flag. -->
+  <div id="orderNote" class="status info" style="display: none; margin-top: 12px;">
+    <span id="orderNoteText"></span>
+  </div>
+
   <div class="footer">
     Local processing only. No data sent to servers.
   </div>

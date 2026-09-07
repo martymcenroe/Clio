@@ -222,7 +222,17 @@ let SCROLL_CONFIG = {
   maxScrollAttempts: 500,       // Multiple scrolls needed to hit buffer edge
   loadingCheckInterval: 100,    // Check loading state every 100ms
   maxLoadingWait: 15000,        // Max 15s waiting for a single loading state
-  progressUpdateInterval: 2     // Update progress more frequently
+  progressUpdateInterval: 2,    // Update progress more frequently
+  // Rounds to keep trying while pinned at a NON-ZERO offset before giving up
+  // and declaring the walk incomplete (#278). Two was the old limit and it is
+  // what produced a 52-message capture of a 233-message conversation: a
+  // virtualized list can re-anchor the scroller for a round or two while a
+  // batch loads, and quitting into that window looks exactly like success.
+  stuckRetries: 5,
+  // Consecutive quiet rounds AT offset zero before the walk may claim it
+  // reached the beginning. Measured on the live site: a real conversation sat
+  // at offset zero, unchanged, for four rounds and then prepended more (#278).
+  topSettleRounds: 6
 };
 
 /**
@@ -244,7 +254,9 @@ function resetScrollConfig() {
     maxScrollAttempts: 500,
     loadingCheckInterval: 100,
     maxLoadingWait: 15000,
-    progressUpdateInterval: 5
+    progressUpdateInterval: 5,
+    stuckRetries: 5,
+    topSettleRounds: 6
   };
 }
 
@@ -703,7 +715,10 @@ async function waitForLoadingComplete() {
  * v2.0: Addresses virtualized list issues where message count stays constant.
  *
  * @param {function} onProgress - Callback for progress updates (optional)
- * @returns {Promise<{success: boolean, messagesLoaded: number, scrollAttempts: number}>}
+ * @returns {Promise<{success: boolean, messagesLoaded: number,
+ *                    scrollAttempts: number, reachedTop: boolean,
+ *                    terminationReason: string, finalScrollTop: number,
+ *                    warning?: string}>}
  */
 async function scrollToLoadAllMessages(onProgress) {
   const scrollContainer = findScrollContainer();
@@ -712,13 +727,26 @@ async function scrollToLoadAllMessages(onProgress) {
       success: false,
       error: 'Could not find scroll container',
       messagesLoaded: 0,
-      scrollAttempts: 0
+      scrollAttempts: 0,
+      reachedTop: false,
+      terminationReason: 'no-scroll-container',
+      finalScrollTop: null
     };
   }
 
   let scrollAttempts = 0;
   let lastScrollTop = scrollContainer.scrollTop;
   let consecutiveNoMovement = 0;
+  // Rounds spent pinned at a NON-ZERO offset. Tracked apart from quietRounds
+  // because "stuck below the top" and "settled at the top" mean opposite
+  // things and were conflated (#278).
+  let stuckRounds = 0;
+  // Consecutive rounds at offset zero during which nothing new arrived.
+  let quietRounds = 0;
+  // High-water marks. Growth in either is proof history is still loading, and
+  // is the only thing that resets patience.
+  let lastHeight = scrollContainer.scrollHeight || 0;
+  let lastCount = 0;
 
   // Track DOM mutations to detect content loading (handles virtualized lists)
   // The list is virtualized: messages loaded early in the scroll are evicted
@@ -820,9 +848,17 @@ async function scrollToLoadAllMessages(onProgress) {
       captureRenderedMessages();
       remeasureRenderedMessages();
 
-      // Check current state
+      // Check current state.
+      //
+      // atTop and noMovement are NOT the same fact and must not be treated as
+      // one (#278). Reaching offset zero means the conversation has no more
+      // history above; a scroller that merely stopped moving at offset 3000
+      // means the walk failed, and the two produced identical exports.
+      //
+      // A real browser can leave a fractional offset after a smooth scroll, so
+      // the top test has a one-pixel tolerance rather than === 0.
       const currentScrollTop = scrollContainer.scrollTop;
-      const atTop = currentScrollTop === 0;
+      const atTop = currentScrollTop <= 1;
       const noMovement = currentScrollTop === lastScrollTop;
 
       // Log every 10 scrolls or on significant events
@@ -837,15 +873,44 @@ async function scrollToLoadAllMessages(onProgress) {
         });
       }
 
-      if (atTop || noMovement) {
-        consecutiveNoMovement++;
-        logScroll('At top/stuck', { consecutiveNoMovement, mutationDetected });
+      // Settle before judging: a prepended batch can land after the scroll
+      // handler returns.
+      await sleep(SCROLL_CONFIG.mutationTimeout);
+      captureRenderedMessages();
 
-        // Give extra time for final content to load
-        await sleep(SCROLL_CONFIG.mutationTimeout);
+      // GROWTH, not mutations, is the signal that history is still arriving.
+      //
+      // Measured against the live site 2026-09-06: scrolling a real
+      // conversation to offset 0 and waiting, the scroller reported scrollTop 0
+      // with an unchanged scrollHeight and message count for as many as four
+      // consecutive rounds — and then grew again. Over 25 rounds scrollHeight
+      // went 14,795 -> 115,437 and was still climbing.
+      //
+      // So "at offset zero and quiet" is the top of the LOADED WINDOW, not the
+      // beginning of the conversation, and treating it as the beginning is a
+      // false completeness signal — the same defect as #278 wearing a better
+      // name. MutationObserver is worse still: ChatGPT's UI mutates constantly
+      // for reasons unrelated to history, so it is noisy in one direction and
+      // silent in the other.
+      const currentHeight = scrollContainer.scrollHeight || 0;
+      const currentCount = Math.max(countMessages(), MESSAGE_CACHE.size);
+      const grew = currentHeight > lastHeight || currentCount > lastCount;
+      lastHeight = Math.max(lastHeight, currentHeight);
+      lastCount = Math.max(lastCount, currentCount);
 
-        // If we're at top/stuck AND no mutations detected, we're done
-        if (!mutationDetected && consecutiveNoMovement >= 2) {
+      if (grew) {
+        // History is still arriving. Nothing here is a stopping condition.
+        quietRounds = 0;
+        stuckRounds = 0;
+        logScroll('Growing', { height: currentHeight, messages: currentCount });
+      } else if (atTop) {
+        quietRounds++;
+        logScroll('Quiet at top', { quietRounds });
+
+        // Only after the conversation has stopped growing for topSettleRounds
+        // consecutive rounds AT offset zero. The live measurement above is why
+        // this is not 2.
+        if (quietRounds >= SCROLL_CONFIG.topSettleRounds) {
           captureRenderedMessages();
           remeasureRenderedMessages();
           const finalCount = Math.max(countMessages(), MESSAGE_CACHE.size);
@@ -854,18 +919,42 @@ async function scrollToLoadAllMessages(onProgress) {
           return {
             success: true,
             messagesLoaded: finalCount,
-            scrollAttempts
+            scrollAttempts,
+            reachedTop: true,
+            terminationReason: 'reached-top',
+            finalScrollTop: currentScrollTop,
+            finalScrollHeight: currentHeight,
+            quietRoundsAtTop: quietRounds
           };
         }
+      } else if (noMovement) {
+        // Pinned below the top with nothing arriving. This is where the
+        // 52-message capture gave up after two rounds and called it success.
+        stuckRounds++;
+        logScroll('Stuck below top', { stuckRounds, at: currentScrollTop });
 
-        // Mutations detected or first time at top - keep trying
-        if (mutationDetected) {
-          consecutiveNoMovement = 0;
+        if (stuckRounds >= SCROLL_CONFIG.stuckRetries) {
+          captureRenderedMessages();
+          remeasureRenderedMessages();
+          const finalCount = Math.max(countMessages(), MESSAGE_CACHE.size);
+          logScroll('STUCK', { finalMessages: finalCount, totalScrolls: scrollAttempts });
+          return {
+            success: true,
+            messagesLoaded: finalCount,
+            scrollAttempts,
+            reachedTop: false,
+            terminationReason: 'stuck',
+            finalScrollTop: currentScrollTop,
+            finalScrollHeight: currentHeight,
+            warning: `Scrolling stopped ${Math.round(currentScrollTop)}px from the top of the conversation after ${scrollAttempts} attempt(s); earlier messages are missing.`
+          };
         }
       } else {
-        // Successfully scrolled, reset counter
-        consecutiveNoMovement = 0;
+        // Moving upward with nothing new yet: ordinary progress.
+        quietRounds = 0;
+        stuckRounds = 0;
       }
+      consecutiveNoMovement = noMovement ? consecutiveNoMovement + 1 : 0;
 
       lastScrollTop = currentScrollTop;
 
@@ -888,6 +977,9 @@ async function scrollToLoadAllMessages(onProgress) {
     success: true,
     messagesLoaded: finalCount,
     scrollAttempts,
+    reachedTop: false,
+    terminationReason: 'max-attempts',
+    finalScrollTop: scrollContainer.scrollTop,
     warning: `Reached maximum scroll attempts (${SCROLL_CONFIG.maxScrollAttempts}). Conversation may be incomplete.`
   };
 }
@@ -1984,6 +2076,19 @@ async function extractConversation() {
     if (scrollResult.warning) {
       incompleteReasons.push(scrollResult.warning);
     }
+    // The walk never got to the beginning of the conversation, so messages
+    // above the stopping point were never rendered and cannot be in this file
+    // (#278). This is the check the 52-message capture needed and did not have:
+    // it stopped 2 attempts in, held 52 of at least 233 messages, and reported
+    // a success shape identical to the complete capture's.
+    //
+    // Guarded on the field being present so a scrollResult from an older code
+    // path cannot silently read as "did not reach the top" and flag every
+    // capture — the opposite failure, and just as unreadable.
+    if (scrollResult.reachedTop === false && !scrollResult.warning) {
+      incompleteReasons.push(
+        'Scrolling did not reach the top of the conversation, so earlier messages are missing.');
+    }
     if (ordersFromCapture && orderStats.withoutOrderKey > 0) {
       incompleteReasons.push(
         `${orderStats.withoutOrderKey} of ${orderStats.captured} message(s) could not be positioned and were appended in capture order`);
@@ -2024,7 +2129,30 @@ async function extractConversation() {
         partialSuccess: !contentComplete,
         scrollInfo: {
           messagesLoaded: scrollResult.messagesLoaded,
-          scrollAttempts: scrollResult.scrollAttempts
+          scrollAttempts: scrollResult.scrollAttempts,
+          // The signal was already in the file as scrollAttempts (2 versus 106
+          // for the same conversation) and nothing acted on it. These say what
+          // that number meant, so the judgement does not have to be made by
+          // whoever reads the export (#278).
+          reachedTop: scrollResult.reachedTop === true,
+          terminationReason: scrollResult.terminationReason || 'unknown',
+          finalScrollTop: typeof scrollResult.finalScrollTop === 'number'
+            ? Math.round(scrollResult.finalScrollTop)
+            : null,
+          // The evidence behind reachedTop, not just the verdict.
+          //
+          // reachedTop is a patience-bounded claim: the scroller was at offset
+          // zero and nothing new arrived for topSettleRounds consecutive
+          // rounds. That is the strongest signal available from inside the
+          // page, and it is not a proof — the site can always pause longer than
+          // the budget. Recording the budget that was actually met lets a
+          // reader weigh it instead of taking the boolean on trust (#278).
+          finalScrollHeight: typeof scrollResult.finalScrollHeight === 'number'
+            ? scrollResult.finalScrollHeight
+            : null,
+          quietRoundsAtTop: typeof scrollResult.quietRoundsAtTop === 'number'
+            ? scrollResult.quietRoundsAtTop
+            : null
         }
       },
       messages: turns

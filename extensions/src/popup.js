@@ -53,6 +53,39 @@ function showImageFetchWarning(failedCount) {
   }
 }
 
+/**
+ * Say plainly when the capture did not reach the beginning of the conversation
+ * (#278).
+ *
+ * The 52-message capture of a 233-message conversation reported the same
+ * success shape as the complete one, and there was no way to tell without a
+ * second capture to diff against. The popup is where the operator is looking at
+ * the time, so it is where this belongs.
+ *
+ * @param {Object|null} metadata export metadata, or null to hide the row
+ */
+function showIncompleteWarning(metadata) {
+  const el = document.getElementById('incompleteWarning');
+  if (!el) return;
+  const text = document.getElementById('incompleteWarningText');
+  const reasons = (metadata && metadata.incompleteReasons) || [];
+  // Only when the field is present AND false. A result saved by an older build
+  // carries no contentComplete, and treating "missing" as "incomplete" would
+  // flag every capture — the same unreadable signal pointing the other way.
+  const incomplete = !!metadata && metadata.contentComplete === false;
+
+  if (incomplete) {
+    if (text) {
+      text.textContent = reasons.length
+        ? `This capture is INCOMPLETE. ${reasons.join(' ')}`
+        : 'This capture is INCOMPLETE — part of the conversation is missing.';
+    }
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 function showResult(messageCount, images, errors, scrollInfo, isLastResult = false) {
   const resultEl = document.getElementById('result');
   resultEl.classList.add('visible');
@@ -60,10 +93,15 @@ function showResult(messageCount, images, errors, scrollInfo, isLastResult = fal
   document.getElementById('imageCount').textContent = images;
   document.getElementById('errorCount').textContent = errors;
 
-  // Show scroll info if available
+  // Show scroll info if available. Where the walk stopped short, say so here
+  // too: "52 loaded, 2 scrolls" was already on screen for the truncated
+  // capture and read as an ordinary result (#278).
   const scrollInfoEl = document.getElementById('scrollInfo');
   if (scrollInfoEl && scrollInfo) {
-    scrollInfoEl.textContent = `(${scrollInfo.messagesLoaded} loaded, ${scrollInfo.scrollAttempts} scrolls)`;
+    const stoppedShort = scrollInfo.reachedTop === false;
+    scrollInfoEl.textContent =
+      `(${scrollInfo.messagesLoaded} loaded, ${scrollInfo.scrollAttempts} scrolls` +
+      `${stoppedShort ? ' — stopped before the top' : ''})`;
     scrollInfoEl.classList.add('visible');
   }
 
@@ -427,6 +465,11 @@ async function handleExtract() {
     ).length;
     showImageFetchWarning(imageFetchFailures);
 
+    // A capture that stopped short is the one thing the operator must not miss,
+    // so it is stated in the popup rather than left for a reader of the JSON
+    // (#278).
+    showIncompleteWarning(data.metadata);
+
     // Save to localStorage for persistence (popup may close during download).
     // Pass site so the next popup-open on a different site doesn't surface
     // these stats (#138).
@@ -539,6 +582,7 @@ if (typeof module !== 'undefined' && module.exports) {
     hideProgress,
     showResult,
     showImageFetchWarning,
+    showIncompleteWarning,
     totalFailureCount,
     setButtonState,
     createZip,

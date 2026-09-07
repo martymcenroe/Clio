@@ -1749,6 +1749,25 @@ async function extractTurnsChatGPT() {
       turn.attachments = (turn.attachments || []).concat(files);
     }
 
+    // The message's own identity, carried out of the page (#294).
+    //
+    // It was already in hand here — read two lines up to attach files, used as
+    // the cache key for the entire scroll — and then discarded, leaving `index`
+    // as the only handle on a message. index is a position within THIS capture,
+    // so it changes whenever the capture does, which makes two captures of one
+    // conversation impossible to compare exactly.
+    //
+    // That is not academic: the acceptance test on #278 is "a correct extraction
+    // is a superset of the three existing captures", and without ids it had to
+    // be attempted on message text. Two comparators gave two different answers
+    // (130 missing on exact text, 44 on a normalised prefix) because the
+    // harvester and the extension extract text differently. With ids it is a set
+    // difference.
+    //
+    // null rather than absent where a site has no such attribute, so a consumer
+    // can tell "this site has no message identity" from "this build is old".
+    turns[turns.length - 1].id = messageId || null;
+
     // Mark the messages whose position rests on a measurement taken while the
     // page was still moving (#282). Present only on the suspects, so a reader
     // — or the numbering oracle in tools/chatgpt/verify-order.js — can check
@@ -1841,13 +1860,24 @@ async function extractTurnsGemini() {
  */
 async function extractTurns() {
   const site = getSite();
+  let turns;
   if (site === 'claude') {
-    return extractTurnsClaude();
+    turns = await extractTurnsClaude();
+  } else if (site === 'chatgpt') {
+    turns = await extractTurnsChatGPT();
+  } else {
+    turns = await extractTurnsGemini();
   }
-  if (site === 'chatgpt') {
-    return extractTurnsChatGPT();
-  }
-  return extractTurnsGemini();
+
+  // Every message carries an `id` key on every site (#294), null where the site
+  // exposes no stable identity. Present-and-null says "this site has no message
+  // identity"; absent would say "this build predates the field", and a consumer
+  // comparing two captures needs to tell those apart. Only ChatGPT populates it
+  // today — it is the site with data-message-id and the site that virtualizes,
+  // so it is also the one where captures diverge and identity is needed most.
+  return turns.map(t => (Object.prototype.hasOwnProperty.call(t, 'id')
+    ? t
+    : { ...t, id: null }));
 }
 
 // ============================================================================

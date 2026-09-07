@@ -87,6 +87,7 @@ The extension creates a zip file containing:
   },
   "messages": [
     {
+      "id": "abc-123",
       "index": 0,
       "role": "user",
       "content": "Hello, can you help me with...",
@@ -94,6 +95,7 @@ The extension creates a zip file containing:
       "attachments": []
     },
     {
+      "id": "def-456",
       "index": 1,
       "role": "assistant",
       "content": "Of course! Here is how...",
@@ -126,6 +128,7 @@ questions.
 | `decorationSkipped` | Citation favicons deliberately not fetched. Not a failure; recorded so the drop stays auditable. |
 | `scrollInfo.reachedTop` | Whether the walk reached the beginning of the conversation. A capture that stopped short sets `contentComplete: false` and names the gap. |
 | `orderInfo.neverMeasuredOnSettledDom` | Messages positioned from a measurement taken before the page settled. Each one is marked `orderFromUnsettledMeasurement` in `messages`. |
+| `messages[].id` | The site's own message identity. `index` is a position within *this* capture and shifts whenever the capture does; `id` does not, so two captures of one conversation can be compared exactly. `null` on sites that expose no such attribute — present-and-null, never absent, so "this site has no identity" is distinguishable from "this build is old". |
 
 `scrollInfo.reachedTop` is a patience-bounded claim rather than a proof: the site
 can always pause longer than the extension waits. `finalScrollHeight` and

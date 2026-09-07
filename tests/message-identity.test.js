@@ -27,7 +27,7 @@ const { SELECTORS: GEMINI } = require('../extensions/src/selectors.js');
 const FAST = {
   scrollStep: 100, scrollDelay: 5, loadingAppearDelay: 2, mutationTimeout: 10,
   maxScrollAttempts: 10, loadingCheckInterval: 5, maxLoadingWait: 50,
-  progressUpdateInterval: 5, stuckRetries: 2, topSettleRounds: 2
+  progressUpdateInterval: 5, stuckRetries: 2, topSettleRounds: 2, minTopWaitMs: 0
 };
 
 function chatgptDom() {

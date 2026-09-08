@@ -248,6 +248,18 @@ function setButtonState(enabled, text = 'Extract Conversation') {
 // ============================================================================
 
 /**
+ * The one place the "you are not on a supported page" copy for the extract
+ * button lives.
+ *
+ * It was duplicated into three test expectations, and when the Recorder work
+ * added a fourth site to `isSupportedSite` the string here changed while the
+ * expectations did not -- three tests went red on a clean clone and stayed
+ * that way (#247). A constant both sides import cannot drift.
+ */
+const UNSUPPORTED_SITE_MESSAGE =
+  'Please open a Gemini, Claude, ChatGPT, or Recorder page first.';
+
+/**
  * Check if a URL is a supported conversation site.
  * @param {string} url
  * @returns {boolean}
@@ -458,7 +470,7 @@ async function handleExtract() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab || !tab.url || !isSupportedSite(tab.url)) {
-      setStatus('Please open a Gemini, Claude, ChatGPT, or Recorder page first.', 'error');
+      setStatus(UNSUPPORTED_SITE_MESSAGE, 'error');
       setButtonState(true);
       hideProgress();
       return;
@@ -612,6 +624,7 @@ if (downloadAllBtn) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    UNSUPPORTED_SITE_MESSAGE,
     isSupportedSite,
     getSitePrefix,
     sanitizeFilename,

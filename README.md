@@ -62,6 +62,8 @@ The extension creates a zip file containing:
     "imageCount": 3,
     "fileCount": 1,
     "decorationSkipped": 12,
+    "reasoningAffordances": 0,
+    "reasoningCaptured": 0,
     "contentComplete": true,
     "incompleteReasons": [],
     "extractionErrors": [],
@@ -126,6 +128,8 @@ questions.
 | `mediaErrors` | Image fetches that failed. *Fail Open by design* — the transcript is unaffected — so these are reported and do **not** make the capture incomplete. |
 | `partialSuccess` | Retained for existing consumers. It is the negation of `contentComplete` and nothing else. |
 | `decorationSkipped` | Citation favicons deliberately not fetched. Not a failure; recorded so the drop stays auditable. |
+| `reasoningAffordances` | Assistant turns that visibly offer reasoning ("Worked for 5m 34s" and similar). Reported even when zero, so "there was none to capture" stays distinguishable from "we captured all of it". |
+| `reasoningCaptured` | Messages whose `thinking` is non-empty. When it is below `reasoningAffordances`, the shortfall is named in `incompleteReasons` and the capture is not complete. |
 | `scrollInfo.reachedTop` | Whether the walk reached the beginning of the conversation. A capture that stopped short sets `contentComplete: false` and names the gap. |
 | `orderInfo.neverMeasuredOnSettledDom` | Messages positioned from a measurement taken before the page settled. Each one is marked `orderFromUnsettledMeasurement` in `messages`. |
 | `messages[].id` | The site's own message identity. `index` is a position within *this* capture and shifts whenever the capture does; `id` does not, so two captures of one conversation can be compared exactly. `null` on sites that expose no such attribute — present-and-null, never absent, so "this site has no identity" is distinguishable from "this build is old". |

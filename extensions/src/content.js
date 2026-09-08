@@ -857,6 +857,69 @@ function getMessageArtifacts(id) {
   return [...entry.files.values(), ...entry.downloads.values()];
 }
 
+// ============================================================================
+// Reasoning affordances (#324)
+// ============================================================================
+
+/**
+ * The elapsed time a reasoning affordance reports.
+ *
+ * Every wording observed so far ends in one: "Reasoned about X for 12 seconds",
+ * "Thought for 8s", "Worked for 5m 34s". Keying on the duration rather than the
+ * verb is what survives the wording changing, which it has done three times, and
+ * most recently broke a verb list built from a stale comment (#321).
+ */
+const REASONING_DURATION =
+  /\bfor\s+\d+\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?|s|sec|secs|seconds?)\b/i;
+
+const REASONING_CLICKABLE = 'button, [role="button"], [aria-expanded], summary';
+
+/**
+ * Does this element look like the control that reveals reasoning?
+ *
+ * DELIBERATELY NARROWER THAN THE PROBE. tools/chatgpt/reasoning-dom.js is
+ * over-inclusive on purpose: it feeds a candidate list a person reads, so a
+ * false positive costs a glance. This runs in every export, so a false positive
+ * marks a clean capture incomplete — and a flag that fires spuriously stops
+ * being read, which is the exact failure contentComplete was created to escape
+ * from partialSuccess (#280).
+ *
+ * So: duration and self-identifying attributes only. The bare-verb route the
+ * probe also uses is not here, because "Thinking" on its own is loose enough to
+ * match a control that has nothing to do with reasoning.
+ *
+ * @param {Element} el
+ * @returns {boolean}
+ */
+function isReasoningAffordance(el) {
+  if (!el || !el.getAttribute) return false;
+  if (REASONING_DURATION.test(el.textContent || '')) return true;
+  const testid = el.getAttribute('data-testid') || '';
+  const aria = el.getAttribute('aria-label') || '';
+  return /reason|think|thought/i.test(testid + ' ' + aria);
+}
+
+/**
+ * How many assistant turns visibly offer reasoning?
+ *
+ * Counted per TURN, not per element, so a turn carrying two matching controls
+ * cannot inflate the number past the count of messages it is compared against.
+ *
+ * @returns {number}
+ */
+function countReasoningAffordances() {
+  if (!SELECTORS.assistantMessage) return 0;
+  let n = 0;
+  const turns = document.querySelectorAll(SELECTORS.assistantMessage);
+  for (const turn of turns) {
+    const controls = turn.querySelectorAll(REASONING_CLICKABLE);
+    for (const el of controls) {
+      if (isReasoningAffordance(el)) { n++; break; }
+    }
+  }
+  return n;
+}
+
 /**
  * Wait for any visible loading indicator to disappear.
  * @returns {Promise<void>}
@@ -2354,6 +2417,26 @@ async function extractConversation() {
       incompleteReasons.push(
         `${orderStats.withoutOrderKey} of ${orderStats.captured} message(s) could not be positioned and were appended in capture order`);
     }
+    // Reasoning the page offers and we did not take (#324).
+    //
+    // On ChatGPT thinkingToggle and thinkingContent are both null, so
+    // expandAllContent() clicks nothing and every message ships an empty
+    // thinking field — across 5,644 captured messages, not one had any (#316).
+    // Until now that was silent: a conversation whose reasoning was dropped
+    // looked exactly like one that never had any, in a capture reporting
+    // contentComplete: true.
+    //
+    // Comparing what the page offers against what we captured is
+    // self-correcting. When the selectors land the counts converge and this
+    // stops firing on its own, so it needs no follow-up removal and cannot mask
+    // the real fix.
+    const reasoningAffordances = countReasoningAffordances();
+    const reasoningCaptured = turns.filter(
+      t => t.thinking && String(t.thinking).trim()).length;
+    if (reasoningAffordances > reasoningCaptured) {
+      incompleteReasons.push(
+        `${reasoningAffordances - reasoningCaptured} message(s) show reasoning that was not captured`);
+    }
     const contentComplete = incompleteReasons.length === 0;
 
     // Image fetches are Fail Open by design — the transcript is unaffected when
@@ -2379,6 +2462,11 @@ async function extractConversation() {
         // regression in the decoration test is visible as a number moving
         // rather than as images quietly going missing (#279).
         decorationSkipped: getDecorationCount(),
+        // What the page offered versus what we took (#324). Both are reported
+        // even when they agree, so "we captured all of it" and "there was none
+        // to capture" stay distinguishable — which they were not before.
+        reasoningAffordances,
+        reasoningCaptured,
         // Did the capture get the whole conversation? The field to gate on.
         contentComplete,
         incompleteReasons,
@@ -2536,6 +2624,10 @@ if (typeof module !== 'undefined' && module.exports) {
     validateSelectors,
     isStreaming,
     expandAllContent,
+    // Reasoning the page offers versus what we captured (#324)
+    isReasoningAffordance,
+    countReasoningAffordances,
+    REASONING_DURATION,
     extractImages,
     // Citation decoration (#279)
     findImages,

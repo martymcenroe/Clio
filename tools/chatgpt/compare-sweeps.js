@@ -28,6 +28,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { assessAllMissed } = require('./sweep-stats.js');
 
 function arg(name, dflt) {
   const i = process.argv.indexOf(`--${name}`);
@@ -43,6 +44,8 @@ if (names.length < 2) {
 }
 
 const say = (s) => process.stdout.write(s + '\n');
+// Small p-values are the whole point here, so they must not round to 0.000.
+const fmtP = (p) => (p < 1e-4 ? p.toExponential(1) : p.toFixed(4));
 
 function loadSweep(name) {
   const dir = path.isAbsolute(name) ? name : path.join(HARVEST, name);
@@ -135,25 +138,44 @@ for (let k = 0; k <= R; k++) {
   const label = k === 0 ? 'captured every time'
     : k === R ? 'MISSED EVERY TIME -> systematic'
       : `missed in ${k} of ${R} -> race`;
+  // toFixed(1) prints the all-missed expectation as "0.0", which is the one
+  // number the verdict below actually turns on -- it is ~1.6e-3, not zero.
+  const exp = expected < 0.05 ? expected.toExponential(1) : expected.toFixed(1);
+  const ratio = expected > 0 ? (missBuckets[k] / expected) : Infinity;
+  const ratioStr = missBuckets[k] === 0 ? '' : `   obs/exp ${ratio.toFixed(ratio >= 100 ? 0 : 2)}x`;
   say(`  missed ${k}x: ${String(missBuckets[k]).padStart(6)}   ` +
-      `expected if purely random ${expected.toFixed(1).padStart(8)}   ${label}`);
+      `expected if purely random ${exp.padStart(8)}   ${label}${ratioStr}`);
 }
 say('');
+say('  p is fitted from these same runs, so the 0x and single-miss buckets are');
+say('  close to expectation partly by construction. The all-missed bucket is the');
+say('  one the fit does not pin down, which is why it carries the test below.');
+say('');
 
-const excess = missBuckets[R] - unionTotal * Math.pow(pHat, R);
+const verdict = assessAllMissed({ unionTotal, pHat, R, observed: missBuckets[R] });
 say('READING IT');
 if (missBuckets[R] === 0) {
   say('  Nothing was missed in every run: the loss is entirely a race.');
   say('  Capturing twice and merging by id would recover it.');
-} else if (excess > Math.max(3, 0.5 * missBuckets[R])) {
-  say(`  ${missBuckets[R]} message(s) were missed in EVERY run, far above the ${(unionTotal * Math.pow(pHat, R)).toFixed(1)}`);
-  say('  a pure race predicts. That excess is a second, structural bug -- those');
-  say('  messages are never captured, and no amount of retrying will get them.');
-  say('  Inspect them individually; they are listed below.');
+} else if (verdict.structural) {
+  say(`  ${missBuckets[R]} message(s) were missed in EVERY run against ${verdict.expected.toExponential(2)}`);
+  say(`  expected under a pure race -- ${verdict.ratio.toFixed(0)}x expectation, p = ${fmtP(verdict.pValue)}.`);
+  say('  That is a second, structural bug: those messages are never captured and');
+  say('  no amount of retrying will get them. Inspect them individually; they are');
+  say('  listed below.');
 } else {
-  say('  The all-missed bucket is close to what a pure race predicts, so there is');
-  say('  no evidence of a structural miss on top of it.');
+  say(`  ${missBuckets[R]} message(s) were missed in every run against ${verdict.expected.toExponential(2)}`);
+  say(`  expected under a pure race, p = ${fmtP(verdict.pValue)}, which does not clear`);
+  say(`  alpha = ${verdict.alpha}. No evidence of a structural miss on top of the race.`);
 }
+say('');
+say('  What that verdict cannot see: it reads only messages that reached the');
+say('  union. A message the extractor removes identically in EVERY run never');
+say('  enters any run\'s id list, so it is in no bucket and cannot appear above at');
+say('  all -- see #332, where 18 such messages were measured in sweep-1 while this');
+say('  comparison reported an empty all-missed bucket. The test answers "is the');
+say('  observed all-missed count consistent with a race", not "was anything lost');
+say('  deterministically".');
 say('');
 
 if (alwaysMissed.length) {

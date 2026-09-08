@@ -6,6 +6,7 @@
  */
 
 const {
+  UNSUPPORTED_SITE_MESSAGE,
   isSupportedSite,
   getSitePrefix,
   sanitizeFilename,
@@ -701,7 +702,7 @@ describe('handleExtract', () => {
     await handleExtract();
 
     const statusEl = document.getElementById('status');
-    expect(statusEl.textContent).toBe('Please open a Gemini, Claude, or ChatGPT conversation first.');
+    expect(statusEl.textContent).toBe(UNSUPPORTED_SITE_MESSAGE);
     expect(statusEl.className).toBe('status error');
   });
 
@@ -711,7 +712,7 @@ describe('handleExtract', () => {
     await handleExtract();
 
     const statusEl = document.getElementById('status');
-    expect(statusEl.textContent).toBe('Please open a Gemini, Claude, or ChatGPT conversation first.');
+    expect(statusEl.textContent).toBe(UNSUPPORTED_SITE_MESSAGE);
   });
 
   test('shows error when tab has no URL', async () => {
@@ -720,7 +721,7 @@ describe('handleExtract', () => {
     await handleExtract();
 
     const statusEl = document.getElementById('status');
-    expect(statusEl.textContent).toBe('Please open a Gemini, Claude, or ChatGPT conversation first.');
+    expect(statusEl.textContent).toBe(UNSUPPORTED_SITE_MESSAGE);
   });
 
   test('disables button during extraction', async () => {

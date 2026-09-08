@@ -122,14 +122,36 @@ async function main() {
 
   say('');
   say(`reasoning candidates: ${found.candidates.length}`);
+  say(`other clickables inside assistant turns: ${found.otherClickablesTotal}` +
+      (found.otherClickablesTotal > found.otherClickables.length
+        ? ` (showing ${found.otherClickables.length})` : ''));
+
+  // The backstop is printed whether or not the routes matched, because its
+  // whole purpose is to be there when they are wrong (#321). An affordance
+  // reading "Worked for 5m 34s" matched none of the original routes; if that
+  // happens again with a wording nobody predicted, it shows up here.
+  if (found.otherClickables.length) {
+    say('');
+    say('BACKSTOP -- clickables in assistant turns that no route matched.');
+    say('If the reasoning affordance is not in the candidate list above, it is');
+    say('almost certainly one of these, and the routes need widening.');
+    for (const o of found.otherClickables) {
+      say(`  clickable=${o.clickable}  label="${o.label}"`);
+      say(renderChain(o.chain, 6));
+    }
+  }
+
   if (!found.candidates.length) {
     say('');
-    say('No affordance found on this conversation. Two readings, and this probe');
-    say('cannot separate them from one page: the conversation used a model that');
-    say('emits no reasoning, or the markup no longer matches either route (a');
-    say('label starting "Reasoned"/"Thought", or a data-testid/aria-label naming');
-    say('reasoning). Try a conversation known to have used a reasoning model');
-    say('before concluding anything about the selectors.');
+    say('No candidate matched a route. THIS IS NOT EVIDENCE THAT THE PAGE HAS NO');
+    say('REASONING -- it is equally consistent with the routes being wrong, which');
+    say('has already happened once: the first version of this probe matched only');
+    say('reasoned/thought/thinking/reasoning and would have missed an affordance');
+    say('reading "Worked for 5m 34s".');
+    say('Read the backstop listing above before concluding anything. If the');
+    say('affordance is in there, widen the routes in reasoning-dom.js. If the');
+    say('backstop is empty too, try a conversation known to have used a reasoning');
+    say('model.');
     flush();
     return;
   }
@@ -147,55 +169,34 @@ async function main() {
 
     if (!c.clickable) { say('    (not clickable -- not clicked)'); continue; }
 
-    const before = await page.evaluate((idx) => {
-      const f = window.ClioReasoningDom.findReasoningCandidates(document);
-      const els = document.querySelectorAll('button, [role="button"], [aria-expanded]');
-      let n = 0;
-      for (const el of els) {
-        if (!window.ClioReasoningDom.LABEL.test(el.textContent || '')) continue;
-        if (n++ !== idx) continue;
-        const turn = el.closest('[data-message-author-role="assistant"]');
-        return {
-          turnTextLen: turn ? turn.textContent.length : null,
-          expanded: el.getAttribute('aria-expanded'),
-          docTextLen: document.body.textContent.length,
-          ok: true
-        };
-      }
-      return { ok: false, seen: f.candidates.length };
-    }, i);
+    // Candidate N here is candidate N in the report, because both come from
+    // candidateElements(). The first version re-derived the list at click time
+    // with a different filter, so the indexes agreed only by luck (#321).
+    const measure = (idx) => {
+      const els = window.ClioReasoningDom.candidateElements(document);
+      const c = els[idx];
+      if (!c) return { ok: false };
+      const turn = c.el.closest('[data-message-author-role="assistant"]');
+      return {
+        ok: true,
+        turnTextLen: turn ? turn.textContent.length : null,
+        expanded: c.el.getAttribute('aria-expanded'),
+        docTextLen: document.body.textContent.length
+      };
+    };
 
+    const before = await page.evaluate(measure, i);
     if (!before.ok) { say('    (candidate no longer present -- skipped)'); continue; }
 
     await page.evaluate((idx) => {
-      const els = document.querySelectorAll('button, [role="button"], [aria-expanded]');
-      let n = 0;
-      for (const el of els) {
-        if (!window.ClioReasoningDom.LABEL.test(el.textContent || '')) continue;
-        if (n++ !== idx) continue;
-        el.click();
-        return;
-      }
+      const els = window.ClioReasoningDom.candidateElements(document);
+      if (els[idx]) els[idx].el.click();
     }, i);
     await sleep(SETTLE_MS);
 
-    const after = await page.evaluate((idx) => {
-      const els = document.querySelectorAll('button, [role="button"], [aria-expanded]');
-      let n = 0;
-      for (const el of els) {
-        if (!window.ClioReasoningDom.LABEL.test(el.textContent || '')) continue;
-        if (n++ !== idx) continue;
-        const turn = el.closest('[data-message-author-role="assistant"]');
-        return {
-          turnTextLen: turn ? turn.textContent.length : null,
-          expanded: el.getAttribute('aria-expanded'),
-          docTextLen: document.body.textContent.length
-        };
-      }
-      return null;
-    }, i);
+    const after = await page.evaluate(measure, i);
+    if (!after.ok) { say('    (candidate vanished after click)'); continue; }
 
-    if (!after) { say('    (candidate vanished after click)'); continue; }
     const dTurn = (after.turnTextLen || 0) - (before.turnTextLen || 0);
     const dDoc = after.docTextLen - before.docTextLen;
     say(`    aria-expanded ${before.expanded} -> ${after.expanded}`);
@@ -216,4 +217,4 @@ async function main() {
   flush();
 }
 
-main().catch((e) => { say(`FAILED: ${e && e.message}`); flush(); process.exit(1); });
+main().catch((e) => { say(`FAILED: ${e && e.message}`); flush(); process.exit(1); }).finally(() => process.exit(process.exitCode || 0));

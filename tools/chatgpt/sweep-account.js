@@ -315,4 +315,4 @@ async function main() {
   say('The browser is left exactly as it was found.');
 }
 
-main().catch((e) => { say(`FAILED: ${e.message}`); process.exitCode = 1; });
+main().catch((e) => { say(`FAILED: ${e.message}`); process.exitCode = 1; }).finally(() => process.exit(process.exitCode || 0));

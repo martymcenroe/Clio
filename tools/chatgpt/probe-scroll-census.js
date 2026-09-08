@@ -240,4 +240,4 @@ main().catch((e) => {
     fs.writeFileSync(path.join(OUTDIR, 'census.txt'), lines.join('\n') + '\n');
   } catch (_) { /* nothing more to do */ }
   process.exitCode = 1;
-});
+}).finally(() => process.exit(process.exitCode || 0));

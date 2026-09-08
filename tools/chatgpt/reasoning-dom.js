@@ -10,6 +10,18 @@
 // should be; it reports what is actually on the page so the selector can be read
 // off real markup rather than guessed. Choosing the selector is #316.
 //
+// A DISCOVERY INSTRUMENT MUST BE OVER-INCLUSIVE (#321). Its output is a
+// candidate list a person reads, so a false positive costs a glance and a false
+// negative costs the whole answer -- silently, and dressed as a result. The
+// first version of this file matched an enumerated verb list,
+// reasoned|thought|thinking|reasoning, copied from a comment in
+// selectors-chatgpt.js. The operator then opened a conversation whose affordance
+// reads "Worked for 5m 34s". It matched none of them, and the probe would have
+// printed "no affordance found" about a page that plainly had one.
+//
+// Hence four routes below, additive rather than exclusive, ending in one that
+// does not depend on predicting anything.
+//
 // Never returns conversation text. Lengths, tags, classes and attributes only:
 // output from this is written to disk and pasted into issues, and the
 // conversations are the operator's (#250).
@@ -17,15 +29,31 @@
 (function (root) {
   'use strict';
 
-  // The visible label ChatGPT puts on a reasoning affordance. Deliberately
-  // loose: the wording has changed across models ("Reasoned about X for Ys",
-  // "Thought for Ys") and will change again. A candidate matching this is a
-  // starting point for inspection, never a confirmed hit.
-  var LABEL = /^\s*(reasoned|thought|thinking|reasoning)\b/i;
+  // ROUTE 1 -- the duration. Every wording seen so far ends in an elapsed time:
+  // "Reasoned about X for 12 seconds", "Thought for 8s", "Worked for 5m 34s".
+  // The affordance exists in order to report how long it took, so the duration
+  // is the most durable thing about it, and far more durable than the verb,
+  // which has already changed three times.
+  var DURATION = /\bfor\s+\d+\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?|s|sec|secs|seconds?)\b/i;
+
+  // ROUTE 2 -- the verb, widened. Cheap, and independent of route 1 for a
+  // wording that carries no duration ("Thinking...").
+  var LABEL = /^\s*(reasoned|reasoning|thought|thinking|worked|working|finished|pondered)\b/i;
+
+  // Labels that are certainly NOT the reasoning affordance. Deliberately short:
+  // this suppresses noise in the BACKSTOP only, and anything it wrongly excludes
+  // becomes a false negative, so it earns entries only for controls that appear
+  // on every single turn.
+  var KNOWN_CONTROLS = /^\s*(copy|copied|edit|share|download|read aloud|good response|bad response|regenerate|try again|more actions|switch model)\s*$/i;
 
   // How far up to walk when describing where a candidate sits. Enough to reach
   // the message container without dumping the whole document.
   var CHAIN_DEPTH = 6;
+  var BACKSTOP_CAP = 25;
+
+  function clickableSelector() {
+    return 'button, [role="button"], [aria-expanded], summary';
+  }
 
   /**
    * Describe one element structurally. Never its text.
@@ -76,7 +104,8 @@
    */
   function isClickable(el) {
     if (!el || !el.tagName) return false;
-    if (el.tagName.toLowerCase() === 'button') return true;
+    var tag = el.tagName.toLowerCase();
+    if (tag === 'button' || tag === 'summary') return true;
     var role = el.getAttribute && el.getAttribute('role');
     if (role === 'button') return true;
     if (el.hasAttribute && el.hasAttribute('aria-expanded')) return true;
@@ -84,58 +113,134 @@
   }
 
   /**
-   * Find every plausible reasoning affordance in a document.
+   * Which routes match this element? Returns an array, possibly empty.
+   */
+  function routesFor(el) {
+    var text = el.textContent || '';
+    var hits = [];
+    if (DURATION.test(text)) hits.push('duration');
+    if (LABEL.test(text)) hits.push('label');
+    var testid = (el.getAttribute && (el.getAttribute('data-testid') || '')) || '';
+    var aria = (el.getAttribute && (el.getAttribute('aria-label') || '')) || '';
+    if (/reason|think|thought/i.test(testid + ' ' + aria)) hits.push('attribute');
+    return hits;
+  }
+
+  /**
+   * The candidate ELEMENTS, in a stable order.
    *
-   * Two independent routes, because either may be the one that survives the
-   * next redesign: the visible label, and any test id or aria attribute naming
-   * reasoning. A candidate found by both is the strongest signal available
-   * without clicking it.
+   * Split out from findReasoningCandidates so the probe can click candidate N
+   * and be certain it is the same element the report calls N. Two separate
+   * enumerations would be two things to keep in step, and they would drift --
+   * the first version of the probe re-derived the list by hand at click time
+   * with a different filter, which was only correct by accident.
+   *
+   * Returns live elements, so it is useful only inside the page.
+   */
+  function candidateElements(doc, messageSelector) {
+    var sel = messageSelector || '[data-message-author-role="assistant"]';
+    var out = [];
+    var seen = [];
+
+    // Routes 1 and 2 over anything clickable, anywhere on the page: the
+    // affordance is not necessarily inside the assistant turn, and where it
+    // sits is part of what the probe is trying to find out.
+    var clickables = doc.querySelectorAll(clickableSelector());
+    for (var i = 0; i < clickables.length; i++) {
+      var hits = routesFor(clickables[i]);
+      if (hits.length && seen.indexOf(clickables[i]) === -1) {
+        seen.push(clickables[i]);
+        out.push({ el: clickables[i], foundBy: hits });
+      }
+    }
+
+    // Route 3 over anything self-identifying, clickable or not, since the text
+    // may live in a container that is not itself the button.
+    var attrHits = doc.querySelectorAll(
+      '[data-testid*="reason" i], [data-testid*="think" i], [data-testid*="thought" i], ' +
+      '[aria-label*="reason" i], [aria-label*="think" i], [aria-label*="thought" i]');
+    for (var j = 0; j < attrHits.length; j++) {
+      if (seen.indexOf(attrHits[j]) === -1) {
+        seen.push(attrHits[j]);
+        out.push({ el: attrHits[j], foundBy: ['attribute'] });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Find every plausible reasoning affordance in a document.
    *
    * @param {Document} doc
    * @param {string} messageSelector - how assistant turns are identified
-   * @returns {{assistantTurns: number, candidates: Array<Object>}}
+   * @returns {{assistantTurns: number, candidates: Array, otherClickables: Array,
+   *            otherClickablesTotal: number}}
    */
   function findReasoningCandidates(doc, messageSelector) {
     var sel = messageSelector || '[data-message-author-role="assistant"]';
     var turns = doc.querySelectorAll(sel);
-    var seen = [];
     var candidates = [];
+    var others = [];
+    var othersTotal = 0;
+    var seen = [];
 
-    function add(el, how) {
-      if (!el || seen.indexOf(el) !== -1) return;
-      seen.push(el);
-      var turn = el.closest ? el.closest(sel) : null;
+    var found = candidateElements(doc, sel);
+    for (var f = 0; f < found.length; f++) {
+      var cel = found[f].el;
+      seen.push(cel);
+      var turn = cel.closest ? cel.closest(sel) : null;
       candidates.push({
-        foundBy: how,
-        clickable: isClickable(el),
+        foundBy: found[f].foundBy,
+        clickable: isClickable(cel),
         // Where the affordance sits relative to the assistant turn, which is
         // what decides whether a selector can be scoped to the message.
         insideAssistantTurn: !!turn,
-        label: (el.textContent || '').slice(0, 40).replace(/\s+/g, ' ').trim(),
-        chain: ancestorChain(el)
+        label: (cel.textContent || '').slice(0, 60).replace(/\s+/g, ' ').trim(),
+        chain: ancestorChain(cel)
       });
     }
 
-    // Route 1: anything whose own label reads like a reasoning affordance.
-    var all = doc.querySelectorAll('button, [role="button"], [aria-expanded]');
-    for (var i = 0; i < all.length; i++) {
-      if (LABEL.test(all[i].textContent || '')) add(all[i], 'label');
+    // ROUTE 4 -- the backstop, and the point of this rewrite. Every remaining
+    // clickable inside an assistant turn, minus the controls that appear on
+    // every turn. If the wording changes again to something nobody predicted, it
+    // lands here instead of vanishing.
+    for (var k = 0; k < turns.length; k++) {
+      var inner = turns[k].querySelectorAll(clickableSelector());
+      for (var m = 0; m < inner.length; m++) {
+        var el = inner[m];
+        if (seen.indexOf(el) !== -1) continue;
+        var label = (el.textContent || '').slice(0, 60).replace(/\s+/g, ' ').trim();
+        if (KNOWN_CONTROLS.test(label)) continue;
+        othersTotal++;
+        if (others.length >= BACKSTOP_CAP) continue;
+        seen.push(el);
+        others.push({
+          label: label,
+          clickable: isClickable(el),
+          chain: ancestorChain(el, 3)
+        });
+      }
     }
 
-    // Route 2: anything self-identifying through an attribute.
-    var attrHits = doc.querySelectorAll(
-      '[data-testid*="reason" i], [data-testid*="think" i], ' +
-      '[aria-label*="reason" i], [aria-label*="think" i]');
-    for (var j = 0; j < attrHits.length; j++) add(attrHits[j], 'attribute');
-
-    return { assistantTurns: turns.length, candidates: candidates };
+    return {
+      assistantTurns: turns.length,
+      candidates: candidates,
+      otherClickables: others,
+      otherClickablesTotal: othersTotal
+    };
   }
 
   var api = {
+    DURATION: DURATION,
     LABEL: LABEL,
+    KNOWN_CONTROLS: KNOWN_CONTROLS,
+    BACKSTOP_CAP: BACKSTOP_CAP,
     describe: describe,
     ancestorChain: ancestorChain,
     isClickable: isClickable,
+    routesFor: routesFor,
+    clickableSelector: clickableSelector,
+    candidateElements: candidateElements,
     findReasoningCandidates: findReasoningCandidates
   };
 

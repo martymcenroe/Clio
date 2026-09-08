@@ -204,4 +204,4 @@ main().catch((e) => {
   say('VERIFY ERROR: ' + (e && e.stack ? e.stack : String(e)));
   flush();
   process.exitCode = 1;
-});
+}).finally(() => process.exit(process.exitCode || 0));

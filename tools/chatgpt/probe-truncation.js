@@ -236,4 +236,4 @@ async function main() {
   say(`\nwrote ${OUT}`);
 }
 
-main().catch((e) => { say(`FAILED: ${e.message}`); flush(); process.exitCode = 1; });
+main().catch((e) => { say(`FAILED: ${e.message}`); flush(); process.exitCode = 1; }).finally(() => process.exit(process.exitCode || 0));

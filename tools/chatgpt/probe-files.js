@@ -113,4 +113,4 @@ main().catch((e) => {
   say('PROBE ERROR: ' + (e && e.stack ? e.stack : String(e)));
   try { fs.writeFileSync(OUT, lines.join('\n') + '\n'); } catch (_) {}
   process.exitCode = 1;
-});
+}).finally(() => process.exit(process.exitCode || 0));

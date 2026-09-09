@@ -7,28 +7,39 @@
 // Reads the manifest each sweep wrote; the full exports are only opened if a
 // manifest is missing message ids.
 //
-// THE DISCRIMINATOR. For each conversation, take the union of message ids seen
-// across the runs -- the best available lower bound on what it holds, since no
-// single capture has yet been a superset. Then, per message, count how many runs
-// MISSED it:
+// WHAT THIS MEASURES, AND WHAT IT CANNOT (#348). For each conversation, take the
+// union of message ids seen across the runs, and per message count how many runs
+// MISSED it.
+//
+// The union is built from these runs' own id sets. Every id in it was
+// contributed by some run, so no id can be missing from all R runs: the
+// all-missed bucket is UNREACHABLE, not merely usually empty. This tool was
+// originally documented here as separating a race from a systematic loss. It
+// cannot. The systematic side of that split is invisible to any union-based
+// method by construction, and the tool printed "the loss is entirely a race" for
+// every dataset it ever saw as a result.
+//
+// What IS measurable is the SHAPE of the loss among messages at least one run
+// captured:
 //
 //   missed in 0 runs        captured every time
-//   missed in 1..R-1 runs   a race; retrying and merging is a valid mitigation
-//   missed in ALL R runs    systematic; retrying will never help, and these are
-//                           a different bug wearing the same symptom
+//   missed in 1..R-1 runs   the observable range
+//   missed in ALL R runs    unreachable; see above
 //
-// One run cannot produce that split and two are ambiguous for anything missed
-// once, which is why the sweep is run three times.
+// Under an independent race, the number of runs missing a given message follows
+// a Poisson binomial over the per-run rates. Correlated loss -- a subpopulation
+// that is fragile for every run -- shows up as too few messages missed once and
+// too many missed twice or more. That is the verdict this tool now makes, and on
+// the block-one sweeps it refutes independence decisively (#347).
 //
-// Under an independent per-message loss model with rate p, miss counts follow
-// Binomial(R, p). The expected count in the all-missed bucket is printed beside
-// the observed one: a large excess there is the signature of a structural cause
-// hiding inside what looks like noise.
+// To detect messages the extractor never captures at all, use an instrument that
+// does not consult a union: audit-drops.js (messagesLoaded - messageCount, #332)
+// or the provider's own export (#307).
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { assessAllMissed } = require('./sweep-stats.js');
+const { assessBuckets, missCountsForConversation } = require('./sweep-stats.js');
 
 function arg(name, dflt) {
   const i = process.argv.indexOf(`--${name}`);
@@ -100,24 +111,25 @@ const alwaysMissed = [];
 const unstable = [];
 
 for (const convId of common) {
-  const sets = runs.map(r => new Set(r.byConv.get(convId).ids));
-  const union = new Set();
-  for (const s of sets) for (const id of s) union.add(id);
-  unionTotal += union.size;
+  const m = missCountsForConversation(runs.map(r => r.byConv.get(convId).ids));
+  unionTotal += m.unionSize;
+  for (let k = 0; k <= R; k++) missBuckets[k] += m.buckets[k];
+  for (let i = 0; i < R; i++) perRunMissed[i] += m.perRun[i];
 
   let convAlways = 0, convRacy = 0;
-  for (const id of union) {
-    let missed = 0;
-    sets.forEach((s, i) => { if (!s.has(id)) { missed++; perRunMissed[i]++; } });
-    missBuckets[missed]++;
-    if (missed === R) { convAlways++; alwaysMissed.push({ convId, id }); }
-    else if (missed > 0) convRacy++;
+  for (const [id, who] of m.missedBy) {
+    // `who.length === R` is unreachable -- see missCountsForConversation. Kept
+    // so the shape of the old accounting is still legible, and so a future
+    // change that makes the union a true superset lights this up rather than
+    // silently doing nothing.
+    if (who.length === R) { convAlways++; alwaysMissed.push({ convId, id }); }
+    else if (who.length > 0) convRacy++;
   }
 
   const counts = runs.map(r => r.byConv.get(convId).ids.length);
   const spread = Math.max(...counts) - Math.min(...counts);
   if (spread > 0 || convAlways > 0) {
-    unstable.push({ convId, counts, union: union.size, always: convAlways, racy: convRacy, spread });
+    unstable.push({ convId, counts, union: m.unionSize, always: convAlways, racy: convRacy, spread });
   }
 }
 
@@ -131,51 +143,71 @@ const pHat = perRunMissed.reduce((a, b) => a + b, 0) / (unionTotal * R);
 say(`  pooled per-message miss rate p = ${(100 * pHat).toFixed(3)}%`);
 say('');
 
+const assessment = assessBuckets({ perRunMissed, unionTotal, missBuckets });
+
 say('MISS-COUNT DISTRIBUTION  (across the union of all runs)');
-const choose = (n, k) => { let r = 1; for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1); return r; };
 for (let k = 0; k <= R; k++) {
-  const expected = unionTotal * choose(R, k) * Math.pow(pHat, k) * Math.pow(1 - pHat, R - k);
-  const label = k === 0 ? 'captured every time'
-    : k === R ? 'MISSED EVERY TIME -> systematic'
-      : `missed in ${k} of ${R} -> race`;
-  // toFixed(1) prints the all-missed expectation as "0.0", which is the one
-  // number the verdict below actually turns on -- it is ~1.6e-3, not zero.
+  if (k === R) {
+    // Not an observation. The union is built from these runs' own id sets, so
+    // every id in it was contributed by some run and no id can be missing from
+    // all of them. Printing a bare 0 here read as "nothing systematic was
+    // found", which is the misreading that stood for the life of this tool
+    // (#348).
+    say(`  missed ${k}x: ${'--'.padStart(6)}   UNREACHABLE -- the union is built from these runs,`);
+    say(`  ${''.padEnd(11)}   so a message missed by all of them is in no run's id list and`);
+    say(`  ${''.padEnd(11)}   never reaches this table. See READING IT below.`);
+    continue;
+  }
+  const expected = k === 0
+    ? unionTotal * (assessment.buckets.reduce((a, b) => a - b.prob, 1))
+    : assessment.buckets.find((b) => b.k === k).expected;
+  const label = k === 0 ? 'captured every time' : `missed in ${k} of ${R}`;
   const exp = expected < 0.05 ? expected.toExponential(1) : expected.toFixed(1);
   const ratio = expected > 0 ? (missBuckets[k] / expected) : Infinity;
   const ratioStr = missBuckets[k] === 0 ? '' : `   obs/exp ${ratio.toFixed(ratio >= 100 ? 0 : 2)}x`;
+  const b = assessment.buckets.find((x) => x.k === k);
+  const sig = b && b.significant ? `  p = ${fmtP(b.pValue)}  ${b.direction.toUpperCase()}` : '';
   say(`  missed ${k}x: ${String(missBuckets[k]).padStart(6)}   ` +
-      `expected if purely random ${exp.padStart(8)}   ${label}${ratioStr}`);
+      `expected if independent ${exp.padStart(8)}   ${label}${ratioStr}${sig}`);
 }
 say('');
-say('  p is fitted from these same runs, so the 0x and single-miss buckets are');
-say('  close to expectation partly by construction. The all-missed bucket is the');
-say('  one the fit does not pin down, which is why it carries the test below.');
+say('  Expectations use each run\'s OWN miss rate, not a pooled one, and are');
+say('  conditioned on the message being in the union at all -- which is what the');
+say('  observed counts are conditioned on.');
 say('');
 
-const verdict = assessAllMissed({ unionTotal, pHat, R, observed: missBuckets[R] });
 say('READING IT');
-if (missBuckets[R] === 0) {
-  say('  Nothing was missed in every run: the loss is entirely a race.');
-  say('  Capturing twice and merging by id would recover it.');
-} else if (verdict.structural) {
-  say(`  ${missBuckets[R]} message(s) were missed in EVERY run against ${verdict.expected.toExponential(2)}`);
-  say(`  expected under a pure race -- ${verdict.ratio.toFixed(0)}x expectation, p = ${fmtP(verdict.pValue)}.`);
-  say('  That is a second, structural bug: those messages are never captured and');
-  say('  no amount of retrying will get them. Inspect them individually; they are');
-  say('  listed below.');
+if (assessment.independent) {
+  say('  The miss-count shape is consistent with an independent race: a message');
+  say('  missed by one run is no likelier than chance to be missed by another.');
+  say('  Capturing twice and merging by id would recover most of this.');
 } else {
-  say(`  ${missBuckets[R]} message(s) were missed in every run against ${verdict.expected.toExponential(2)}`);
-  say(`  expected under a pure race, p = ${fmtP(verdict.pValue)}, which does not clear`);
-  say(`  alpha = ${verdict.alpha}. No evidence of a structural miss on top of the race.`);
+  const worst = [...assessment.excesses].sort((a, b) => b.ratio - a.ratio)[0];
+  say('  The loss is NOT an independent race. Misses are CORRELATED across runs:');
+  if (worst) {
+    say(`  ${worst.observed} message(s) were missed in ${worst.k} of ${R} runs against ` +
+        `${worst.expected < 0.05 ? worst.expected.toExponential(1) : worst.expected.toFixed(1)} expected`);
+    say(`  under independence -- ${worst.ratio >= 100 ? worst.ratio.toFixed(0) : worst.ratio.toFixed(1)}x, ` +
+        `p = ${fmtP(worst.pValue)}.`);
+  }
+  for (const d of assessment.deficits) {
+    say(`  And only ${d.observed} missed in ${d.k} of ${R} against ${d.expected.toFixed(1)} expected ` +
+        `(${d.ratio.toFixed(2)}x, p = ${fmtP(d.pValue)}) --`);
+    say('  the mirror image of the same thing.');
+  }
+  say('');
+  say('  That means a subpopulation of messages is fragile for every run rather');
+  say('  than each run losing a random sample. Capturing twice and merging helps');
+  say('  much less than the pooled rate suggests, because the residue is exactly');
+  say('  the fragile set. See #347.');
 }
 say('');
-say('  What that verdict cannot see: it reads only messages that reached the');
-say('  union. A message the extractor removes identically in EVERY run never');
-say('  enters any run\'s id list, so it is in no bucket and cannot appear above at');
-say('  all -- see #332, where 18 such messages were measured in sweep-1 while this');
-say('  comparison reported an empty all-missed bucket. The test answers "is the');
-say('  observed all-missed count consistent with a race", not "was anything lost');
-say('  deterministically".');
+say('  What NO union-based test can see: a message the extractor removes in every');
+say('  run is in no run\'s id list, so it never reaches the table above -- that is');
+say('  why the all-missed row is unreachable rather than merely empty. Detecting');
+say('  that class needs an instrument that does not consult a union:');
+say('  audit-drops.js (messagesLoaded - messageCount, #332), which measures 15');
+say('  such messages across these sweeps, or the provider export (#307).');
 say('');
 
 if (alwaysMissed.length) {

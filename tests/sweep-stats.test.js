@@ -1,17 +1,88 @@
-// Tests for the sweep comparison's structural-vs-race verdict (#337).
+// Tests for the sweep comparison's statistics (#337, #346, #348).
 //
-// The case that matters is the one the old `Math.max(3, ...)` floor got wrong:
-// a single message missed in all three runs, at the miss rate actually measured
-// across sweep-1 and sweep-2, is decisive evidence against the race hypothesis
-// and used to be reported as "close to what a pure race predicts".
+// The central case is #348: the all-missed bucket is unreachable because the
+// union is built from the runs' own id lists. A message no run captured is not
+// counted as "missed by all" -- it is absent, and no union-based method can see
+// it. Everything the old verdict rested on followed from not noticing that.
 
-const { binomTailGE, assessAllMissed } = require('../tools/chatgpt/sweep-stats.js');
+const {
+  binomTailGE, binomTailLE, poissonBinomialPmf, assessBuckets, missCountsForConversation,
+} = require('../tools/chatgpt/sweep-stats.js');
 
-// Measured by `node tools/chatgpt/compare-sweeps.js sweep-1 sweep-2` on the
-// real capture manifests, 2026-09-08.
-const MEASURED = { unionTotal: 8405, pHat: 0.00577, R: 3 };
+// Measured across the four completed block-one sweeps, 2026-09-09.
+const BLOCK_ONE = {
+  unionTotal: 8269,
+  perRunMissed: [52, 101, 95, 120],
+  missBuckets: [8068, 79, 77, 45, 0],
+};
 
-describe('binomTailGE', () => {
+describe('missCountsForConversation — the #348 tautology', () => {
+  test('a message no run captured is absent, not counted as missed-by-all', () => {
+    // The truth is 4 messages. Every run captures a, b, c and none captures d.
+    const runs = [['a', 'b', 'c'], ['a', 'b', 'c'], ['a', 'b', 'c']];
+    const m = missCountsForConversation(runs);
+    expect(m.unionSize).toBe(3);            // d is simply not there
+    expect(m.union.has('d')).toBe(false);
+    expect(m.buckets[3]).toBe(0);           // the all-missed bucket, and it is 0
+    expect(m.buckets[0]).toBe(3);
+  });
+
+  test('buckets[R] is zero across many shapes, because it cannot be otherwise', () => {
+    const shapes = [
+      [['a'], ['a'], ['a']],
+      [['a', 'b'], ['a'], ['b']],
+      [[], [], ['x']],
+      [['a', 'b', 'c'], ['b'], ['c']],
+      [['a'], [], []],
+    ];
+    for (const runs of shapes) {
+      const m = missCountsForConversation(runs);
+      expect(m.buckets[runs.length]).toBe(0);
+    }
+  });
+
+  test('a message seen by exactly one run lands in bucket R-1, not R', () => {
+    const m = missCountsForConversation([['a'], [], []]);
+    expect(m.buckets[2]).toBe(1);
+    expect(m.buckets[3]).toBe(0);
+  });
+
+  test('per-run misses and buckets agree with each other', () => {
+    const m = missCountsForConversation([['a', 'b'], ['a'], ['a', 'b', 'c']]);
+    // union {a,b,c}: a missed by none, b missed by run 1, c missed by runs 0 and 1
+    expect(m.unionSize).toBe(3);
+    expect(m.buckets).toEqual([1, 1, 1, 0]);
+    expect(m.perRun).toEqual([1, 2, 0]);
+    expect(m.perRun.reduce((a, b) => a + b, 0))
+      .toBe(m.buckets.reduce((acc, n, k) => acc + n * k, 0));
+  });
+});
+
+describe('poissonBinomialPmf', () => {
+  test('is a probability distribution', () => {
+    const pmf = poissonBinomialPmf([0.1, 0.2, 0.3]);
+    expect(pmf).toHaveLength(4);
+    expect(pmf.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
+  });
+
+  test('reduces to the binomial when all rates are equal', () => {
+    const p = 0.25;
+    const pmf = poissonBinomialPmf([p, p, p]);
+    expect(pmf[0]).toBeCloseTo((1 - p) ** 3, 12);
+    expect(pmf[1]).toBeCloseTo(3 * p * (1 - p) ** 2, 12);
+    expect(pmf[3]).toBeCloseTo(p ** 3, 12);
+  });
+
+  test('handles unequal rates, which is the reason it exists', () => {
+    // Pooling 0.01 and 0.10 into 0.055 gets the both-missed term badly wrong.
+    const exact = poissonBinomialPmf([0.01, 0.10])[2];
+    expect(exact).toBeCloseTo(0.001, 12);
+    const pooled = 0.055 ** 2;
+    expect(pooled / exact).toBeGreaterThan(3);
+  });
+});
+
+describe('binomTailGE / binomTailLE', () => {
   test('k <= 0 is the whole distribution', () => {
     expect(binomTailGE(100, 0.1, 0)).toBe(1);
   });
@@ -20,15 +91,20 @@ describe('binomTailGE', () => {
     expect(binomTailGE(10, 0.5, 11)).toBe(0);
   });
 
-  test('matches a hand-checkable case: P(X >= 1) for n=2, p=0.5 is 0.75', () => {
+  test('hand-checkable: n=2 p=0.5', () => {
     expect(binomTailGE(2, 0.5, 1)).toBeCloseTo(0.75, 12);
-  });
-
-  test('matches a hand-checkable case: P(X >= 2) for n=2, p=0.5 is 0.25', () => {
     expect(binomTailGE(2, 0.5, 2)).toBeCloseTo(0.25, 12);
+    expect(binomTailLE(2, 0.5, 0)).toBeCloseTo(0.25, 12);
+    expect(binomTailLE(2, 0.5, 1)).toBeCloseTo(0.75, 12);
   });
 
-  test('is monotonically non-increasing in k', () => {
+  test('the two tails are complementary', () => {
+    for (const k of [0, 1, 2, 5, 9]) {
+      expect(binomTailLE(20, 0.3, k) + binomTailGE(20, 0.3, k + 1)).toBeCloseTo(1, 10);
+    }
+  });
+
+  test('upper tail is monotonically non-increasing in k', () => {
     let prev = 1;
     for (let k = 0; k <= 20; k++) {
       const p = binomTailGE(500, 0.02, k);
@@ -38,78 +114,65 @@ describe('binomTailGE', () => {
   });
 
   test('stays accurate in the tiny-tail regime where 1 - lowerTail would cancel', () => {
-    // n*p = 1.6e-3, so P(X >= 1) ~= n*p. Computing this as 1 - (1-p)^n in double
-    // precision loses most of the significant digits; the direct upper-tail sum
-    // does not.
-    const n = 8405;
-    const p = Math.pow(0.00577, 3);
-    // P(X >= 1) = 1 - (1-p)^n agrees with n*p only to first order; they differ by
-    // about (n*p)^2/2 ~= 1.3e-6, so this asserts agreement at that scale, not
-    // exact equality.
-    expect(binomTailGE(n, p, 1)).toBeCloseTo(n * p, 5);
+    const n = 8269;
+    const p = 1e-8;
+    // P(X >= 1) ~= n*p to FIRST order; they differ by about (n*p)^2/2 ~= 3.4e-9,
+    // so this asserts agreement at that scale. The complement form loses the
+    // whole value, not just the second-order term.
+    expect(binomTailGE(n, p, 1)).toBeCloseTo(n * p, 8);
     expect(binomTailGE(n, p, 1)).toBeGreaterThan(0);
-    expect(binomTailGE(n, p, 1)).toBeLessThan(n * p); // strictly below, by inclusion-exclusion
-  });
-
-  test('P(X >= 2) is far smaller still, and strictly positive', () => {
-    const n = 8405;
-    const p = Math.pow(0.00577, 3);
-    const tail = binomTailGE(n, p, 2);
-    expect(tail).toBeGreaterThan(0);
-    expect(tail).toBeLessThan(1e-5);
+    expect(binomTailGE(n, p, 1)).toBeLessThan(n * p);
   });
 });
 
-describe('assessAllMissed — the case the old threshold got wrong', () => {
-  test('one always-missed message at the measured rates is structural', () => {
-    const v = assessAllMissed({ ...MEASURED, observed: 1 });
-    expect(v.expected).toBeCloseTo(0.00161, 5);
-    expect(v.pValue).toBeLessThan(0.01);
-    expect(v.structural).toBe(true);
+describe('assessBuckets', () => {
+  test('only the observable buckets are assessed', () => {
+    const a = assessBuckets(BLOCK_ONE);
+    expect(a.buckets.map((b) => b.k)).toEqual([1, 2, 3]);
+    expect(a.unreachableBucket).toBe(4);
   });
 
-  test('the old floor of 3 would have called that same case a race', () => {
-    // The retired branch: excess > Math.max(3, 0.5 * observed).
-    const observed = 1;
-    const excess = observed - MEASURED.unionTotal * Math.pow(MEASURED.pHat, MEASURED.R);
-    expect(excess > Math.max(3, 0.5 * observed)).toBe(false);
-    // ...while the replacement calls it what it is.
-    expect(assessAllMissed({ ...MEASURED, observed }).structural).toBe(true);
+  test('block one is not an independent race, and says which way', () => {
+    const a = assessBuckets(BLOCK_ONE);
+    expect(a.independent).toBe(false);
+    // Excess at 2 and 3 of 4, deficit at 1 of 4 -- correlated loss.
+    expect(a.excesses.map((b) => b.k)).toEqual([2, 3]);
+    expect(a.deficits.map((b) => b.k)).toEqual([1]);
+    const three = a.buckets.find((b) => b.k === 3);
+    expect(three.ratio).toBeGreaterThan(100);
+    expect(three.pValue).toBeLessThan(1e-20);
   });
 
-  test('two and three always-missed are structural a fortiori', () => {
-    for (const observed of [2, 3]) {
-      expect(assessAllMissed({ ...MEASURED, observed }).structural).toBe(true);
-    }
+  test('the retired rule would have called block one a pure race', () => {
+    // The old verdict looked only at missBuckets[R], which is structurally 0, so
+    // it always took the "entirely a race" branch regardless of the data.
+    expect(BLOCK_ONE.missBuckets[4]).toBe(0);
+    expect(assessBuckets(BLOCK_ONE).independent).toBe(false);
   });
 
-  test('an empty all-missed bucket is never structural', () => {
-    const v = assessAllMissed({ ...MEASURED, observed: 0 });
-    expect(v.structural).toBe(false);
-    expect(v.pValue).toBe(1);
+  test('data generated as an independent race is reported as one', () => {
+    const rates = [0.01, 0.01, 0.01];
+    const N = 100000;
+    const pmf = poissonBinomialPmf(rates);
+    const inUnion = 1 - pmf[3];
+    const missBuckets = [0, 1, 2, 3].map((k) => Math.round(N * pmf[k] / inUnion));
+    const perRunMissed = rates.map((r) => Math.round(r * N));
+    const a = assessBuckets({ unionTotal: N, perRunMissed, missBuckets });
+    expect(a.independent).toBe(true);
+    expect(a.excesses).toHaveLength(0);
+    expect(a.deficits).toHaveLength(0);
   });
 
-  test('a count consistent with a large null expectation is NOT structural', () => {
-    // A corpus where the race alone predicts ~20 always-missed messages: an
-    // observation of 20 is unremarkable and must not be called structural, even
-    // though it is far more than the 4 the old floor demanded.
-    const pHat = 0.3;              // p^3 = 0.027
-    const unionTotal = Math.round(20 / Math.pow(pHat, 3));
-    const v = assessAllMissed({ unionTotal, pHat, R: 3, observed: 20 });
-    expect(v.expected).toBeCloseTo(20, 0);
-    expect(v.structural).toBe(false);
-    // The old rule would have fired on this: excess ~= 0 fails, but at observed
-    // = 40 (still only 2x expectation) the old rule fires and the tail test
-    // agrees -- the point is that the decision now scales with the null.
-    expect(assessAllMissed({ unionTotal, pHat, R: 3, observed: 40 }).structural).toBe(true);
+  test('the union-conditioning correction is negligible at these rates, and is reported', () => {
+    const a = assessBuckets(BLOCK_ONE);
+    expect(a.allMissedProbability).toBeLessThan(1e-6);
+    expect(a.allMissedProbability).toBeGreaterThan(0);
   });
 
-  test('the verdict scales with the corpus, which a fixed count cannot', () => {
-    // Same observed count, same per-run miss rate, corpus 1000x larger: the null
-    // expectation rises with N, so the same observation stops being surprising.
-    const small = assessAllMissed({ unionTotal: 8405, pHat: 0.01, R: 3, observed: 3 });
-    const large = assessAllMissed({ unionTotal: 8405000, pHat: 0.01, R: 3, observed: 3 });
-    expect(small.structural).toBe(true);
-    expect(large.structural).toBe(false);
+  test('per-run rates are used, not a pooled one', () => {
+    const a = assessBuckets(BLOCK_ONE);
+    expect(a.rates).toHaveLength(4);
+    expect(a.rates[0]).toBeCloseTo(52 / 8269, 12);
+    expect(a.rates[3]).toBeCloseTo(120 / 8269, 12);
   });
 });

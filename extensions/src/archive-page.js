@@ -1,4 +1,4 @@
-/* global chrome, openDb, statusCounts, seedQueue, runBatch */
+/* global openDb, statusCounts, seedQueue, runBatch, setRunTag, clearAll */
 // Clio 2.0 — Download-All page orchestrator (#63 + wiring).
 //
 // Opens one background "worker tab" on the site, enumerates the full conversation

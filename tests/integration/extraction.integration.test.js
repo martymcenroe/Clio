@@ -6,12 +6,9 @@
 
 const {
   sanitizeFilename,
-  extractTitle,
-  extractConversationId,
   extractTextContent,
   extractUserTurn,
   extractAssistantTurn,
-  validateSelectors,
   isStreaming,
   extractTurns,
   extractConversation,

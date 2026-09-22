@@ -729,7 +729,7 @@ describe('handleExtract', () => {
     // Create a promise that never resolves to test button state during extraction
     chrome.tabs.sendMessage.mockImplementation(() => new Promise(() => {}));
 
-    const extractPromise = handleExtract();
+    handleExtract();
 
     // Check button state immediately after starting
     await Promise.resolve(); // Let the async function start

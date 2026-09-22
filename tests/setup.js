@@ -59,7 +59,7 @@ class MockJSZip {
     return this.folders[name];
   }
 
-  async generateAsync(options) {
+  async generateAsync(_options) {
     return new Blob(['mock-zip-content'], { type: 'application/zip' });
   }
 }

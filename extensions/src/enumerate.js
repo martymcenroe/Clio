@@ -1,4 +1,3 @@
-/* global document */
 // Clio 2.0 — conversation-list enumeration (#54).
 //
 // Walk the site's conversation list, scrolling until it stops growing (the list

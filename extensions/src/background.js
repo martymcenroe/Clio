@@ -5,7 +5,6 @@
  * LLD Reference: docs/reports/1/lld-clio.md
  */
 
-/* global chrome */
 
 // Listener stubs. Required by the manifest's background.service_worker
 // declaration. No-op after #151 removed the debug console.log breadcrumbs

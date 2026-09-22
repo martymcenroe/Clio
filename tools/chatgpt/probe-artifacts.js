@@ -136,6 +136,6 @@ async function main() {
 
 main().catch((e) => {
   say('PROBE ERROR: ' + (e && e.stack ? e.stack : String(e)));
-  try { fs.writeFileSync(OUT, lines.join('\n') + '\n'); } catch (_) {}
+  try { fs.writeFileSync(OUT, lines.join('\n') + '\n'); } catch { /* the probe's findings already printed to stdout; a failed file write must not mask them */ }
   process.exitCode = 1;
 }).finally(() => process.exit(process.exitCode || 0));

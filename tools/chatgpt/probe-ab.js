@@ -68,7 +68,7 @@ async function main() {
       const lines = text.split('\n').filter(l => l.trim());
       if (!lines.length) return false;
       const codey = lines.filter(l =>
-        /[;{}()=<>|&$]|^\s*(#|\/\/|--)|^\s*[\w.-]+\s+[-\/]{1,2}\w/.test(l)).length;
+        /[;{}()=<>|&$]|^\s*(#|\/\/|--)|^\s*[\w.-]+\s+[-/]{1,2}\w/.test(l)).length;
       return codey / lines.length >= 0.4;
     };
 

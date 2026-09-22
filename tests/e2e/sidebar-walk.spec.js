@@ -71,7 +71,7 @@ const parseConversationId = (url) => {
 };
 
 test.describe.serial('Clio 2.0 — sidebar enumerate + switch (live)', () => {
-  test('Gemini: enumerate all, then switch through the first few', async ({ browserName }, testInfo) => {
+  test('Gemini: enumerate all, then switch through the first few', async ({ browserName }) => {
     test.skip(browserName !== 'chromium', 'Live walk is Chromium-only');
     test.setTimeout(0); // no timeout — human-in-the-loop login/verify
 

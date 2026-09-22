@@ -1,4 +1,3 @@
-/* global indexedDB */
 // Clio 2.0 — local archive store (#48).
 //
 // IndexedDB-backed persistence for the batch-download feature: the catalog of

@@ -172,7 +172,7 @@ git -C /c/Users/mcwiz/Projects/Clio status
 
 Commit (ONE commit for everything):
 ```bash
-git -C /c/Users/mcwiz/Projects/Clio commit -m "docs: [MODE] cleanup $(powershell.exe -Command "Get-Date -Format 'yyyy-MM-dd'")"
+git -C /c/Users/mcwiz/Projects/Clio commit -m "docs: [MODE] cleanup $(date '+%Y-%m-%d')"
 ```
 
 Push:

@@ -41,3 +41,41 @@ data/
 # Machine-local Claude Code config -- never track
 .claude/settings.local.json
 .claude/*.json.bak
+
+# --- backfilled from new_repo.py template (2026-09-15) ---
+# Patterns this repo predates. Appended by tools/retrofit_data_dl_disk_only.py;
+# nothing above this line was changed.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+data-g/probe
+data-unleashed/
+data-dl/*
+!data-dl/README.md
+# Un-ignoring a directory makes git descend into it, so each one's contents must
+# be re-ignored before the .gitkeep is excepted again (#367). Without the
+# `data-dl/<dir>/*` lines, everything dropped into these directories is offered
+# for commit.
+!data-dl/audio/
+data-dl/audio/*
+!data-dl/audio/.gitkeep
+!data-dl/transcripts/
+data-dl/transcripts/*
+!data-dl/transcripts/.gitkeep
+!data-dl/reference/
+data-dl/reference/*
+!data-dl/reference/.gitkeep
+*.bak
+*.parked-*

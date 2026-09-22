@@ -38,6 +38,12 @@ docs/session-logs/
 # broad rule supersedes the narrow per-file rules below.
 data/
 
+# Raw DOM dumps from the e2e discovery specs -- full conversation content from
+# the live sites. This was ignored only by ~/.gitignore_global, which does not
+# travel with a clone, so on any other machine it was committable (#370). This
+# repo is public; the guarantee has to live here.
+docs/dom-dumps/
+
 # Machine-local Claude Code config -- never track
 .claude/settings.local.json
 .claude/*.json.bak

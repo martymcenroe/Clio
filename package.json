@@ -7,9 +7,9 @@
   "scripts": {
     "build:viewer": "node viewer/build.js",
     "prebuild": "npm run build:viewer",
-    "test": "jest --testPathIgnorePatterns=e2e",
-    "test:coverage": "jest --coverage --testPathIgnorePatterns=e2e",
-    "test:watch": "jest --watch --testPathIgnorePatterns=e2e",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch",
     "test:e2e": "npm run build:viewer && playwright test",
     "test:e2e:headed": "npm run build:viewer && playwright test --headed",
     "test:e2e:dom-discovery": "npm run build:viewer && playwright test dom-discovery --debug",

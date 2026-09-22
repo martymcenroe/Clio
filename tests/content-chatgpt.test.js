@@ -9,8 +9,6 @@ const {
   getSite,
   extractTitle,
   extractConversationId,
-  extractTextContent,
-  extractUserTurn,
   extractAssistantTurnChatGPT,
   extractTurnsChatGPT,
   extractTurns,

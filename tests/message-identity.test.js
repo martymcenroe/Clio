@@ -15,7 +15,6 @@
  */
 
 const {
-  extractTurns,
   extractConversation,
   setScrollConfig,
   resetScrollConfig

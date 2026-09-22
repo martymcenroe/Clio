@@ -58,7 +58,7 @@ test.beforeAll(() => {
   fs.mkdirSync(PROFILE_DIR, { recursive: true });
 });
 
-test('Claude artifact-widget DOM dump (#43)', async ({ browserName }, testInfo) => {
+test('Claude artifact-widget DOM dump (#43)', async ({ browserName }) => {
   test.skip(browserName !== 'chromium', 'Anti-automation gate requires system Chrome (ADR-0201)');
   test.setTimeout(0);
 
@@ -166,6 +166,13 @@ test('Claude artifact-widget DOM dump (#43)', async ({ browserName }, testInfo) 
       const turns = [];
       const rawHtmlCandidates = [];
 
+      // The assistant turns this spec walks. Never declared before (#373): the
+      // evaluate body referenced `rows` here and at totalAssistantTurns below,
+      // so the first real run would have thrown ReferenceError. `.row-start-2`
+      // is the selector the spec's header names and the one waited for at
+      // page.waitForSelector above.
+      const rows = Array.from(document.querySelectorAll('.row-start-2'));
+
       rows.forEach((row, idx) => {
         const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
         const hits = [];
@@ -199,7 +206,7 @@ test('Claude artifact-widget DOM dump (#43)', async ({ browserName }, testInfo) 
           'button'
         ];
         for (const sel of candidateSelectors) {
-          let matches = [];
+          let matches;
           try { matches = Array.from(row.querySelectorAll(sel)); } catch (e) { continue; }
           if (matches.length) {
             widgetIndicators.push({

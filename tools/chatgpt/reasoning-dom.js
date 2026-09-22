@@ -138,7 +138,7 @@
    * Returns live elements, so it is useful only inside the page.
    */
   function candidateElements(doc, messageSelector) {
-    var sel = messageSelector || '[data-message-author-role="assistant"]';
+    var _sel = messageSelector || '[data-message-author-role="assistant"]';
     var out = [];
     var seen = [];
 

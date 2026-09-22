@@ -9,12 +9,9 @@ const {
   getSite,
   extractTitle,
   extractConversationId,
-  extractTextContent,
-  extractUserTurn,
   extractAssistantTurnClaude,
   extractTurnsClaude,
   extractTurns,
-  validateSelectors,
   countMessages
 } = require('../extensions/src/content.js');
 

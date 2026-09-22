@@ -1,4 +1,4 @@
-/* global chrome, JSZip, getConversation, markDownloaded, markDownloadError, dequeueNext, statusCounts, sleepImpl */
+/* global JSZip, getConversation, markDownloaded, markDownloadError, dequeueNext, statusCounts, sleepImpl, upsertConversation, enqueueExtraction */
 // Clio 2.0 — batch-download worker (#60).
 //
 // The walk: for each queued conversation, navigate a worker tab to the

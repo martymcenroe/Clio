@@ -5,7 +5,7 @@
  * LLD Reference: docs/reports/1/lld-clio.md
  */
 
-/* global SELECTORS, chrome */
+/* global SELECTORS */
 
 // ============================================================================
 // Site Detection
@@ -993,7 +993,11 @@ async function scrollToLoadAllMessages(onProgress) {
   setMessageScroller(scrollContainer);
   captureRenderedMessages();
 
-  let mutationDetected = false;
+  // No initialiser: the scroll loop below resets this to false at the top of
+  // every pass, before anything reads it, so `= false` here was dead. Left
+  // undefined it is still falsy, which is what the one read at the bottom of
+  // the loop wants.
+  let mutationDetected;
   const observer = new MutationObserver((mutations) => {
     // Sweep the live DOM for everything still attached.
     captureRenderedMessages();
@@ -1033,7 +1037,7 @@ async function scrollToLoadAllMessages(onProgress) {
   reportProgress(`Loading conversation history... (${initialCount} messages visible)`);
 
   // Logging helper (disabled - enable for debugging)
-  const logScroll = (msg, data = {}) => {
+  const logScroll = (msg, _data = {}) => {
     // console.log(`[Clio Scroll #${scrollAttempts}]`, msg, data);
   };
 
@@ -1681,7 +1685,7 @@ function extractUserTurn(element, index) {
     role: 'user',
     content: extractTextContent(element),
     thinking: null,
-    attachments: images.map((img, i) => ({
+    attachments: images.map((img) => ({
       type: 'image',
       filename: null, // Will be set during image processing
       originalSrc: img.src
@@ -2330,7 +2334,10 @@ async function extractConversation() {
 
     // Phase 2: Expand content
     showProgress('Expanding content...');
-    const expandedCount = await expandAllContent();
+    // expandAllContent() returns how many elements it expanded. Nothing
+    // downstream consumes it, so the result is discarded rather than bound to a
+    // variable no one reads, which only looks like it is being used.
+    await expandAllContent();
     await sleep(500); // Wait for expansions to settle
 
     // Phase 3: Extract metadata
@@ -2607,6 +2614,14 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     getSite,
     sanitizeFilename,
+    // Neither of the next two is called from this file. They are exported
+    // rather than removed: getTimestamp is a filename helper, and
+    // findClaudeAssistantContainer encodes how a Claude turn's container is
+    // located from a response element -- hard-won DOM knowledge worth keeping
+    // reachable and testable. Exporting is what makes "unused" false here
+    // without deleting anything.
+    getTimestamp,
+    findClaudeAssistantContainer,
     extractTitle,
     extractConversationId,
     extractTextContent,

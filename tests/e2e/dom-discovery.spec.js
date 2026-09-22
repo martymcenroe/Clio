@@ -293,7 +293,7 @@ async function dumpSite(page) {
     const accountCandidates = [];
     const seenEls = new Set();
     for (const sel of accountSelectors) {
-      let matches = [];
+      let matches;
       try { matches = Array.from(document.querySelectorAll(sel)); } catch (e) { continue; }
       for (const el of matches) {
         if (seenEls.has(el)) continue;

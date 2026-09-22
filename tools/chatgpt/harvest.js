@@ -324,7 +324,7 @@ async function main() {
   // Click whatever download buttons are on screen right now. Runs EVERY round,
   // which is the entire point — after the scroll they are gone.
   async function harvestDownloads() {
-    let pending = [];
+    let pending;
     try { pending = await page.evaluate(() => window.__clioPendingDownloads()); }
     catch (e) { return 0; }
     let n = 0;

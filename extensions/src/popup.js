@@ -5,7 +5,7 @@
  * LLD Reference: docs/reports/1/lld-clio.md
  */
 
-/* global chrome, JSZip */
+/* global JSZip */
 
 // ============================================================================
 // UI Helpers
@@ -347,7 +347,7 @@ function downloadBlob(blob, filename) {
     url: url,
     filename: filename,
     saveAs: true
-  }, (downloadId) => {
+  }, () => {
     // Clean up object URL after download starts
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
@@ -434,8 +434,13 @@ async function sendExtractMessage(tab) {
       throw err; // unrelated extraction error — let it surface as-is
     }
     // Recovery path: re-inject the content script for this site.
+    //
+    // All three throws below deliberately show the same short sentence -- the
+    // user's action is the same whichever step failed. `cause` keeps the
+    // underlying error attached so the console still says which one it was;
+    // without it the three failures are indistinguishable when debugging.
     if (!chrome.scripting || !chrome.scripting.executeScript) {
-      throw new Error("Couldn't reach the page. Please reload the tab and try again.");
+      throw new Error("Couldn't reach the page. Please reload the tab and try again.", { cause: err });
     }
     try {
       await chrome.scripting.executeScript({
@@ -443,12 +448,12 @@ async function sendExtractMessage(tab) {
         files: scriptsForSite(getSitePrefix(tab.url))
       });
     } catch (injectErr) {
-      throw new Error("Couldn't reach the page. Please reload the tab and try again.");
+      throw new Error("Couldn't reach the page. Please reload the tab and try again.", { cause: injectErr });
     }
     try {
       return await sendExtractMessageOnce(tab.id);
     } catch (retryErr) {
-      throw new Error("Couldn't reach the page. Please reload the tab and try again.");
+      throw new Error("Couldn't reach the page. Please reload the tab and try again.", { cause: retryErr });
     }
   }
 }

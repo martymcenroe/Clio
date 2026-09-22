@@ -7,8 +7,21 @@
  * to the conversation-list view, then runs structural analysis and
  * writes:
  *
- *   docs/dom-dumps/{site}.json           structured report
- *   tests/fixtures/sidebar-{site}.html   full page HTML for jsdom tests
+ *   docs/dom-dumps/{site}.json              structured report
+ *   data/sidebar-captures/sidebar-{site}.html   raw full page HTML
+ *
+ * PRIVACY (#369). Both outputs are the operator's real conversation data and
+ * this repo is PUBLIC, so both directories are gitignored. This spec used to
+ * write the HTML straight to tests/fixtures/sidebar-{site}.html — tracked, and
+ * deliberately scrubbed by PR #340 — so every run silently republished 85 real
+ * conversation titles and ids, and every test still passed because they all
+ * assert structure rather than content. Turning a capture into a committable
+ * fixture is a separate, deliberate step:
+ *
+ *     node tools/scrub-sidebar-fixtures.js data/sidebar-captures
+ *
+ * This spec does not write to any tracked path. Keep it that way; a test
+ * enforces it.
  *
  * Login is persistent: each site has its own Chrome profile at
  *   ~/.clio-profiles/{site}/
@@ -29,7 +42,11 @@ const os = require('os');
 const path = require('path');
 
 const OUT_DIR = path.join(__dirname, '..', '..', 'docs', 'dom-dumps');
-const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
+// Raw page captures are the operator's real conversation list and this repo is
+// PUBLIC, so they go to a gitignored directory — NEVER tests/fixtures (#369).
+// `tools/scrub-sidebar-fixtures.js` is what turns a capture into a committable
+// fixture, and running it is a deliberate separate step.
+const CAPTURES_DIR = path.join(__dirname, '..', '..', 'data', 'sidebar-captures');
 const PROFILES_ROOT = path.join(os.homedir(), '.clio-profiles');
 
 const SITES = [
@@ -55,7 +72,7 @@ const SITES = [
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.mkdirSync(FIXTURES_DIR, { recursive: true });
+  fs.mkdirSync(CAPTURES_DIR, { recursive: true });
   fs.mkdirSync(PROFILES_ROOT, { recursive: true });
 });
 
@@ -122,7 +139,7 @@ test.describe.serial('DOM discovery — Clio 2.0 sidebar harvesting (#47)', () =
         const jsonPath = path.join(OUT_DIR, `${site.id}.json`);
         fs.writeFileSync(jsonPath, JSON.stringify(dump, null, 2));
 
-        const htmlPath = path.join(FIXTURES_DIR, `sidebar-${site.id}.html`);
+        const htmlPath = path.join(CAPTURES_DIR, `sidebar-${site.id}.html`);
         try {
           fs.writeFileSync(htmlPath, await page.content());
         } catch (e) {
@@ -132,12 +149,12 @@ test.describe.serial('DOM discovery — Clio 2.0 sidebar harvesting (#47)', () =
         if (dumpError) {
           console.log(`\n✗ ${site.label} — dump failed`);
           console.log(`  Dump (error form): ${path.relative(process.cwd(), jsonPath)}`);
-          console.log(`  Fixture:           ${path.relative(process.cwd(), htmlPath)}`);
+          console.log(`  Raw capture:       ${path.relative(process.cwd(), htmlPath)} (gitignored)`);
           console.log(`  Trace:             ${path.relative(process.cwd(), testInfo.outputDir)}/trace.zip`);
         } else {
           console.log(`\n✓ ${site.label}`);
           console.log(`  Dump:       ${path.relative(process.cwd(), jsonPath)}`);
-          console.log(`  Fixture:    ${path.relative(process.cwd(), htmlPath)}`);
+          console.log(`  Raw capture: ${path.relative(process.cwd(), htmlPath)} (gitignored)`);
           console.log(`  Scrollables: ${dump.scrollableContainers.length}`);
           if (dump.mostLikelySidebar) {
             const fps = dump.mostLikelySidebar.childClassFingerprints || {};

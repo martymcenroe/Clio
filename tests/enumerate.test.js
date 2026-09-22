@@ -27,6 +27,16 @@ describe('collectConversations — Claude (real captured DOM)', () => {
     expect(rows.every((r) => r.site === 'claude')).toBe(true);
     expect(rows.filter((r) => !r.title)).toEqual([]);
   });
+
+  // Same reasoning as the Gemini row-0 assertion: the structural checks above
+  // cannot tell a correct reader from one wiring ids and titles together wrongly.
+  test('row 0 carries the fixture id and a non-empty scrubbed title', () => {
+    expect(rows[0].site).toBe('claude');
+    expect(rows[0].conversation_id).toBe('00000000-0000-4000-8000-000000000001');
+    expect(rows[0].url).toBe('https://claude.ai/chat/00000000-0000-4000-8000-000000000001');
+    expect(rows[0].title).toEqual(expect.any(String));
+    expect(rows[0].title.length).toBeGreaterThan(0);
+  });
 });
 
 describe('collectConversations — Gemini (real captured DOM)', () => {
@@ -36,6 +46,24 @@ describe('collectConversations — Gemini (real captured DOM)', () => {
   test('finds all 53 conversations with parseable ids', () => {
     expect(rows.length).toBe(53);
     expect(rows.every((r) => r.conversation_id && r.url.startsWith('https://gemini.google.com/app/'))).toBe(true);
+  });
+
+  // Every other assertion in this file is structural -- counts, uniqueness, URL
+  // shape -- and all of them pass just as happily if the title selector starts
+  // matching the wrong node, or if id and title come from different rows. This
+  // one pins row 0 to the exact values the scrubbed fixture holds, which is the
+  // only thing here that would catch that (#358).
+  //
+  // Values are the scrubbed fixture's, from PR #340's tools/scrub-sidebar-fixtures.js.
+  // They are synthetic by design: this repo is public, and the assertion this was
+  // ported from carried the operator's real conversation title and id (#359).
+  test('row 0 matches the fixture exactly', () => {
+    expect(rows[0]).toEqual({
+      site: 'gemini',
+      conversation_id: 'c000000000000001',
+      url: 'https://gemini.google.com/app/c000000000000001',
+      title: 'Alder dogwood notes 1',
+    });
   });
 });
 

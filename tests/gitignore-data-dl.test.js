@@ -8,55 +8,9 @@
 //
 // The rules are checked here rather than read, and checked through git itself,
 // because gitignore precedence is not something you can verify by looking at it.
-//
-// `git check-ignore` resolves hypothetical paths, so nothing is written to disk.
-// `-v` is what makes this a real test: it names the file and line of the winning
-// rule, which is how we assert the guarantee comes from the repo's own
-// .gitignore and not from the machine's ~/.gitignore_global. A rule that only
-// works on this machine does not survive a clone, and an assertion that a path
-// is merely "ignored" would have passed on that accident.
-const { execFileSync } = require('child_process');
-const path = require('path');
-
-const REPO = path.resolve(__dirname, '..');
-
-/**
- * Winning gitignore rule for `p`, as { source, line, pattern }, or null if no
- * rule matched at all.
- *
- * Note this is "which rule won", NOT "is it ignored". `git check-ignore -v`
- * reports a winning NEGATION (`!data-dl/reference/.gitkeep`) as a match and
- * exits 0, so a non-null result here says nothing about ignored-ness on its
- * own. `isIgnored` below is the predicate; reading the rule is the point,
- * because we assert *which file* supplies the guarantee.
- */
-function winningRule(p) {
-  let out;
-  try {
-    out = execFileSync('git', ['check-ignore', '-v', '--no-index', '--', p], {
-      cwd: REPO,
-      encoding: 'utf8',
-    });
-  } catch (e) {
-    // git exits 1 with no output when the path is not ignored.
-    if (e.status === 1) return null;
-    throw e;
-  }
-  // Format: <source>:<line>:<pattern>\t<path>. The source may be an absolute
-  // Windows path (C:/Users/...), so split the rule side off the tab first and
-  // take the last two colon-separated fields rather than the first.
-  const rule = out.trim().split('\n')[0].split('\t')[0];
-  const parts = rule.split(':');
-  const pattern = parts.pop();
-  const line = Number(parts.pop());
-  return { source: parts.join(':'), line, pattern };
-}
-
-/** True iff `p` is actually ignored — a winning negation means it is not. */
-function isIgnored(p) {
-  const rule = winningRule(p);
-  return rule !== null && !rule.pattern.startsWith('!');
-}
+// The two traps — a winning negation counting as a match, and a path that is
+// ignored only by ~/.gitignore_global — live in the shared helper.
+const { winningRule, isIgnored } = require('./helpers/git-ignore');
 
 const MUST_BE_IGNORED = [
   'data-dl/probe-toplevel.bin',

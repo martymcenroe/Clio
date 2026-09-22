@@ -104,7 +104,7 @@ When spawning agents, logging instructions will be included automatically.
 - Command not in safe allowlist
 
 **If risky pattern detected:**
-1. Get current timestamp: Use PowerShell `Get-Date -Format "yyyy-MM-ddTHH:mm:ss"`
+1. Get current timestamp: `date '+%Y-%m-%dT%H:%M:%S'` (plain `date` prints US Central on this machine)
 2. Append to log file using Write tool (append mode not available - read, append, write back):
 
 ```
@@ -173,7 +173,7 @@ C:\Users\mcwiz\.claude\projects\C--Users-mcwiz-Projects-Clio\zugzwang.log
 **Do this:**
 1. Read → Append → Write: `TIMESTAMP | TOOL_BLOCKED | agent:sonnet | tool:TOOL | context:"ERROR" | status:blocked`
 
-Use PowerShell for timestamp: `powershell.exe -Command "Get-Date -Format 'yyyy-MM-ddTHH:mm:ss'"`
+Timestamp: `date '+%Y-%m-%dT%H:%M:%S'`
 ```
 
 ---

@@ -1,0 +1,40 @@
+name: Tests
+
+# 573 unit tests existed in this repo and none of them ran in CI (#366). The
+# only workflow was Auto Review, which checks issue references -- so a PR that
+# broke every test in the repo satisfied branch protection, and a test could sit
+# failing in the index for two weeks without anything saying so. One did.
+#
+# Unit tests and lint only. `npm test` covers the jest suites; the four specs
+# under tests/e2e/ and tests/viewer.e2e.test.js are Playwright, human-in-the-loop
+# (page.pause(), headed Chrome, persistent login profiles) and cannot run on a
+# runner. jest.config.js excludes them by the *.e2e.test.js suffix.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test

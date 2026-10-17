@@ -115,7 +115,7 @@ function validateSelectors() {
   }
 
   // Check for at least one message
-  const messages = document.querySelectorAll(SELECTORS.allMessages);
+  const messages = queryMessages(document);
   if (messages.length === 0) {
     // Try fallback - look for any message-like structure
     const userMsgs = document.querySelectorAll(SELECTORS.userMessage);
@@ -299,7 +299,10 @@ function countMessages() {
     return userMsgs.length + assistantMsgs.length;
   }
   if (site === 'chatgpt') {
-    return document.querySelectorAll('[data-message-author-role="user"], [data-message-author-role="assistant"]').length;
+    // queryMessages() rather than a copy of the selectors: a hardcoded copy
+    // here is what kept counting the 2026-05 markup after ChatGPT replaced it
+    // (#399).
+    return queryMessages(document).length;
   }
   // Gemini: Count ONLY primary elements (user-query, model-response)
   // Don't use composite SELECTORS which include fallbacks that may be nested
@@ -422,6 +425,21 @@ let MESSAGE_CACHE_SEQ = 0;
 let MESSAGE_RESCUED = 0;
 
 /**
+ * Cached clones replaced because the message's content rendered after it was
+ * first captured (#399). Counted for the same reason as MESSAGE_RESCUED.
+ */
+let MESSAGE_REFRESHED = 0;
+
+/**
+ * Exchanges whose reply has been captured as an assistant unit (#399), and how
+ * many provisional reply-block entries that unit displaced. See
+ * supersedeReplyBlock().
+ * @type {Set<string>}
+ */
+let UNIT_REPLY_EXCHANGES = new Set();
+let MESSAGE_SUPERSEDED = 0;
+
+/**
  * The scroller the ordering key is measured against, fixed for one scroll pass.
  * findScrollContainer() walks the whole document, which is far too expensive to
  * repeat inside a MutationObserver, so it is resolved once and cached.
@@ -466,6 +484,11 @@ function setMessageScroller(el) {
  *       the transcript sorts into a handful of buckets.
  *   DOM position  describes one window; virtualization evicts the rest.
  *
+ * An element with `display: contents` has no box and reports a zero rect, so it
+ * is measured by its first child that has one (layoutRectOf). ChatGPT's reply
+ * blocks are display:contents (#399); before this, all 51 reply blocks in one
+ * capture measured null and were appended at the end of the transcript.
+ *
  * Distance from the bottom is invariant because prepending older content above
  * increases scrollHeight by D and pushes every existing element's offset down
  * by the same D, so (scrollHeight - offsetTop) does not move. Larger = further
@@ -479,7 +502,7 @@ function measureFromBottom(el, scroller) {
   if (!scroller || !el || typeof el.getBoundingClientRect !== 'function') return null;
   // A container that does not actually scroll gives a meaningless key.
   if (!(scroller.scrollHeight > scroller.clientHeight)) return null;
-  const r = el.getBoundingClientRect();
+  const r = layoutRectOf(el, 3);
   // Height 0 means the node is in the DOM but not yet laid out — a measurement
   // here is junk, and junk that outranks "unknown" is worse than no key at all.
   if (!r || !r.height) return null;
@@ -489,20 +512,280 @@ function measureFromBottom(el, scroller) {
 }
 
 /**
+ * The box an element occupies on screen, for measuring its position.
+ *
+ * `display: contents` removes an element's own box, so its rect is all zeros
+ * while its children are laid out normally. Such an element is measured by its
+ * first child that has a height, searched to `depth` levels. An element with
+ * no laid-out child keeps its zero rect, which measureFromBottom() treats as
+ * "not laid out yet".
+ *
+ * @param {Element} el
+ * @param {number} depth how many levels of children to search
+ * @returns {DOMRect|{top: number, height: number}}
+ */
+function layoutRectOf(el, depth) {
+  const r = el.getBoundingClientRect();
+  if ((r && r.height) || depth <= 0 || !el.children) return r;
+  for (const child of el.children) {
+    if (typeof child.getBoundingClientRect !== 'function') continue;
+    const cr = layoutRectOf(child, depth - 1);
+    if (cr && cr.height) return cr;
+  }
+  return r;
+}
+
+/**
+ * The message's own id, which keys the capture cache and is carried into the
+ * export (#294).
+ *
+ * 2026-05 ChatGPT markup puts it in data-message-id (data-turn-id on some
+ * builds). The 2026-10 markup has neither (#399): the message element carries
+ * data-chatgpt-search-message-ids, a space-separated list. A user message
+ * lists its one id; an assistant message lists its own id first (observed
+ * twice over, matching its data-chatgpt-selection-message-id). The first token
+ * is therefore the message's id, and it stays put while later tokens are
+ * appended.
+ *
+ * A reply with no search unit (SELECTORS.agentReply) carries no message id at
+ * all. Its exchange does: data-turn-key, the opening user message's id, unique
+ * per exchange and holding one reply. So the reply is `<turn key>:reply`.
+ *
+ * A cached clone is detached and cannot look up its exchange, so every clone is
+ * stamped with the id it was cached under (snapshotMessage) and that stamp is
+ * read first.
+ *
+ * @param {Element} el
+ * @returns {string|null}
+ */
+function messageIdOf(el) {
+  if (!el || typeof el.getAttribute !== 'function') return null;
+  const stamped = el.getAttribute('data-clio-message-id');
+  if (stamped) return stamped;
+  const direct = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
+  if (direct) return direct;
+  const list = el.getAttribute('data-chatgpt-search-message-ids');
+  if (list) {
+    const first = list.trim().split(/\s+/)[0];
+    if (first) return first;
+  }
+  if (isAgentReply(el)) {
+    const turnKey = turnKeyOf(el);
+    if (turnKey) return `${turnKey}:reply`;
+  }
+  return null;
+}
+
+/**
+ * Is this element a reply rendered with no search unit (#399)?
+ *
+ * The block that directly holds SELECTORS.replyMarker and holds no assistant
+ * message element. See replyMarker in selectors-chatgpt.js for why this is
+ * code rather than a :has() selector.
+ *
+ * @param {Element} el
+ * @returns {boolean}
+ */
+function isAgentReply(el) {
+  const marker = typeof SELECTORS !== 'undefined' && SELECTORS.replyMarker;
+  if (!marker || !el || !el.children || typeof el.querySelector !== 'function') return false;
+  const holdsMarker = Array.from(el.children).some(c => c.matches(marker));
+  return holdsMarker && !el.querySelector(SELECTORS.assistantMessage);
+}
+
+/** Is this node one message — matched by a selector, or a unit-less reply? */
+function isMessageElement(node) {
+  if (!node || node.nodeType !== 1 || typeof node.matches !== 'function') return false;
+  return node.matches(SELECTORS.allMessages) || isAgentReply(node);
+}
+
+/**
+ * Every message element under `scope`, in document order: what
+ * SELECTORS.allMessages matches, plus each unit-less reply (#399). Every place
+ * that enumerates messages goes through here, so the two can never disagree
+ * about what a message is. On a site with no replyMarker this is exactly
+ * querySelectorAll(allMessages).
+ *
+ * As with querySelectorAll, `scope` itself is not included.
+ *
+ * @param {Document|Element} [scope=document]
+ * @returns {Element[]}
+ */
+function queryMessages(scope) {
+  const root = scope || document;
+  const found = Array.from(root.querySelectorAll(SELECTORS.allMessages));
+  const marker = SELECTORS.replyMarker;
+  if (!marker) return found;
+
+  const replies = [];
+  for (const m of root.querySelectorAll(marker)) {
+    const block = m.parentElement;
+    if (block && block !== root && !replies.includes(block) && isAgentReply(block)) replies.push(block);
+  }
+  if (!replies.length) return found;
+  return found.concat(replies).sort((a, b) =>
+    (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+}
+
+/**
+ * The key of the exchange a message belongs to, or null where the site has no
+ * such container. Read from the stamp on a cached clone, which is detached.
+ * @param {Element} el
+ * @returns {string|null}
+ */
+function turnKeyOf(el) {
+  if (!el || typeof el.getAttribute !== 'function') return null;
+  const stamped = el.getAttribute('data-clio-turn-key');
+  if (stamped) return stamped;
+  const sel = typeof SELECTORS !== 'undefined' && SELECTORS.turnContainer;
+  const attr = typeof SELECTORS !== 'undefined' && SELECTORS.turnKeyAttribute;
+  if (!sel || !attr || typeof el.closest !== 'function') return null;
+  const turn = el.closest(sel);
+  return turn ? turn.getAttribute(attr) : null;
+}
+
+/**
+ * A detached deep clone of a message for the capture cache, stamped with the
+ * identity a detached node can no longer work out for itself: its cache id and
+ * its exchange.
+ * @param {Element} el
+ * @param {string} id
+ * @returns {Element}
+ */
+function snapshotMessage(el, id) {
+  const turnKey = turnKeyOf(el);
+  const clone = el.cloneNode(true);
+  clone.setAttribute('data-clio-message-id', id);
+  if (turnKey) clone.setAttribute('data-clio-turn-key', turnKey);
+  return clone;
+}
+
+/**
+ * 'user', 'assistant', or null, for a ChatGPT message element.
+ *
+ * data-message-author-role on the 2026-05 markup; on the 2026-10 markup the
+ * role is the suffix of data-chatgpt-search-unit-key, "<turn>:<n>:user" or
+ * "<turn>:<n>:assistant", or the element is a reply with no unit, which is
+ * always the assistant's (#399).
+ *
+ * @param {Element} el
+ * @returns {string|null}
+ */
+function chatgptRoleOf(el) {
+  if (!el || typeof el.getAttribute !== 'function') return null;
+  const explicit = el.getAttribute('data-message-author-role');
+  if (explicit) return explicit;
+  const unit = el.getAttribute('data-chatgpt-search-unit-key') || '';
+  if (unit.endsWith(':user')) return 'user';
+  if (unit.endsWith(':assistant')) return 'assistant';
+  if (isAgentReply(el)) return 'assistant';
+  return null;
+}
+
+/**
+ * How much of a message an element holds: its text, and its images, which add
+ * no text at all.
+ * @param {Element} el
+ * @returns {{text: number, images: number}}
+ */
+function messageFullness(el) {
+  return {
+    text: (el.textContent || '').length,
+    images: el.querySelectorAll ? el.querySelectorAll('img').length : 0
+  };
+}
+
+/**
+ * Replace a cached clone with a fresh one when the element now holds more than
+ * the clone did (#399).
+ *
+ * The 2026-10 ChatGPT markup mounts a message, id and all, BEFORE its content:
+ * an assistant message's content root is there and empty and fills in a moment
+ * later, and an image-only user message mounts before its <img>. The cache used
+ * to keep the first clone of each id for the whole scroll, so a message seen
+ * first in that state was kept as a shell. Measured on the live page: 24 of 75
+ * assistant messages in one capture were shells holding only the screen-reader
+ * "ChatGPT said:" heading, while the live element beside them held up to 9,684
+ * characters, and two image-only user messages were kept with no image. The
+ * blank-turn filter (#208) then dropped all 26, and the export reported
+ * contentComplete: true.
+ *
+ * Fuller means more text, or as much text and more images. Only the clone is
+ * replaced: seq, fromBottom and measuredSettled are the message's place in the
+ * conversation and stay as they were.
+ *
+ * @param {{el: Element, fullness?: {text: number, images: number}}} entry
+ * @param {Element} el the live (or just-detached) element for the same id
+ * @param {string} id the id the entry is cached under
+ * @returns {boolean} whether the clone was replaced
+ */
+function refreshIfFuller(entry, el, id) {
+  const have = entry.fullness || messageFullness(entry.el);
+  const now = messageFullness(el);
+  const fuller = now.text > have.text || (now.text >= have.text && now.images > have.images);
+  if (!fuller) return false;
+  entry.el = snapshotMessage(el, id);
+  entry.fullness = now;
+  MESSAGE_REFRESHED++;
+  return true;
+}
+
+/**
+ * Keep one cache entry per reply when its block is seen before its unit (#399).
+ *
+ * A reply's block counts as a unit-less reply (isAgentReply) only while it
+ * holds no assistant unit, and during a scroll-back a block can be on screen
+ * for a moment before its unit mounts. Measured live: 39 of 79 blocks were
+ * caught that way, each under the provisional id `<exchange>:reply`, beside the
+ * real unit captured a moment later. So:
+ *
+ *   - capturing an assistant unit marks its exchange as having one, and drops
+ *     the provisional block entry if there is one;
+ *   - a block whose exchange is already marked is not cached at all.
+ *
+ * A no-op on a site with no replyMarker.
+ *
+ * @param {Element} el
+ * @returns {boolean} true when `el` must not be cached
+ */
+function supersedeReplyBlock(el) {
+  if (typeof SELECTORS === 'undefined' || !SELECTORS.replyMarker) return false;
+  if (isAgentReply(el)) {
+    const key = turnKeyOf(el);
+    return !!key && UNIT_REPLY_EXCHANGES.has(key);
+  }
+  if (chatgptRoleOf(el) !== 'assistant') return false;
+  const key = turnKeyOf(el);
+  if (!key || UNIT_REPLY_EXCHANGES.has(key)) return false;
+  UNIT_REPLY_EXCHANGES.add(key);
+  const provisional = `${key}:reply`;
+  if (MESSAGE_CACHE.delete(provisional)) MESSAGE_SUPERSEDED++;
+  MESSAGE_ARTIFACTS.delete(provisional);
+  return false;
+}
+
+/**
  * Snapshot every message currently rendered that we have not already kept, and
- * measure where it sits.
+ * measure where it sits. A message already kept is re-cloned if its content has
+ * grown since (refreshIfFuller).
  * Cheap and idempotent — safe to call on every scroll tick and every mutation.
  * @returns {number} how many new messages were captured
  */
 function captureRenderedMessages() {
   let added = 0;
-  for (const el of document.querySelectorAll(SELECTORS.allMessages)) {
-    const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
+  for (const el of queryMessages(document)) {
+    const id = messageIdOf(el);
     if (!id) continue;
+    if (supersedeReplyBlock(el)) continue;
     captureMessageArtifacts(el, id);
-    if (MESSAGE_CACHE.has(id)) continue;
+    const kept = MESSAGE_CACHE.get(id);
+    if (kept) {
+      refreshIfFuller(kept, el, id);
+      continue;
+    }
     MESSAGE_CACHE.set(id, {
-      el: el.cloneNode(true),
+      el: snapshotMessage(el, id),
+      fullness: messageFullness(el),
       seq: MESSAGE_CACHE_SEQ++,
       fromBottom: measureFromBottom(el, MESSAGE_SCROLLER),
       measuredSettled: false
@@ -549,17 +832,25 @@ function captureDetachedMessages(nodes, record) {
     // The node may BE a message, or contain several.
     const candidates = [];
     try {
-      if (node.matches && node.matches(SELECTORS.allMessages)) candidates.push(node);
+      if (isMessageElement(node)) candidates.push(node);
       if (node.querySelectorAll) {
-        for (const inner of node.querySelectorAll(SELECTORS.allMessages)) candidates.push(inner);
+        for (const inner of queryMessages(node)) candidates.push(inner);
       }
     } catch (e) {
       continue; // a malformed selector must not take the scroll down
     }
 
     for (const el of candidates) {
-      const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
-      if (!id || MESSAGE_CACHE.has(id)) continue;
+      const id = messageIdOf(el);
+      if (!id) continue;
+      if (supersedeReplyBlock(el)) continue;
+      // Kept already, perhaps as a shell taken before its text rendered: the
+      // node leaving the DOM may be the fullest copy there will ever be.
+      const kept = MESSAGE_CACHE.get(id);
+      if (kept) {
+        refreshIfFuller(kept, el, id);
+        continue;
+      }
 
       captureMessageArtifacts(el, id);
       // Attached nodes can still be measured directly; detached ones cannot.
@@ -567,7 +858,8 @@ function captureDetachedMessages(nodes, record) {
       if (fromBottom === null) fromBottom = interpolateFromSiblings(record);
 
       MESSAGE_CACHE.set(id, {
-        el: el.cloneNode(true),
+        el: snapshotMessage(el, id),
+        fullness: messageFullness(el),
         seq: MESSAGE_CACHE_SEQ++,
         fromBottom,
         measuredSettled: false,
@@ -600,11 +892,11 @@ function interpolateFromSiblings(record) {
     let n = start;
     for (let i = 0; n && i < 12; i++, n = n[dir]) {
       if (n.nodeType !== 1) continue;
-      const el = (n.matches && n.matches(SELECTORS.allMessages))
+      const el = isMessageElement(n)
         ? n
-        : (n.querySelector ? n.querySelector(SELECTORS.allMessages) : null);
+        : (n.querySelectorAll ? queryMessages(n)[0] || null : null);
       if (!el) continue;
-      const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
+      const id = messageIdOf(el);
       const entry = id && MESSAGE_CACHE.get(id);
       if (entry && typeof entry.fromBottom === 'number') return entry.fromBottom;
     }
@@ -633,6 +925,16 @@ function getRescuedCount() {
   return MESSAGE_RESCUED;
 }
 
+/** How many cached clones were replaced by a fuller render since the last reset (#399). */
+function getRefreshedCount() {
+  return MESSAGE_REFRESHED;
+}
+
+/** How many provisional reply-block entries a unit displaced since the last reset (#399). */
+function getSupersededCount() {
+  return MESSAGE_SUPERSEDED;
+}
+
 /**
  * Re-measure everything currently rendered, from a settled DOM.
  *
@@ -648,8 +950,8 @@ function getRescuedCount() {
 function remeasureRenderedMessages() {
   if (!MESSAGE_SCROLLER) return 0;
   let n = 0;
-  for (const el of document.querySelectorAll(SELECTORS.allMessages)) {
-    const id = el.getAttribute('data-message-id') || el.getAttribute('data-turn-id');
+  for (const el of queryMessages(document)) {
+    const id = messageIdOf(el);
     const entry = id && MESSAGE_CACHE.get(id);
     if (!entry) continue;
     const measured = measureFromBottom(el, MESSAGE_SCROLLER);
@@ -669,7 +971,7 @@ function remeasureRenderedMessages() {
  */
 function getCapturedMessageEls() {
   if (MESSAGE_CACHE.size === 0) {
-    return Array.from(document.querySelectorAll(SELECTORS.allMessages));
+    return queryMessages(document);
   }
   const entries = Array.from(MESSAGE_CACHE.values());
   const measured = entries.filter(e => typeof e.fromBottom === 'number');
@@ -727,6 +1029,9 @@ function resetMessageCache() {
   MESSAGE_CACHE = new Map();
   MESSAGE_CACHE_SEQ = 0;
   MESSAGE_RESCUED = 0;
+  MESSAGE_REFRESHED = 0;
+  UNIT_REPLY_EXCHANGES = new Set();
+  MESSAGE_SUPERSEDED = 0;
   MESSAGE_ARTIFACTS = new Map();
   MESSAGE_SCROLLER = null;
 }
@@ -1377,26 +1682,48 @@ function outermostPre(el) {
 }
 
 /**
+ * The element that IS the code block, header and controls included, where the
+ * site declares one (SELECTORS.codeBlockRoot).
+ *
+ * The 2026-10 ChatGPT markup (#399) wraps each block in `[data-code-block]`,
+ * and its header row (language label, copy and wrap buttons) sits BESIDE the
+ * code rather than inside any <pre>. One shape has no <pre> at all; the other
+ * keeps a bare <pre> below the header. outermostPre() stops short of the label
+ * in both, so where a root is declared, the root is the block.
+ *
+ * @param {Element} el
+ * @returns {Element|null}
+ */
+function codeBlockRootOf(el) {
+  const rootSel = typeof SELECTORS !== 'undefined' && SELECTORS.codeBlockRoot;
+  if (!rootSel || !el || typeof el.closest !== 'function') return null;
+  return el.closest(rootSel);
+}
+
+/**
  * Best available language for a code block.
  *
  * Tried in descending order of proof:
  *   1. a `language-*` class or data-language attribute — an explicit statement;
- *   2. the block's header label, read from the OUTER pre;
+ *   2. the block's header label, read from the OUTER pre (or the declared
+ *      block root — see codeBlockRootOf);
  *   3. the code itself, sniffed, and only where the evidence is unambiguous.
  *
  * Step 3 is not a nicety. Probed on the live page over 64 blocks, ChatGPT's
- * current markup carries no class, no data attribute and no header at all —
- * there is nothing to read, which is why 540 of 606 blocks came back
- * unlabelled. Where a label exists it still wins; where none does, the content
- * is the only remaining evidence.
+ * 2026-09 markup carried no class, no data attribute and no header at all —
+ * there was nothing to read, which is why 540 of 606 blocks came back
+ * unlabelled. The 2026-10 markup carries a header label again (#399). Where a
+ * label exists it still wins; where none does, the content is the only
+ * remaining evidence.
  *
  * @param {Element} code - the <code> (or CodeMirror content) element
  * @param {Element} pre  - its enclosing <pre>
  * @returns {string} the language, lowercased and normalised, or '' when unknown
  */
 function detectCodeLanguage(code, pre) {
-  // Look in the outer block, not the inner CodeMirror pre — see outermostPre.
-  const scope = outermostPre(code) || outermostPre(pre) || pre;
+  // Look in the whole block, not the inner CodeMirror pre — see outermostPre
+  // and codeBlockRootOf.
+  const scope = codeBlockRootOf(code) || outermostPre(code) || outermostPre(pre) || pre;
 
   const fromClass = (el) => {
     if (!el || !el.classList) return '';
@@ -1459,7 +1786,14 @@ function normaliseLanguage(raw) {
  */
 function headerLabel(pre) {
   if (!pre || typeof pre.querySelector !== 'function') return '';
-  const header = pre.querySelector('[class*="sticky"], header, [class*="header"]');
+  let header = pre.querySelector('[class*="sticky"], header, [class*="header"]');
+  // 2026-10 ChatGPT (#399): the header row is a plain flex div with nothing in
+  // its name that says header. It is the child of the block that holds the
+  // copy/wrap controls, so it is found by them.
+  if (!header && typeof SELECTORS !== 'undefined' && SELECTORS.codeBlockControls) {
+    const controls = pre.querySelector(SELECTORS.codeBlockControls);
+    header = controls ? Array.from(pre.children).find(c => c.contains(controls)) || null : null;
+  }
   if (!header) return '';
 
   // The label node first: a leaf whose whole text is one non-control word.
@@ -1572,7 +1906,11 @@ function extractTextContent(element) {
     // replaceWith on a node with no parent is a no-op, so the fence is still
     // emitted exactly once — asserted in tests/code-language.test.js rather
     // than assumed.
-    const pre = outermostPre(code) || code;
+    //
+    // Where the site declares a block root (#399), that root is the outer
+    // block: its header sits beside the code, outside every <pre>, and
+    // replacing anything smaller leaves the label ("Bash") in the text.
+    const pre = codeBlockRootOf(code) || outermostPre(code) || code;
     const lang = detectCodeLanguage(code, pre);
     const codeText = code.textContent;
     const replacement = document.createTextNode(`\n\`\`\`${lang}\n${codeText}\n\`\`\`\n`);
@@ -1938,10 +2276,30 @@ function extractAssistantTurnChatGPT(messageEl, index) {
     }
   }
 
-  // Extract response content from .markdown container
+  // Response content: every content root in the message, in order, read as
+  // one. A unit reply holds one; an agent-style reply (#399) interleaves
+  // several with tool-activity lines, and reading only the first dropped the
+  // rest. Activity lines are not the reply's text and are skipped, as is any
+  // root nested inside another, which the outer one already covers.
   const contentSelector = SELECTORS.assistantContent || '.markdown';
-  const contentEl = messageEl.querySelector(contentSelector);
-  const content = contentEl ? extractTextContent(contentEl) : extractTextContent(messageEl);
+  const activitySelector = SELECTORS.activityHeader;
+  const inActivity = (el) => !!(activitySelector && el.closest(activitySelector));
+  const roots = Array.from(messageEl.querySelectorAll(contentSelector)).filter(root => {
+    if (inActivity(root)) return false;
+    const outer = root.parentElement && root.parentElement.closest(contentSelector);
+    return !(outer && messageEl.contains(outer));
+  });
+  let content;
+  if (roots.length) {
+    content = roots.map(extractTextContent).filter(Boolean).join('\n\n');
+  } else {
+    // No content root at all: the whole message, minus any activity lines, so
+    // a reply showing only "Stopped" comes out empty rather than as a turn
+    // whose text is the word "Stopped".
+    const bare = messageEl.cloneNode(true);
+    if (activitySelector) bare.querySelectorAll(activitySelector).forEach(el => el.remove());
+    content = extractTextContent(bare);
+  }
 
   // Extract model slug if available (may be on the messageEl itself or a descendant)
   let modelSlug = messageEl.getAttribute('data-message-model-slug');
@@ -1968,7 +2326,9 @@ function extractAssistantTurnChatGPT(messageEl, index) {
 
 /**
  * Extract turns from a ChatGPT conversation.
- * ChatGPT uses <article data-turn="user|assistant"> elements.
+ * One message element per message: data-message-author-role on the 2026-05
+ * markup, the search-unit div on the 2026-10 markup (#399). chatgptRoleOf()
+ * and messageIdOf() read either.
  * @returns {Promise<Array>} - Array of turn objects
  */
 async function extractTurnsChatGPT() {
@@ -1978,11 +2338,13 @@ async function extractTurnsChatGPT() {
   // Every message seen during the scroll, not just the window still rendered.
   // ChatGPT evicts as it loads, so reading the live DOM here would return one
   // window of a long conversation (#256).
+  // A reply block caught before its unit mounted has already been dropped from
+  // the cache by supersedeReplyBlock(), so each reply arrives here once.
   const messageEls = getCapturedMessageEls();
 
   for (let i = 0; i < messageEls.length; i++) {
     const messageEl = messageEls[i];
-    const turnType = messageEl.getAttribute('data-message-author-role');
+    const turnType = chatgptRoleOf(messageEl);
 
     if (turnType === 'user') {
       // Extract user content from .whitespace-pre-wrap or the message element
@@ -2001,8 +2363,7 @@ async function extractTurnsChatGPT() {
     // extracted from its .whitespace-pre-wrap content element, and the file
     // cards sit outside it — on the message element, which only this loop
     // still holds.
-    const messageId = messageEl.getAttribute('data-message-id') ||
-                      messageEl.getAttribute('data-turn-id');
+    const messageId = messageIdOf(messageEl);
     const files = messageId ? getMessageArtifacts(messageId) : [];
     if (files.length) {
       const turn = turns[turns.length - 1];
@@ -2540,6 +2901,14 @@ async function extractConversation() {
         // of one conversation could each hold messages the other lacked while
         // both reported complete.
         rescuedFromEviction: getRescuedCount(),
+        // Messages first captured as a shell, before their text rendered, and
+        // re-cloned once it had (#399). Before the refresh existed they were
+        // dropped as blank turns from a capture reporting contentComplete.
+        refreshedAfterLateRender: getRefreshedCount(),
+        // Reply blocks seen before their unit mounted, whose provisional entry
+        // the unit replaced (#399). Each one is a reply that would otherwise
+        // have been exported twice or out of place.
+        replyBlocksSupersededByUnit: getSupersededCount(),
         // The counter said 35 of 233 and nothing told anyone (#282). A reader
         // had to know the field existed, find it inside orderInfo, and already
         // know what a non-zero value implies. This says it instead.
@@ -2628,6 +2997,7 @@ if (typeof module !== 'undefined' && module.exports) {
     detectCodeLanguage,
     sniffCodeLanguage,
     outermostPre,
+    codeBlockRootOf,
     extractUserTurn,
     extractAssistantTurn,
     extractAssistantTurnClaude,
@@ -2660,10 +3030,21 @@ if (typeof module !== 'undefined' && module.exports) {
     waitForLoadingComplete,
     scrollToLoadAllMessages,
     // Virtualized-list capture (#256) and bottom-anchored ordering (#264)
+    // Message identity and role across both ChatGPT markups (#399)
+    messageIdOf,
+    chatgptRoleOf,
+    isAgentReply,
+    isMessageElement,
+    queryMessages,
+    turnKeyOf,
+    snapshotMessage,
     captureRenderedMessages,
     captureDetachedMessages,
     interpolateFromSiblings,
     getRescuedCount,
+    getRefreshedCount,
+    getSupersededCount,
+    layoutRectOf,
     remeasureRenderedMessages,
     getCapturedMessageEls,
     getCaptureOrderStats,

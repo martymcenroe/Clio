@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<!--
+  ChatGPT thread markup as served on 2026-10-17 (#399). SYNTHETIC TEXT, REAL
+  STRUCTURE: every element, attribute and class on the path from a message to
+  the scroller is copied from tools/chatgpt/probe-turns.js and the probes
+  recorded on #399, run against the live page. The words are invented and the
+  ids are placeholders; no conversation content is here. Clio is public.
+
+  What it pins:
+    - two <main> elements, the FIRST of which is the empty home composer, so
+      document.querySelector('main') does not return the thread;
+    - one [data-turn-key] per EXCHANGE, holding a user and an assistant
+      message, each marked by [data-chatgpt-search-unit-key] ending in its role;
+    - the assistant id repeated in data-chatgpt-search-message-ids;
+    - the screen-reader "You said:" / "ChatGPT said:" headings beside the text;
+    - both code-block shapes seen on one page: [data-code-block-source] > code
+      with no <pre>, and a bare <pre> > code, each under a header row whose
+      language label sits beside the copy/wrap controls;
+    - an agent-style reply (exchange 3) with NO search unit and no message id:
+      tertiary and primary MarkdownRoots around a tool-activity line;
+    - a reply (exchange 4) whose "Worked for" activity line sits in the block
+      before its unit, the shape in which the element after the reply marker
+      is not the reply.
+  No element carries data-message-author-role, data-message-id, data-turn-id or
+  .markdown, which is the whole defect.
+-->
+<html>
+<head><title>Synthetic four-exchange conversation</title></head>
+<body>
+<main>
+  <div role="main" class="[container-type:size] relative flex min-h-0">
+    <div class="group/home-composer-layout relative flex min-h-0">
+      <div class="relative w-full min-w-0 text-center">
+        <h1 class="heading-xl invisible font-normal whitespace-pre-wrap">Where should we begin?</h1>
+      </div>
+    </div>
+  </div>
+</main>
+<main>
+  <div class="relative mx-auto flex min-h-0">
+    <div class="min-h-0 flex-1">
+      <div class="flex h-full min-h-0 flex-col">
+        <div class="contents">
+          <div data-request-input-activity-root class="group/thread-scroll-layout relative h-full">
+            <div data-app-action-timeline-scroll role="region" class="thread-scroll-container overflow-x-hidden overflow-y-auto overscroll-y-contain">
+
+              <div data-turn-key="11111111-1111-4111-8111-111111111111" class="[&amp;_[data-virtualized-turn-content]]:[content-visibility:visible]">
+                <div data-content-search-turn-key="fallback-turn-0">
+                  <div>
+                    <div data-talvt-turn-state="complete" class="group flex flex-col">
+                      <div class="flex flex-col gap-3 browser:gap-1">
+                        <div class="block-BQZwFn">
+                          <h4 class="sr-only m-0 select-none print:not-sr-only">You said:</h4>
+                          <div data-chatgpt-search-unit-key="fallback-turn-0:0:user" data-chatgpt-search-message-ids="11111111-1111-4111-8111-111111111111" class="group/user-message flex flex-col items-end">
+                            <div data-content-search-unit-key="fallback-turn-0:0:user" class="w-full">
+                              <div class="group/user-message flex w-full flex-col">
+                                <div data-user-message-bubble="true" class="bg-user-message text-user-message min-w-0 max-w-(--user-chat-width)">
+                                  <div class="flex flex-col items-end gap-1">
+                                    <div class="relative w-full min-w-0 text-size-chat">
+                                      <div data-search-result-target>
+                                        <div><div class="text-size-chat whitespace-pre-wrap">How do I list files by size?</div></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <span data-state="closed" class="contents"><button class="no-drag cursor-interaction items-center select-none"></button></span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="block-BQZwFn">
+                          <span data-chatgpt-agent-turn-start></span>
+                          <div data-content-search-unit-key="fallback-turn-0:2:assistant" data-chatgpt-search-unit-key="fallback-turn-0:2:assistant" data-chatgpt-search-message-ids="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa">
+                            <h4 data-conversation-role="assistant" class="sr-only m-0 select-none print:not-sr-only">ChatGPT said:</h4>
+                            <div data-chatgpt-selection-conversation-id="cccccccc-cccc-4ccc-8ccc-cccccccccccc" data-chatgpt-selection-message-id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" class="group flex min-w-0 flex-col">
+                              <div data-selected-text-overlay-target data-markdown-text-style="assistant-message" class="MarkdownRoot-rZKhxa"><p class="Paragraph-kKnbIo">Sort the long listing by size:</p><div data-code-block="true" data-markdown-copy data-theme="dark" class="relative Root-iW7ipz w-full min-w-0"><div data-markdown-copy class="flex items-center font-sans text-sm"><svg><use></use></svg><div class="min-w-0 flex-1 truncate">Bash</div><div class="ms-auto flex items-center min-w-0"><div data-code-block-controls role="presentation" class="flex items-center gap-px print:hidden"><span data-state="closed" class="contents"><button aria-label="Enable word wrap" class="no-drag cursor-interaction items-center select-none"><svg></svg></button></span><span data-state="closed" class="contents"><button aria-label="Copy code" class="no-drag cursor-interaction items-center select-none"><svg></svg></button></span></div></div></div><div data-code-block-source class="text-size-chat overflow-auto outline-none focus-visible:ring-2"><code class="whitespace-pre! block text-size-code CodeContent-ybJ8Tl"><span>ls -lS</span></code></div></div><p class="Paragraph-kKnbIo">Largest files come first.</p></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-turn-key="22222222-2222-4222-8222-222222222222" class="[&amp;_[data-virtualized-turn-content]]:[content-visibility:visible]">
+                <div data-content-search-turn-key="fallback-turn-1">
+                  <div>
+                    <div data-talvt-turn-state="complete" class="group flex flex-col">
+                      <div class="flex flex-col gap-3 browser:gap-1">
+                        <div class="block-BQZwFn">
+                          <h4 class="sr-only m-0 select-none print:not-sr-only">You said:</h4>
+                          <div data-chatgpt-search-unit-key="fallback-turn-1:0:user" data-chatgpt-search-message-ids="22222222-2222-4222-8222-222222222222" class="group/user-message flex flex-col items-end">
+                            <div data-content-search-unit-key="fallback-turn-1:0:user" class="w-full">
+                              <div class="group/user-message flex w-full flex-col">
+                                <div data-user-message-bubble="true" class="bg-user-message text-user-message min-w-0 max-w-(--user-chat-width)">
+                                  <div class="flex flex-col items-end gap-1">
+                                    <div class="relative w-full min-w-0 text-size-chat">
+                                      <div data-search-result-target>
+                                        <div><div class="text-size-chat whitespace-pre-wrap">And in Python?</div></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="block-BQZwFn">
+                          <span data-chatgpt-agent-turn-start></span>
+                          <div data-content-search-unit-key="fallback-turn-1:2:assistant" data-chatgpt-search-unit-key="fallback-turn-1:2:assistant" data-chatgpt-search-message-ids="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb">
+                            <h4 data-conversation-role="assistant" class="sr-only m-0 select-none print:not-sr-only">ChatGPT said:</h4>
+                            <div data-chatgpt-selection-conversation-id="cccccccc-cccc-4ccc-8ccc-cccccccccccc" data-chatgpt-selection-message-id="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" class="group flex min-w-0 flex-col">
+                              <div data-selected-text-overlay-target data-markdown-text-style="assistant-message" class="MarkdownRoot-rZKhxa"><p class="Paragraph-kKnbIo">Use os.scandir:</p><div data-code-block="true" data-markdown-copy data-theme="dark" data-search-result-target class="relative Root-iW7ipz w-full min-w-0"><div data-markdown-copy class="flex items-center font-sans text-sm"><svg><use></use></svg><div class="min-w-0 flex-1 truncate">Python</div><div class="ms-auto flex items-center min-w-0"><div data-code-block-controls role="presentation" class="flex items-center gap-px print:hidden"><span data-state="closed" class="contents"><button aria-label="Enable word wrap" class="no-drag cursor-interaction items-center select-none"><svg></svg></button></span><span data-state="closed" class="contents"><button aria-label="Copy code" class="no-drag cursor-interaction items-center select-none"><svg></svg></button></span></div></div></div><div class="relative [container-type:inline-size]"><div class="InlineCodePane-EYx4bd w-full overflow-x-hidden"><div class="relative z-0 flex max-w-full"><div class="chatgpt-code-scrollport flex w-full items-stretch"><pre class="m-0 flex-1 cursor-text px-4"><code>sorted(os.scandir('.'), key=lambda e: e.stat().st_size)</code></pre></div></div></div><button aria-label="Scroll to bottom" class="group/scroll-to-bottom cursor-interaction absolute z-30"><svg><use></use></svg></button></div></div></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-turn-key="44444444-4444-4444-8444-444444444444" class="[&amp;_[data-virtualized-turn-content]]:[content-visibility:visible]">
+                <div data-content-search-turn-key="fallback-turn-2">
+                  <div>
+                    <div data-talvt-turn-state="complete" class="group flex flex-col">
+                      <div class="flex flex-col gap-3 browser:gap-1">
+                        <div class="block-BQZwFn">
+                          <h4 class="sr-only m-0 select-none print:not-sr-only">You said:</h4>
+                          <div data-chatgpt-search-unit-key="fallback-turn-2:0:user" data-chatgpt-search-message-ids="44444444-4444-4444-8444-444444444444" class="group/user-message flex flex-col items-end">
+                            <div data-content-search-unit-key="fallback-turn-2:0:user" class="w-full">
+                              <div class="group/user-message flex w-full flex-col">
+                                <div data-user-message-bubble="true" class="bg-user-message text-user-message min-w-0 max-w-(--user-chat-width)">
+                                  <div class="flex flex-col items-end gap-1"><div class="relative w-full min-w-0 text-size-chat"><div data-search-result-target><div><div class="text-size-chat whitespace-pre-wrap">Check the config file for errors.</div></div></div></div></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="block-BQZwFn">
+                          <span data-chatgpt-agent-turn-start></span>
+                          <div class="flex min-w-0 items-start gap-3">
+                            <div class="min-w-0 flex-1">
+                              <div class="min-w-0 text-size-chat relative overflow-visible">
+                                <div class="flex flex-col gap-4"><div data-selected-text-overlay-target data-markdown-text-style="assistant-message" data-markdown-text-tone="tertiary" class="MarkdownRoot-rZKhxa"><p class="Paragraph-kKnbIo"><span>Opening the config now.</span></p></div><div class="min-w-0 text-size-chat relative overflow-visible"><div class="flex min-w-0 flex-col"><div class="group/activity-header relative inline-flex min-w-0"><span class="inline-flex min-w-0 gap-1.5"><span class="contents text-text/60"><span class="flex shrink-0 items-center gap-0.5"><svg><use></use></svg></span></span><span class="min-w-0 flex-1 truncate text-(--agent-activity-summary-color)"><div data-selected-text-overlay-target data-markdown-text-style="assistant-message" data-markdown-text-tone="tertiary" class="MarkdownRoot-rZKhxa"><p class="Paragraph-kKnbIo"><span>Inspected config.yaml</span></p></div></span></span></div></div></div><div data-selected-text-overlay-target data-markdown-text-style="assistant-message" data-markdown-text-tone="primary" class="MarkdownRoot-rZKhxa"><p class="Paragraph-kKnbIo"><span>It parses, but </span><span data-markdown-copy class="InlineCode-Cddi3Y InlineMarkdownIsolate-QWDV4W">timeout</span><span> is set twice.</span></p></div></div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-turn-key="55555555-5555-4555-8555-555555555555" class="[&amp;_[data-virtualized-turn-content]]:[content-visibility:visible]">
+                <div data-content-search-turn-key="fallback-turn-3">
+                  <div>
+                    <div data-talvt-turn-state="complete" class="group flex flex-col">
+                      <div class="flex flex-col gap-3 browser:gap-1">
+                        <div class="block-BQZwFn">
+                          <h4 class="sr-only m-0 select-none print:not-sr-only">You said:</h4>
+                          <div data-chatgpt-search-unit-key="fallback-turn-3:0:user" data-chatgpt-search-message-ids="55555555-5555-4555-8555-555555555555" class="group/user-message flex flex-col items-end">
+                            <div data-content-search-unit-key="fallback-turn-3:0:user" class="w-full">
+                              <div class="group/user-message flex w-full flex-col">
+                                <div data-user-message-bubble="true" class="bg-user-message text-user-message min-w-0 max-w-(--user-chat-width)">
+                                  <div class="flex flex-col items-end gap-1"><div class="relative w-full min-w-0 text-size-chat"><div data-search-result-target><div><div class="text-size-chat whitespace-pre-wrap">Fix it.</div></div></div></div></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="block-BQZwFn">
+                          <span data-chatgpt-agent-turn-start></span>
+                          <div class="min-w-0 text-size-chat relative overflow-visible"><div class="flex min-w-0 flex-col"><div class="group/activity-header relative inline-flex min-w-0"><span class="inline-flex min-w-0 gap-1.5"><span class="text-text/60 flex min-w-0 max-w-full">Worked for 5m 34s</span></span></div></div></div>
+                          <div data-content-search-unit-key="fallback-turn-3:2:assistant" data-chatgpt-search-unit-key="fallback-turn-3:2:assistant" data-chatgpt-search-message-ids="dddddddd-dddd-4ddd-8ddd-dddddddddddd dddddddd-dddd-4ddd-8ddd-dddddddddddd">
+                            <h4 data-conversation-role="assistant" class="sr-only m-0 select-none print:not-sr-only">ChatGPT said:</h4>
+                            <div data-chatgpt-selection-conversation-id="cccccccc-cccc-4ccc-8ccc-cccccccccccc" data-chatgpt-selection-message-id="dddddddd-dddd-4ddd-8ddd-dddddddddddd" class="group flex min-w-0 flex-col">
+                              <div data-selected-text-overlay-target data-markdown-text-style="assistant-message" class="MarkdownRoot-rZKhxa"><p class="Paragraph-kKnbIo">Removed the second timeout line.</p></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

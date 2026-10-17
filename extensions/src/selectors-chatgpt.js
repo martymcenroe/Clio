@@ -12,6 +12,27 @@
  * 2026-02-28 verification (issue #15) and now (#116). The per-turn
  * boundary is the inner div with `data-message-author-role`. We select
  * on that attribute directly — no article-based selector path.
+ *
+ * RE-VERIFIED: 2026-10-17 against the live page (#399), after every ChatGPT
+ * extraction failed with "Missing selectors: messages". ChatGPT replaced the
+ * thread markup wholesale: no element carries data-message-author-role,
+ * data-message-id, data-turn-id or .markdown any more. The new shape, probed
+ * with tools/chatgpt/probe-turns.js:
+ *
+ *   div[data-turn-key=<user message id>]          one EXCHANGE, not one message
+ *     div[data-chatgpt-search-unit-key="<k>:0:user"
+ *         data-chatgpt-search-message-ids="<id>"]  the user message
+ *       … [data-user-message-bubble] … .whitespace-pre-wrap   its text
+ *     div[data-chatgpt-search-unit-key="<k>:2:assistant"
+ *         data-chatgpt-search-message-ids="<id> <id>"]  the assistant message
+ *       h4[data-conversation-role="assistant"].sr-only   "ChatGPT said:"
+ *       … [data-markdown-text-style="assistant-message"]   its text
+ *
+ * The search-unit element is the message boundary: exactly one per message,
+ * never nested, with the role as the suffix of its key and the message id as
+ * the first token of its id list (content.js messageIdOf()). Every 1.9.1
+ * selector is kept beside its replacement, so a browser still served the old
+ * markup keeps working.
  */
 
 const SELECTORS = {
@@ -34,21 +55,61 @@ const SELECTORS = {
   // `scroll-root` is listed first so it is chosen directly. The others are kept
   // as fallbacks for other builds; findScrollContainer() walks this list in
   // order and rejects any entry that does not genuinely scroll.
-  scrollContainer: '[class*="scroll-root"], main [class*="overflow-y-auto"], main',
+  //
+  // 2026-10-17 (#399): the thread now scrolls in
+  // `div[data-app-action-timeline-scroll].thread-scroll-container`, inside
+  // <main>, and nothing on the page matches `scroll-root`. It goes first.
+  scrollContainer: '[data-app-action-timeline-scroll], .thread-scroll-container, [class*="scroll-root"], main [class*="overflow-y-auto"], main',
 
-  // Message elements — current ChatGPT renders each turn as a div
-  // bearing `data-message-author-role="user"` or `="assistant"`.
-  userMessage: '[data-message-author-role="user"]',
-  assistantMessage: '[data-message-author-role="assistant"]',
+  // Message elements. 2026-05 markup: a div bearing
+  // `data-message-author-role="user"` or `="assistant"`. 2026-10 markup
+  // (#399): the search-unit div, whose key ends in `:user` or `:assistant`.
+  userMessage: '[data-message-author-role="user"], [data-chatgpt-search-unit-key$=":user"]',
+  assistantMessage: '[data-message-author-role="assistant"], [data-chatgpt-search-unit-key$=":assistant"]',
 
-  // All messages (union of user + assistant)
-  allMessages: '[data-message-author-role="user"], [data-message-author-role="assistant"]',
+  // All messages (union of user + assistant). content.js queryMessages() adds
+  // the replies no selector can name — see replyMarker.
+  allMessages: '[data-message-author-role="user"], [data-message-author-role="assistant"], ' +
+    '[data-chatgpt-search-unit-key$=":user"], [data-chatgpt-search-unit-key$=":assistant"]',
+
+  // A reply with no search unit (#399).
+  //
+  // Every reply's block opens with this marker. In most replies the assistant
+  // unit follows somewhere in that block. In an agent-style reply — tool
+  // activity ("Inspected…", "Fetched…") interleaved with text — no unit is ever
+  // rendered: the text sits in bare MarkdownRoots with no message id anywhere.
+  // One live conversation had 12 such replies out of 79, all invisible to the
+  // unit selectors. So the block holding the marker is the message, but only
+  // when it holds no unit, which keeps the two shapes from ever matching one
+  // reply twice.
+  //
+  // Not "the element after the marker": in 39 of those 79 replies that element
+  // is the "Worked for 5m 34s" line, with the unit further down the block, and
+  // selecting it would have invented an assistant turn per reply.
+  //
+  // Found in code (content.js isAgentReply) rather than with
+  // `div:has(> marker):not(:has(unit))`: Chrome evaluates that, but jsdom's
+  // selector engine throws on any :has() in a document carrying ChatGPT's
+  // bracketed class names, so no test could exercise it.
+  replyMarker: '[data-chatgpt-agent-turn-start]',
+
+  // The exchange a message belongs to (2026-10). Its value is the id of the
+  // user message that opens the exchange, so it is unique per exchange.
+  turnContainer: '[data-turn-key]',
+  turnKeyAttribute: 'data-turn-key',
 
   // Content selectors within messages
-  // User text is inside .whitespace-pre-wrap
+  // User text is inside .whitespace-pre-wrap — still true in the 2026-10 markup.
   userContent: '.whitespace-pre-wrap',
-  // Assistant text is inside .markdown.prose
-  assistantContent: '.markdown',
+  // Assistant text: .markdown.prose (2026-05), or the MarkdownRoot carrying
+  // data-markdown-text-style (2026-10). Using it keeps the screen-reader
+  // "ChatGPT said:" heading out of the content. A reply can hold several
+  // (an agent-style reply interleaves them with tool activity); all of them are
+  // read, in order.
+  assistantContent: '.markdown, [data-markdown-text-style]',
+  // Tool-activity lines in a reply ("Inspected 3 files", "Worked for 5m 34s").
+  // They carry MarkdownRoots of their own, and they are not the reply's text.
+  activityHeader: '[class*="activity-header"]',
 
   // Expandable content — no generic expand buttons in ChatGPT
   expandButton: null,
@@ -61,12 +122,23 @@ const SELECTORS = {
   // Reasoning label — the container with "Reasoned about..." text
   reasoningLabel: '.flex.items-start.gap-3.pb-2',
 
-  // Response content — the message element with data-message-author-role
-  responseContent: '[data-message-author-role="assistant"]',
+  // Response content — the assistant message element
+  responseContent: '[data-message-author-role="assistant"], [data-chatgpt-search-unit-key$=":assistant"]',
 
-  // Code blocks — ChatGPT uses <pre> with CodeMirror inside
-  // Language label is in a sticky header div inside the pre
-  codeBlock: 'pre code, pre .cm-content',
+  // Code blocks — 2026-05: <pre> with CodeMirror inside, language label in a
+  // sticky header div inside the pre.
+  //
+  // 2026-10 (#399): a `[data-code-block]` root holding a header row (icon,
+  // language label, copy/wrap controls) and then the code, in one of two
+  // shapes seen side by side on one page:
+  //   [data-code-block-source] > code             (no <pre> at all)
+  //   … pre > code
+  // The root is what extractTextContent() replaces with the fence, or the
+  // header's label ("Bash") lands in the text beside it. The controls are how
+  // the header row is found: nothing in its class names says header.
+  codeBlock: 'pre code, pre .cm-content, [data-code-block] code',
+  codeBlockRoot: '[data-code-block]',
+  codeBlockControls: '[data-code-block-controls]',
   codeLanguage: 'pre [class*="sticky"]',
 
   // Images

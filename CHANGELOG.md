@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.9.2] — 2026-10-17
+
+ChatGPT replaced its conversation markup, and every ChatGPT extraction in 1.9.1 failed before it began with "ChatGPT UI may have changed. Missing selectors: messages." This release reads the new markup and keeps reading the old (#399).
+
+### Fixed
+- ChatGPT messages are found again: the message element, its role and its id are read from the new search-unit markup, beside the 2026-05 attributes (#399)
+- The thread's new scroll container is used, so scroll-back reaches the start of a long conversation (#399)
+- Code blocks in the new markup are fenced with their header's language, and the header label and the copy/wrap captions no longer land in the text (#399)
+- A message first seen before its content rendered is re-captured once the content arrives: an assistant reply before its text, an image-only user message before its image. Without this, 24 of 75 replies in one measured capture were dropped as blank in an export that reported `contentComplete: true`. `orderInfo.refreshedAfterLateRender` counts them (#399)
+- Agent-style replies, which ChatGPT renders with no message unit and no id (tool activity interleaved with text), are captured, every text block in order, without the activity lines. One measured conversation had 12 of them, all previously missing (#399)
+- Reply blocks are `display: contents` and have no box of their own; they are now positioned by their first laid-out child, so they sort into place rather than being appended at the end (#399)
+- A reply block caught before its unit mounted is replaced by the unit in the capture cache, so no reply is exported twice. `orderInfo.replyBlocksSupersededByUnit` counts them (#399)
+
+### Added
+- `tools/chatgpt/probe-turns.js` — structural census of the live thread markup, the probe that found the new shape (#399)
+- `tools/chatgpt/verify-extract.js` — runs the real `extractConversation()` on the live page and reports what it produced, including every message dropped as blank (#399)
+
 ## [1.4.1] — 2026-05-25
 
 Pre-submission cleanup release. `v1.4.0` was tagged but never submitted to the Chrome Web Store — pre-flight surfaced two unnecessary `console.log` calls in the background service worker. They do not violate the privacy policy (local console output, never transmitted), but they present a confusing surface for a reviewer auditing a strict-local extension. `v1.4.1` ships without them.

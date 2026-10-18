@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.9.5] — 2026-10-18
+
+### Fixed
+- A conversation that fits on screen exports complete. With nothing to scroll, `findScrollContainer()` falls back to `<body>`, and every message was refused an ordering key because `<body>` does not scroll, so each short ChatGPT or Claude conversation exported `contentComplete: false` with "N of N message(s) could not be positioned". The key is now refused only when something between the scroller and the message scrolls, the case where it could be wrong. Measured live (injected, viewport emulated at 1800px): 4 of 4 messages unpositioned on a ChatGPT and a Claude test conversation; in a 680px window, where the same conversations scroll, 0 of 4. With this release, at 1800px: 4 of 4 positioned, `contentComplete: true`, in the same order as the 680px capture. The rule dates from #264 (2026-09-05), under the 2026-05 markup (#407)
+
+### Changed
+- `tools/extension/compare-with-injected.js` prints what each capture said about itself (`contentComplete`, `incompleteReasons`, how the scroll ended) and, for every message only one side holds, its position, role and size and the messages either side, so a turn added between the two captures can be told from a message one of them lost (#308, #405)
+
 ## [1.9.4] — 2026-10-17
 
 Claude extraction works again, and ChatGPT images are captured. Measured through the real extension, 1.9.3 exported **none of Claude's replies** from a Claude conversation, and **0 of 2** images from a ChatGPT one, reporting both complete (#409, #331).

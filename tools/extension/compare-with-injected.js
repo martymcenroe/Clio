@@ -38,7 +38,24 @@ function siteOf(url) {
   return 'gemini';
 }
 
+// An id's first four characters and its length: enough to tell messages apart
+// in the transcript without printing them whole.
 const shape = (id) => (id ? (id.length > 12 ? `${id.slice(0, 4)}…(${id.length})` : id) : '-');
+
+/**
+ * Where a message sits in the capture that holds it: its position, role and
+ * size, and the messages either side. A one-sided message at the very end is
+ * a turn added between the two captures; one in the middle was lost by one of
+ * them.
+ */
+function whereIn(list, id) {
+  const i = list.findIndex((m) => m.id === id);
+  const m = list[i];
+  const prev = i > 0 ? shape(list[i - 1].id) : '(start)';
+  const next = i < list.length - 1 ? shape(list[i + 1].id) : '(end)';
+  return `${shape(id)} at ${i + 1} of ${list.length}, ${m.role}, ${m.textLength} chars, ` +
+    `${m.images} image(s); between ${prev} and ${next}`;
+}
 
 function summarize(messages) {
   return messages.map((m) => ({
@@ -97,8 +114,21 @@ async function main() {
   say(`real extension (ZIP): ${real.length} messages, ${real.reduce((n, m) => n + m.images, 0)} image attachments, ${real.reduce((n, m) => n + m.imagesFetched, 0)} fetched`);
   say(`injected:             ${injected.length} messages, ${injected.reduce((n, m) => n + m.images, 0)} image attachments, ${injected.reduce((n, m) => n + m.imagesFetched, 0)} fetched`);
   say(`messages without an id: real ${real.filter((m) => !m.id).length}, injected ${injected.filter((m) => !m.id).length}`);
+  // What each capture said about itself. A capture that lost messages and says
+  // contentComplete: true is a different finding from one that said it was
+  // incomplete (#405).
+  const verdictOf = (m) => m ? JSON.stringify({
+    messageCount: m.messageCount,
+    contentComplete: m.contentComplete,
+    incompleteReasons: m.incompleteReasons,
+    terminationReason: m.scrollInfo && m.scrollInfo.terminationReason
+  }) : '(no metadata)';
+  say(`real extension says: ${verdictOf(fromZip.metadata)}`);
+  say(`injected says:       ${verdictOf(injectedResult.metadata)}`);
   say(`only in the real capture: ${onlyReal.length}${onlyReal.length ? '  ' + onlyReal.map(shape).join(' ') : ''}`);
+  for (const id of onlyReal) say(`  ${whereIn(real, id)}`);
   say(`only in the injected capture: ${onlyInjected.length}${onlyInjected.length ? '  ' + onlyInjected.map(shape).join(' ') : ''}`);
+  for (const id of onlyInjected) say(`  ${whereIn(injected, id)}`);
   say(`same id, different result: ${differing.length}`);
   for (const d of differing) {
     say(`  ${shape(d.id)} ${d.real.role}: ${d.fields.join(', ') || 'image errors'}`);

@@ -58,6 +58,7 @@ The extension creates a zip file containing:
     "title": "My Conversation",
     "extractedAt": "2026-01-19T12:34:56.789Z",
     "url": "https://chatgpt.com/c/abc123",
+    "clioVersion": "1.9.9",
     "messageCount": 24,
     "imageCount": 3,
     "imagesOffered": 3,
@@ -130,6 +131,8 @@ questions.
 | `mediaErrors` | Image fetches that failed. *Fail Open by design* — the transcript is unaffected — so these are reported and do **not** make the capture incomplete. |
 | `partialSuccess` | Retained for existing consumers. It is the negation of `contentComplete` and nothing else. |
 | `imagesOffered` | Conversation images the page rendered, counted by scanning each exchange rather than through the message selectors, so an image those selectors miss is still counted. Every offered image is in the ZIP (`imageCount`), in `mediaErrors`, or named in `incompleteReasons` — a missed image makes the capture incomplete. Absent where the site has no image scope defined yet, rather than a zero nobody measured. |
+| `imagesReduced` | Of the images captured, how many are the site's own reduced copy rather than the original: Claude's preview of an upload seen after a page load, or Gemini's display-size copy of a generated image when the full size could not be fetched. Each is marked on its attachment (`attachments[].rendition`: `"preview"` or `"display"`) and the count is named in `incompleteReasons`. Present on the sites that have a rule for telling (Claude, Gemini). |
+| `clioVersion` | The version of the extension that made the export, from its manifest. `null` when the extraction ran outside the extension (the injected tools in `tools/`), so such a capture cannot pass for a real one. |
 | `decorationSkipped` | Citation favicons deliberately not fetched. Not a failure; recorded so the drop stays auditable. |
 | `reasoningAffordances` | Assistant turns that visibly offer reasoning ("Worked for 5m 34s" and similar). Reported even when zero, so "there was none to capture" stays distinguishable from "we captured all of it". |
 | `reasoningCaptured` | Messages whose `thinking` is non-empty. When it is below `reasoningAffordances`, the shortfall is named in `incompleteReasons` and the capture is not complete. |

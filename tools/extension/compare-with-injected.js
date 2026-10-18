@@ -123,6 +123,14 @@ async function main() {
     incompleteReasons: m.incompleteReasons,
     terminationReason: m.scrollInfo && m.scrollInfo.terminationReason
   }) : '(no metadata)';
+  // Which builds are being compared (#419). The injected side runs this
+  // checkout's code, whose version is its manifest's; the ZIP says its own,
+  // from 1.9.9 on. Different builds can differ for that reason alone (text
+  // lengths changed in 1.9.6, #426).
+  const zipVersion = fromZip.metadata && 'clioVersion' in fromZip.metadata ? fromZip.metadata.clioVersion : null;
+  const repoVersion = JSON.parse(fs.readFileSync(path.join(REPO, 'extensions', 'manifest.json'), 'utf8')).version;
+  say(`builds: ZIP ${zipVersion || '(not recorded)'}, injected ${repoVersion}` +
+    (zipVersion && zipVersion !== repoVersion ? '  -- DIFFERENT BUILDS: differences may be the build, not the capture' : ''));
   say(`real extension says: ${verdictOf(fromZip.metadata)}`);
   say(`injected says:       ${verdictOf(injectedResult.metadata)}`);
   say(`only in the real capture: ${onlyReal.length}${onlyReal.length ? '  ' + onlyReal.map(shape).join(' ') : ''}`);

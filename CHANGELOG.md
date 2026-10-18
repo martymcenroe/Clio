@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.9.9] — 2026-10-18
+
+### Added
+- `metadata.clioVersion`: the version of the extension that made the export, from its manifest; `null` when the extraction ran outside the extension, as the injected tools do, so such a capture cannot pass for a real one. `tools/extension/inspect-zip.js` prints it (and `imagesReduced`), and `compare-with-injected.js` prints both builds and says when they differ, since different builds can differ for that reason alone (#419)
+- The README documents `clioVersion`, `imagesReduced` and `attachments[].rendition`
+
 ## [1.9.8] — 2026-10-18
 
 ### Fixed

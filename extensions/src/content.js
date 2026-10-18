@@ -3005,6 +3005,22 @@ async function extractTurns() {
 // ============================================================================
 
 /**
+ * The version of the extension running this code (#419), from its manifest.
+ * null where there is no extension: the injected tools and jsdom run this
+ * file with a stub `chrome` that has no getManifest.
+ * @returns {string|null}
+ */
+function clioVersion() {
+  try {
+    if (typeof chrome === 'undefined' || !chrome.runtime ||
+        typeof chrome.runtime.getManifest !== 'function') return null;
+    return chrome.runtime.getManifest().version || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
  * Determine image extension from MIME type or URL.
  * @param {string} mimeType
  * @param {string} url
@@ -3512,6 +3528,10 @@ async function extractConversation() {
         title,
         extractedAt,
         url,
+        // Which Clio made this export (#419): the loaded extension's version,
+        // or null outside the extension, so an injected capture cannot pass
+        // for a real one.
+        clioVersion: clioVersion(),
         messageCount: turns.length,
         imageCount: images.length,
         // What the page offered, beside what was taken (#410), reported even
@@ -3725,6 +3745,7 @@ if (typeof module !== 'undefined' && module.exports) {
     countImagesOffered,
     stashImageBytes,
     readImageBytes,
+    clioVersion,
     fetchImage,
     fetchImageAsShown,
     imageRendition,

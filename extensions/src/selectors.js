@@ -93,6 +93,19 @@ const SELECTORS = {
   // which holds the prompt and the reply. The account avatar and the
   // sidebar's icons are outside every one.
   imageScope: '.conversation-container',
+  // A generated image is shown at display size (#425): Google's image service
+  // URL lh3.googleusercontent.com/gg/<token>=s1024-rj, the long side capped at
+  // 1024 (measured: 1024×559, 16,227 bytes). Gemini's own "Download full size
+  // image" asks for the same kind of URL with =d-I (1408×768, 321,273 bytes),
+  // so that is tried first and the displayed copy kept, and marked, if it
+  // fails. Once an image is shown, the page swaps its src for a blob: URL, so
+  // the https URL is remembered as it goes (trackSwaps, watchImageSrcSwaps).
+  imageRenditions: {
+    reduced: '^(https://lh3\\.googleusercontent\\.com/gg/[^=/?#]+)=(?:[^/?#]*-)?[swh][1-9][0-9]*(?:-[^/?#]*)?$',
+    rendition: 'display',
+    fullSize: '$1=d-I',
+    trackSwaps: true
+  },
 
   // Citation decoration (#279). Null because no citation-favicon markup has
   // been verified against this site's DOM, and a guessed selector here would

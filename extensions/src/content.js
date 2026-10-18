@@ -3037,13 +3037,114 @@ function getImageExtension(mimeType, url) {
 }
 
 /**
- * Fetch a single image, handling different URL schemes.
+ * The https URL each blob: image was shown from before the page swapped it
+ * (#425). Gemini shows a generated image from a size-capped image-service URL
+ * and, once it is on screen, replaces the src with a blob: URL, leaving
+ * nothing in the page that says where it came from. Keyed by the blob: URL.
+ * @type {Map<string, string>}
+ */
+const SRC_ORIGINALS = new Map();
+
+/**
+ * Remember, as it happens, every image whose src changes from a reduced copy
+ * (SELECTORS.imageRenditions.reduced) to a blob: URL. Installed when the
+ * content script loads, on sites that ask for it, because a swap made before
+ * the extraction starts is otherwise lost.
+ *
+ * @param {Node} [root=document.documentElement]
+ * @returns {MutationObserver|null}
+ */
+function watchImageSrcSwaps(root) {
+  const r = typeof SELECTORS !== 'undefined' && SELECTORS.imageRenditions;
+  if (!r || !r.reduced || typeof MutationObserver === 'undefined') return null;
+  const reduced = new RegExp(r.reduced);
+  const observer = new MutationObserver((records) => {
+    for (const rec of records) {
+      const now = rec.target && rec.target.getAttribute && rec.target.getAttribute('src');
+      if (rec.oldValue && reduced.test(rec.oldValue) && now && now.startsWith('blob:')) {
+        SRC_ORIGINALS.set(now, rec.oldValue);
+      }
+    }
+  });
+  observer.observe(root || document.documentElement, {
+    subtree: true, attributes: true, attributeFilter: ['src'], attributeOldValue: true
+  });
+  return observer;
+}
+
+/**
+ * Is this image the site's own reduced copy, and can the full one be had?
+ * (#420, #425)
+ *
+ * @param {string} src
+ * @returns {{rendition: string, fullSize: string|null}|null} null when the
+ *   image is not a known reduced copy
+ */
+function imageRendition(src) {
+  const r = typeof SELECTORS !== 'undefined' && SELECTORS.imageRenditions;
+  if (!r || !r.reduced || !src) return null;
+  const shownFrom = src.startsWith('blob:') ? (SRC_ORIGINALS.get(src) || src) : src;
+  const reduced = new RegExp(r.reduced);
+  if (!reduced.test(shownFrom)) return null;
+  return {
+    rendition: r.rendition,
+    fullSize: r.fullSize ? shownFrom.replace(reduced, r.fullSize) : null
+  };
+}
+
+/**
+ * The full-size image a reduced copy stands for, or null when it cannot be
+ * had (#425). Failure is expected and silent: the displayed copy is kept, and
+ * marked, by the caller.
+ *
+ * @returns {Promise<Object|null>} ImageData, or null
+ */
+async function fetchFullSize(url, src, turnIndex, imageIndex) {
+  try {
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    if (!blob.size || !/^image\//.test(blob.type)) return null;
+    return {
+      blob,
+      filename: `images/${String(imageIndex).padStart(3, '0')}.${getImageExtension(blob.type, url)}`,
+      originalSrc: src,
+      turnIndex,
+      fullSize: true
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Fetch a single image: the full-size original where the page shows a reduced
+ * copy and the original can be had (#425), otherwise the image as shown,
+ * marked with its rendition when it is a reduced copy (#420).
  * @param {string} src - Image source URL
  * @param {number} turnIndex - Which turn this image belongs to
  * @param {number} imageIndex - Image sequence number
  * @returns {Promise<Object>} - ImageData or error object
  */
 async function fetchImage(src, turnIndex, imageIndex) {
+  const rendition = imageRendition(src);
+  if (rendition && rendition.fullSize) {
+    const full = await fetchFullSize(rendition.fullSize, src, turnIndex, imageIndex);
+    if (full) return full;
+  }
+  const result = await fetchImageAsShown(src, turnIndex, imageIndex);
+  if (rendition && result.blob) result.rendition = rendition.rendition;
+  return result;
+}
+
+/**
+ * Fetch a single image as the page shows it, handling different URL schemes.
+ * @param {string} src - Image source URL
+ * @param {number} turnIndex - Which turn this image belongs to
+ * @param {number} imageIndex - Image sequence number
+ * @returns {Promise<Object>} - ImageData or error object
+ */
+async function fetchImageAsShown(src, turnIndex, imageIndex) {
   const timestamp = new Date().toISOString();
 
   try {
@@ -3182,6 +3283,8 @@ async function extractImages(turns) {
         // Success
         images.push(result);
         item.attachment.filename = result.filename;
+        // The site's reduced copy, not the original (#420, #425).
+        if (result.rendition) item.attachment.rendition = result.rendition;
         imageIndex++;
       } else {
         // Error - Fail Open
@@ -3359,6 +3462,15 @@ async function extractConversation() {
       incompleteReasons.push(
         `${imagesOffered - imagesAccounted} of ${imagesOffered} image(s) on the page were not captured`);
     }
+    // Images captured as the site's reduced copy, where the original could not
+    // be had (#420, #425): each marked on its attachment, and counted here so
+    // a smaller or lossy copy cannot pass for the image.
+    const imagesReduced = turns.reduce((n, t) => n +
+      (t.attachments || []).filter(a => a.type === 'image' && a.rendition).length, 0);
+    if (imagesReduced > 0) {
+      incompleteReasons.push(
+        `${imagesReduced} image(s) are the site's reduced copy, not the original`);
+    }
     const contentComplete = incompleteReasons.length === 0;
 
     // Image fetches are Fail Open by design — the transcript is unaffected when
@@ -3383,6 +3495,9 @@ async function extractConversation() {
         // when equal. Absent, not zero, where the site has no image scope yet:
         // a zero there would claim a measurement nobody made.
         ...(imagesOffered !== null ? { imagesOffered } : {}),
+        // Of the images captured, how many are the site's reduced copy (#420,
+        // #425). Present where the site has a rule for telling.
+        ...(SELECTORS.imageRenditions ? { imagesReduced } : {}),
         fileCount: fileAttachments,
         // What was deliberately not fetched, so the drop is auditable and a
         // regression in the decoration test is visible as a number moving
@@ -3500,6 +3615,13 @@ async function extractConversation() {
   }
 }
 
+// From load, not from the click: a swap made before the extraction starts
+// would otherwise be lost (#425).
+if (typeof SELECTORS !== 'undefined' && SELECTORS.imageRenditions &&
+    SELECTORS.imageRenditions.trackSwaps && typeof document !== 'undefined') {
+  watchImageSrcSwaps();
+}
+
 // ============================================================================
 // Message Handling
 // ============================================================================
@@ -3581,6 +3703,10 @@ if (typeof module !== 'undefined' && module.exports) {
     stashImageBytes,
     readImageBytes,
     fetchImage,
+    fetchImageAsShown,
+    imageRendition,
+    watchImageSrcSwaps,
+    SRC_ORIGINALS,
     isCitationDecoration,
     resetDecorationCount,
     getDecorationCount,

@@ -108,6 +108,18 @@ const SELECTORS = {
   imageScope: '[data-turn-key]',
   turnKeyAttribute: 'data-turn-key',
 
+  // Images the site shows as its own reduced copy (#420). After a page load,
+  // an upload is shown from /api/<org>/files/<id>/preview: measured on a
+  // 512×512 PNG upload, a 6,006-byte lossy WebP of the same size. Claude's own
+  // image viewer shows that copy too, and no endpoint for the original was
+  // found (the file's path, /contents, /content, /download and /original are
+  // 404; /thumbnail is a 400×400 WebP). So such an image is marked, not
+  // replaced.
+  imageRenditions: {
+    reduced: '/api/[^/]+/files/[^/]+/(?:preview|thumbnail)(?:[?#]|$)',
+    rendition: 'preview'
+  },
+
   // Expandable content — thinking toggles in Claude
   expandButton: null, // Claude doesn't use generic expand buttons
   thinkingToggle: '.row-start-1 button[aria-expanded="false"]',

@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.9.7] — 2026-10-18
+
+### Fixed
+- A Gemini generated image is captured at full size where it can be had. Gemini shows it from Google's image service capped at 1024 px (`…/gg/<token>=s1024-rj`: measured 1024×559, 16,227 bytes) where its own "Download full size image" gives 1408×768, 321,273 bytes; the same URL with `=d-I`, as that download asks, is fetched first. The page swaps the image's src for a `blob:` URL once it is on screen, so the content script remembers each swap from the moment it loads (#425)
+
+### Added
+- `attachment.rendition` and `metadata.imagesReduced`: an image captured as the site's own reduced copy, where the original could not be had, is marked (`"preview"`, `"display"`), counted, and named in `incompleteReasons`, so a smaller or lossy copy cannot pass for the image. On Claude, an upload seen after a page load is shown from `/files/<id>/preview` (a 512×512 PNG upload came back as a 6,006-byte lossy WebP), Claude's own viewer shows the same copy, and no endpoint for the original was found, so it is marked (#420). On Gemini, a displayed copy is marked when the full size cannot be fetched (#425)
+- Measured for #425: ChatGPT's generated image, as Clio captures it, is byte-identical to ChatGPT's own download (1254×1254 PNG, 1,186,331 bytes)
+
 ## [1.9.6] — 2026-10-18
 
 Gemini is measured for the first time (#309), and every site's text keeps its paragraphs.

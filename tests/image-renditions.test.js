@@ -17,6 +17,9 @@
 
 const {
   imageRendition,
+  shownAsOf,
+  imageAttachment,
+  findImages,
   fetchImage,
   watchImageSrcSwaps,
   SRC_ORIGINALS,
@@ -180,5 +183,51 @@ describe('the export says so (#420 R3, #425 R3)', () => {
     document.body.innerHTML = '<main><div data-message-author-role="user" data-message-id="u1"><div class="whitespace-pre-wrap">hi</div></div></main>';
     const result = await extractConversation();
     expect(result.data.metadata.imagesReduced).toBeUndefined();
+  });
+
+  // The path 1.9.7 missed, measured live: the page fetches the image itself
+  // and sets a blob: on a fresh <img>, so its URL is never in the page.
+  test('a generated image that is a bare blob: is marked from where it sits', async () => {
+    document.querySelector('generated-image img').setAttribute('src', 'blob:https://gemini.google.com/fresh-element');
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, blob: async () => blobOf('image/jpeg', 16) }));
+    const result = await extractConversation();
+    const m = result.data.metadata;
+    expect(global.fetch).toHaveBeenCalledTimes(1);          // nothing to derive a full size from
+    expect(m.imagesReduced).toBe(1);
+    expect(m.incompleteReasons).toContain("1 image(s) are the site's reduced copy, not the original");
+    expect(m.contentComplete).toBe(false);
+    const att = result.data.messages[3].attachments[0];
+    expect(att.rendition).toBe('display');
+    expect(att).not.toHaveProperty('shownAs');               // the hint stays out of the export
+  });
+});
+
+describe('what an image is shown as, from where it sits (#425)', () => {
+  test('Gemini: inside generated-image, the displayed copy; elsewhere, nothing', () => {
+    global.SELECTORS = GEMINI;
+    document.body.innerHTML = '<generated-image><img id="a" src="blob:x"></generated-image><user-query><img id="b" src="blob:y"></user-query>';
+    const found = findImages(document.body, 0);
+    expect(found.map(imageAttachment)).toEqual([
+      { type: 'image', filename: null, originalSrc: 'blob:x', shownAs: 'display' },
+      { type: 'image', filename: null, originalSrc: 'blob:y' }
+    ]);
+  });
+
+  test('Claude and ChatGPT have no placement rule', () => {
+    document.body.innerHTML = '<generated-image><img id="a" src="blob:x"></generated-image>';
+    for (const s of [CLAUDE, CHATGPT]) {
+      global.SELECTORS = s;
+      expect(shownAsOf(document.getElementById('a'))).toBeNull();
+    }
+  });
+
+  test('a known origin still wins: the full size is tried for a remembered blob:', async () => {
+    global.SELECTORS = GEMINI;
+    SRC_ORIGINALS.set('blob:https://gemini.google.com/known', DISPLAY);
+    global.fetch = jest.fn(async (url) => ({ ok: true, status: 200,
+      blob: async () => (url === FULL ? blobOf('image/jpeg', 321) : blobOf('image/jpeg', 16)) }));
+    const r = await fetchImage('blob:https://gemini.google.com/known', 1, 1, 'display');
+    expect(r.fullSize).toBe(true);
+    expect(r.rendition).toBeUndefined();
   });
 });

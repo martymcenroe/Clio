@@ -32,6 +32,12 @@ const SELECTORS = {
   conversationContainer: '.conversation-container, [data-conversation-id]',
   // VERIFIED: <span class="conversation-title gds-title-m">
   sessionTitle: '.conversation-title, h1[data-conversation-title], h1',
+  // 2026-10 (#423): neither match is the title any more. `.conversation-title`
+  // is the mode picker's label ("Auto", inside bard-mode-switcher) and the one
+  // <h1> is a screen-reader heading, "Conversation with Gemini", the same on
+  // every page; an export was titled "Auto". Matches inside these are skipped,
+  // and the title comes from document.title.
+  titleChrome: 'bard-mode-switcher, .cdk-visually-hidden',
 
   // Scroll container (for lazy-loaded conversations)
   // VERIFIED: <div id="chat-history" class="chat-history-scroll-container">
@@ -59,11 +65,34 @@ const SELECTORS = {
   thinkingContent: 'model-thoughts .thoughts-body, .thinking-content, [data-thinking-content], .thought-process',
 
   // Code blocks
-  codeBlock: 'pre code, .code-block code, code-block',
+  //
+  // 2026-10 (#422): a <code-block> holds a header (div.code-block-decoration:
+  // the language label "Bash", then Download and Copy buttons) and then
+  // pre > code. The bare `code-block` alternative matched the whole element,
+  // header included, and as the first match in document order it was the one
+  // turned into the fence, so the label became the code's first line
+  // ("Bash#!/bin/bash"). The code is read from pre > code, and the
+  // <code-block> is the root replaced by the fence.
+  codeBlock: 'pre code, .code-block code',
+  codeBlockRoot: 'code-block',
   codeLanguage: '[data-language], .code-language, .language-label',
+
+  // Text that is page chrome, inside a message (#421): Angular CDK's
+  // off-screen class. Each prompt carries an <h5> of it ("You said" and a
+  // truncated copy of the prompt), each reply an <h6> ("Gemini said"); both
+  // were read as message text.
+  textChrome: '.cdk-visually-hidden',
+  // The prompt, one element per line (#421). Read line by line and joined
+  // with newlines; each line carries one space of template whitespace at
+  // either end.
+  userLine: 'p.query-text-line',
 
   // Images
   image: 'img',
+  // Where the images-offered count looks (#424): each exchange's container,
+  // which holds the prompt and the reply. The account avatar and the
+  // sidebar's icons are outside every one.
+  imageScope: '.conversation-container',
 
   // Citation decoration (#279). Null because no citation-favicon markup has
   // been verified against this site's DOM, and a guessed selector here would

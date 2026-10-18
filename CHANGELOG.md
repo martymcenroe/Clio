@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.9.6] — 2026-10-18
+
+Gemini is measured for the first time (#309), and every site's text keeps its paragraphs.
+
+### Fixed — every site
+- Paragraphs, list items, headings and table rows no longer run together in exported text. `extractTextContent()` read `textContent`, which puts nothing between two elements, so a boundary survived only where the page left whitespace there. Measured live: ChatGPT left none at 200 of 200 adjacent blocks, Gemini at 3 of 3, Claude at 3 of 50; a 162-message ChatGPT export ran sentences together at 621 places in 62 of 77 replies. Adjacent blocks now get a blank line (paragraphs, headings, lists, quotes, tables) or a newline (list items, rows, `div`s), cells within a row " | ", and a `<br>` a newline, only where the page has no whitespace of its own, so Claude's mostly spaced text is left as it was. On the same ChatGPT conversation, 0 such places remain (#426)
+- A code fence no longer ends in a blank line when the code ends in a newline (#422)
+
+### Fixed — Gemini
+- Messages no longer carry Gemini's screen-reader headings. Each prompt began "You said" followed by a truncated copy of itself and then the prompt, and each reply began "Gemini said". Elements with `cdk-visually-hidden` are left out of the text, and a prompt is read line by line from `p.query-text-line`, so a prompt typed on three lines keeps its three lines (#421)
+- A code block's language label is no longer the first line of its code ("Bash#!/bin/bash"). The `<code-block>` element, header and buttons included, is replaced by the fence, and the code is read from its `pre > code` (#422)
+- An export is titled with the conversation's title, not the mode picker's "Auto". Matches inside the mode picker and screen-reader headings are skipped, and `document.title` loses its current " - Google Gemini" suffix; a page titled only "Gemini" or "Google Gemini" is "Untitled Conversation" (#423)
+
+### Added — Gemini
+- `imagesOffered`, counted per exchange (`.conversation-container`), so an image on the page that the capture neither took nor reported makes a Gemini export incomplete, as on ChatGPT and Claude (#424)
+
 ## [1.9.5] — 2026-10-18
 
 ### Fixed

@@ -107,7 +107,9 @@ describe('extracted turns', () => {
     expect(turns[0].content).toBe('Stop and name the colours in this pattern.');
     expect(turns[0].attachments.map(a => a.originalSrc)).toEqual([UPLOAD]);
 
-    expect(turns[1].content).toBe('Red, green and blue bands.List them by size like this:\n```bash\nls -lS\n```');
+    // Until #426 this read "bands.List them": the two paragraphs ran together,
+    // and the test asserted it.
+    expect(turns[1].content).toBe('Red, green and blue bands.\n\nList them by size like this:\n```bash\nls -lS\n```');
     for (const leak of ['Claude responded', 'Looked at the image', 'just now', 'Copy to clipboard', 'Retry']) {
       expect(turns[1].content).not.toContain(leak);
     }

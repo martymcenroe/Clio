@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!--
+  ChatGPT image markup as served on 2026-10-17 (#410, #411). SYNTHETIC TEXT,
+  REAL STRUCTURE: the ancestor chains are copied from probes of a live test
+  conversation (one uploaded synthetic PNG, one generated image). Ids and blob
+  URLs are placeholders; no conversation content is here. Clio is public.
+
+  What it pins:
+    - exchange 1: a user message with an upload BESIDE its text, in
+      div.flex.flex-wrap > div[role=button] > img, not inside .whitespace-pre-wrap;
+      and a unit reply;
+    - exchange 2: a reply that is ONLY a generated image — a marker block with
+      no unit and no text, the image under div[data-chatgpt-search-message-ids]
+      > [data-testid="generated-image-gallery"] > … button > img.
+  Both images are blob: URLs, as on the live page.
+-->
+<html>
+<head><title>Synthetic image test conversation</title></head>
+<body>
+<main>
+  <div class="relative mx-auto flex min-h-0">
+    <div data-app-action-timeline-scroll role="region" class="thread-scroll-container overflow-x-hidden overflow-y-auto">
+
+      <div data-turn-key="66666666-6666-4666-8666-666666666666">
+        <div data-content-search-turn-key="fallback-turn-0">
+          <div class="flex flex-col gap-1.5">
+            <div data-talvt-turn-state="complete" class="group flex flex-col">
+              <div class="flex flex-col gap-3 browser:gap-1">
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only m-0 select-none print:not-sr-only">You said:</h4>
+                  <div data-chatgpt-search-unit-key="fallback-turn-0:0:user" data-chatgpt-search-message-ids="66666666-6666-4666-8666-666666666666" class="group/user-message flex flex-col items-end">
+                    <div class="flex flex-wrap items-end justify-end">
+                      <div role="button" aria-label="Open image" class="size-20 cursor-interaction rounded-lg border">
+                        <img alt="Uploaded image" data-state="closed" class="h-full w-full rounded-md object-cover" src="blob:https://chatgpt.com/11111111-0000-4000-8000-000000000001">
+                      </div>
+                    </div>
+                    <div data-content-search-unit-key="fallback-turn-0:0:user" class="w-full">
+                      <div class="group/user-message flex w-full flex-col">
+                        <div data-user-message-bubble="true" class="bg-user-message">
+                          <div data-search-result-target><div><div class="text-size-chat whitespace-pre-wrap">Name the colours in this test pattern.</div></div></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="block-BQZwFn">
+                  <span data-chatgpt-agent-turn-start></span>
+                  <div data-content-search-unit-key="fallback-turn-0:2:assistant" data-chatgpt-search-unit-key="fallback-turn-0:2:assistant" data-chatgpt-search-message-ids="77777777-7777-4777-8777-777777777777 77777777-7777-4777-8777-777777777777">
+                    <h4 data-conversation-role="assistant" class="sr-only">ChatGPT said:</h4>
+                    <div data-chatgpt-selection-message-id="77777777-7777-4777-8777-777777777777" class="group flex min-w-0 flex-col">
+                      <div data-markdown-text-style="assistant-message" class="MarkdownRoot-rZKhxa"><p class="Paragraph-kKnbIo">Red, green and blue bands.</p></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div data-turn-key="88888888-8888-4888-8888-888888888888">
+        <div data-content-search-turn-key="fallback-turn-1">
+          <div class="flex flex-col gap-1.5">
+            <div data-talvt-turn-state="complete" class="group flex flex-col">
+              <div class="flex flex-col gap-3 browser:gap-1">
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only m-0 select-none print:not-sr-only">You said:</h4>
+                  <div data-chatgpt-search-unit-key="fallback-turn-1:0:user" data-chatgpt-search-message-ids="88888888-8888-4888-8888-888888888888" class="group/user-message flex flex-col items-end">
+                    <div data-content-search-unit-key="fallback-turn-1:0:user" class="w-full">
+                      <div class="group/user-message flex w-full flex-col">
+                        <div data-user-message-bubble="true" class="bg-user-message">
+                          <div data-search-result-target><div><div class="text-size-chat whitespace-pre-wrap">Generate an image of a blue circle.</div></div></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="block-BQZwFn">
+                  <span data-chatgpt-agent-turn-start></span>
+                  <h4 data-conversation-role="assistant" class="sr-only m-0 select-none print:not-sr-only">ChatGPT said:</h4>
+                  <div data-chatgpt-search-message-ids="99999999-9999-4999-8999-999999999999">
+                    <div>
+                      <div data-testid="generated-image-gallery" class="group/generated-image-gallery-controls relative overflow-hidden">
+                        <div><div><div><div><button class="no-drag cursor-interaction">Edit</button></div></div></div></div>
+                        <div class="flex gap-2 transition-transform">
+                          <div data-image-transparency-backdrop-scope class="group/generated-image-preview relative shrink-0">
+                            <button data-testid="generated-image-preview" aria-label="Generated image" class="shrink-0 cursor-interaction overflow-hidden">
+                              <img alt="Generated image" class="ImageTransparencyBackdrop-zlBprd block h-full image-transparency-backdrop w-auto object-contain" src="blob:https://chatgpt.com/22222222-0000-4000-8000-000000000002">
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+</body>
+</html>

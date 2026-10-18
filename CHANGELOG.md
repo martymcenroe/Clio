@@ -6,9 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
-## [Unreleased]
+## [1.9.4] — 2026-10-17
+
+Claude extraction works again, and ChatGPT images are captured. Measured through the real extension, 1.9.3 exported **none of Claude's replies** from a Claude conversation, and **0 of 2** images from a ChatGPT one, reporting both complete (#409, #331).
+
+### Fixed — Claude
+- Claude replies are extracted. Claude's markup changed and nothing carries `.font-claude-response` any more; the reply is `[data-testid="assistant-message"]`, its text read from `[data-transcript-engine-root]` without the screen-reader heading, the status row, the code label or the toolbar (#409)
+- Long Claude conversations are captured whole. The transcript now virtualizes (3 to 11 of 18 rows in the page at once, measured live), so Claude moves onto the capture cache, keyed by each message's `data-turn-key`, with the user's whole row as the message so an upload beside the text survives. Measured live: 18 of 18 messages, in order, where the live-DOM read got one window (#409)
+- The scroll finds the transcript, not the conversation-list sidebar. `findScrollContainer()` tried its selector list in document order, not in the order written, and the sidebar comes first in the document; the transcript's own `[data-autoscroll-container]` is now tried first, and the list is honoured in order (#409)
+- An extraction started away from the bottom of a virtualized conversation no longer loses everything below the starting point: the walk goes down to the newest message first, and `scrollInfo.reachedBottom` says whether it got there. Started from the top, a long Claude conversation had exported 7 of 18 (#413)
+- A message whose text contains "Stop" no longer blocks extraction with "Claude is currently generating": Claude puts message text into button labels, and the stop-button test matched any label containing the word (#409)
+- Uploaded images on Claude user messages are attached and counted in `imagesOffered` (#409, #410)
+- The collapsed status row is no longer exported as the reply's reasoning; capturing the reasoning itself is #316 (#409)
+
+### Fixed — ChatGPT
+- A generated-image reply is a message again. It has no text, and 1.9.3 took a reply block for a message only if it held text — a regression #400 introduced. It now also counts a block holding a conversation image, and uses the reply's real message id where the page provides one (#411)
+- An uploaded image beside a user message's text is attached to that message; only the text element was searched before (#411)
+- `blob:` images are read while they are on screen. Images were fetched after the scroll, from cached copies, by which time the page could have released the URL; a failure that happens anyway now says so instead of "Failed to fetch" (#411)
+- A reply with no text block exports empty text, not its screen-reader heading and button captions (#411)
 
 ### Added
+- `imagesOffered`: the conversation images the page rendered, counted from each exchange rather than through the message selectors. An image neither in the ZIP nor in `mediaErrors` is named in `incompleteReasons` and makes the capture incomplete — an export with images missing can no longer report clean (#410). ChatGPT and Claude; Gemini gets its own with its fix
 - `tools/extension/` — capture through the real, loaded extension (popup click to ZIP), inspect what a ZIP actually holds, compare a real capture with an injected one by message id, and generate synthetic test images. The first live coverage of the extension itself since Chrome stopped honouring `--load-extension` (#406, toward #308)
 
 ## [1.9.3] — 2026-10-17

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!--
+  Claude thread markup as served on 2026-10-17 (#409, #413). SYNTHETIC TEXT,
+  REAL STRUCTURE: ancestor chains copied from probes of a live test
+  conversation and a live 18-message conversation. Ids are placeholders, the
+  upload is a placeholder blob: URL; no conversation content is here.
+
+  What it pins:
+    - the conversation-list SIDEBAR scroller comes before the transcript in the
+      document, and both really scroll (sizes are set by the tests);
+    - the transcript scroller is div[data-autoscroll-container];
+    - the user's ROW, [data-user-scope] > [data-turn-key], holds the upload's
+      thumbnail BESIDE the text bubble [data-testid="user-message"];
+    - a reply is div[data-testid="assistant-message"][data-turn-key], holding a
+      screen-reader heading, a collapsed status row (data-find-omitted), the text
+      under [data-transcript-engine-root] with a code block whose language label
+      is data-find-omitted, and a toolbar with a timestamp;
+    - a "Show message actions" button whose label carries the message's own
+      text, here containing "Stop".
+  No element carries .font-claude-response, which is the whole defect.
+-->
+<html>
+<head><title>Synthetic Claude test conversation</title></head>
+<body>
+<nav>
+  <div class="dframe-nav-scroll relative flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
+    <a href="/chat/00000000-0000-4000-8000-000000000000">A past conversation</a>
+  </div>
+</nav>
+<main>
+  <div class="dframe-pane-scroller flex-1 min-h-0 flex flex-col overflow-x-clip overflow-y-auto">
+    <div data-autoscroll-container="true" class="overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable] scroll-pt-frame-row flex-1">
+      <div data-sizer-excess data-rocksteady-sizer data-testid="transcript-sizer">
+
+        <div data-rs-index="0" data-index="0" data-testid="transcript-row">
+          <div role="article" class="rounded-lg">
+            <div data-mini-claude-message class="contents">
+              <div data-transcript-row class="mt-6">
+                <h2 data-find-omitted class="sr-only select-none">You said: Stop and name the colours in this pattern.</h2>
+                <div data-user-scope class="group group/message-row min-w-0">
+                  <div data-cds data-turn-key="aaaaaaaa-0000-4000-8000-00000000000a" class="group/message-row flex w-full min-w-0">
+                    <div data-cds data-fit data-find-omitted data-natural-tiles class="flex w-full flex-wrap gap-xs">
+                      <div data-cds data-fit data-item-key data-testid="file-thumbnail" class="group/tile relative isolate flex">
+                        <div data-cds data-size class="group/card relative isolate flex">
+                          <div data-cds-card-body class="cds-card-body flex min-h-0 flex-1">
+                            <div data-cds data-cds-tile-media class="self-stretch overflow-hidden">
+                              <span data-cds role="button" class="cds-reset outline-none"><img alt="clio-test-pattern-a.png" data-cds-tile-picture data-loaded class="block transition-opacity" src="blob:https://claude.ai/aaaaaaaa-0000-4000-8000-0000000000a1"></span>
+                            </div>
+                            <span>clio-test-pattern-a.png</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="relative flex min-w-0 flex-col"><div><div class="cds-user-message-body"><div data-testid="user-message" class="relative grid min-w-0 grid-cols-1"><p>Stop and name the colours in this pattern.</p></div></div></div></div>
+                    <div data-cds data-reveal role="toolbar" data-size class="flex items-center select-none">
+                      <time data-cds>just now</time>
+                      <button data-cds data-testid="user-message-retry" aria-label="Retry"><span>↻</span></button>
+                      <button data-cds aria-label="Show message actions for You said: Stop and name the colours in this pattern."><span>…</span></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div data-rs-index="1" data-index="1" data-testid="transcript-row">
+          <div role="article" class="rounded-lg">
+            <div data-mini-claude-message class="contents">
+              <div data-transcript-row class="mt-xs">
+                <div data-reply-scope class="group group/message-row min-w-0">
+                  <div data-cds data-testid="assistant-message" data-turn-key="bbbbbbbb-0000-4000-8000-00000000000b" data-is-streaming="false" class="group/message-row relative flex w-full">
+                    <h2 data-find-omitted class="sr-only select-none">Claude responded: Red, green and blue bands.</h2>
+                    <div class="flex min-w-0 flex-col gap-5">
+                      <div data-closed data-cds data-item-key data-find-omitted data-state="done" class="group/status flex w-full min-w-0">
+                        <div data-cds-row class="flex min-w-0 gap-xs text-start"><span class="flex min-w-0 gap-xs items-center"><span class="group/morph inline-grid items-center"><span data-morph-key class="col-start-1 row-start-1 flex"><span class="min-w-0 overflow-x-clip text-ellipsis">Looked at the image</span></span></span></span><button data-cds-row-toggle class="cds-reset inline-flex"><span>›</span></button></div>
+                        <span role="status" class="sr-only">Looked at the image</span>
+                      </div>
+                      <div class="min-w-0"><div class="grid grid-cols-1 content-start gap-5"><div data-transcript-engine-root class="contents"><div data-cds data-size class="prose"><div data-perf-reply-text class="standard-markdown grid-cols-1"><p>Red, green and blue bands.</p><p>List them by size like this:</p><div data-not-prose><div role="group" aria-label="bash code" class="relative group/copy"><div class="sticky opacity-0"><div class="absolute right-0 h-8"><button data-cds data-testid="code-block-copy" aria-label="Copy to clipboard"><span>⧉</span></button><span role="status" class="sr-only"></span></div></div><div data-find-omitted class="text-secondary font-small p-3.5">bash</div><div class="overflow-x-auto"><pre class="code-block__code"><code data-highlight class="language-bash"><span data-code-line-group class="block"><span>ls -lS</span></span></code></pre></div></div></div></div></div></div></div></div>
+                    </div>
+                    <div class="print:mt-xs"><div data-cds data-reveal data-always-visible role="toolbar" aria-label="Message actions" data-size data-testid="message-actions" class="flex items-center select-none"><button data-cds data-testid="action-bar-retry" aria-label="Retry"><span>↻</span></button><time data-cds>just now</time></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

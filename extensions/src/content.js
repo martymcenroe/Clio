@@ -291,12 +291,11 @@ function resetScrollConfig() {
 function countMessages() {
   const site = getSite();
   if (site === 'claude') {
-    // Assistant turns: one .font-claude-response per turn. Do not use
-    // action-bar-copy (appears on user messages too, inflated the count —
-    // issue #32). Do not use .row-start-2 (broken on pre-redesign Claude — #114).
-    const userMsgs = document.querySelectorAll('[data-testid="user-message"]');
-    const assistantMsgs = document.querySelectorAll('.font-claude-response:not(.font-claude-response-body)');
-    return userMsgs.length + assistantMsgs.length;
+    // queryMessages(), not a copy of the selectors: the copy that lived here
+    // counted only the 2026-05 markup, and so counted none of the 2026-10
+    // replies (#409). Do not use action-bar-copy (appears on user messages
+    // too, inflated the count — issue #32).
+    return queryMessages(document).length;
   }
   if (site === 'chatgpt') {
     // queryMessages() rather than a copy of the selectors: a hardcoded copy
@@ -338,6 +337,37 @@ function isRealScroller(el) {
 }
 
 /**
+ * Split a CSS selector list at its top-level commas: not those inside
+ * brackets, parentheses or quotes, so `[aria-label="a, b"]` and `:is(a, b)`
+ * stay whole.
+ * @param {string} list
+ * @returns {string[]}
+ */
+function splitSelectorList(list) {
+  const parts = [];
+  let depth = 0;
+  let quote = null;
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === '(' || c === '[') depth++;
+    else if (c === ')' || c === ']') depth--;
+    else if (c === ',' && depth === 0) {
+      parts.push(list.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(list.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+/**
  * Find the scrollable container for the conversation.
  * @returns {Element|null} - The scroll container element
  */
@@ -345,10 +375,21 @@ function findScrollContainer() {
   // Selector matches, in SELECTOR order. querySelector() with a selector list
   // returns the first match in DOCUMENT order, so for a list like
   // 'main [class*="overflow-y-auto"], main' the ancestor <main> always won and
-  // the intended first choice was dead code (#255). Iterate instead.
-  const matches = SELECTORS.scrollContainer
-    ? Array.from(document.querySelectorAll(SELECTORS.scrollContainer))
-    : [];
+  // the intended first choice was dead code (#255).
+  //
+  // querySelectorAll() over the whole list has the same flaw, which is what
+  // this code did until #409: the isRealScroller() test below rejected #255's
+  // <main>, but among real scrollers the first in the document still won. On
+  // Claude's 2026-10 page that was the conversation-list sidebar, ahead of the
+  // transcript in the document, so the sidebar was scrolled and only the
+  // messages already rendered were exported. Each selector is now tried in
+  // turn.
+  const matches = [];
+  for (const part of splitSelectorList(SELECTORS.scrollContainer || '')) {
+    for (const el of document.querySelectorAll(part)) {
+      if (!matches.includes(el)) matches.push(el);
+    }
+  }
   for (const el of matches) {
     if (isRealScroller(el)) return el;
   }
@@ -438,6 +479,25 @@ let MESSAGE_REFRESHED = 0;
  * @type {Set<string|Element>}
  */
 let REASONING_OFFERED = new Set();
+
+/**
+ * Conversation images the page rendered, per exchange (#410): the most seen at
+ * once in each. Counted independently of the message selectors, so an image
+ * those selectors cannot reach is still counted — the failure #331 was. See
+ * sweepImagesOffered().
+ * @type {Map<string|Element, number>}
+ */
+let IMAGES_OFFERED = new Map();
+
+/**
+ * The bytes of `blob:` images, read while they were on screen (#411). A blob
+ * URL lives only as long as the page keeps it, and images are fetched after
+ * the scroll from cached clones, by which time a virtualized list has
+ * unmounted most of them. Keyed by URL; each value a Promise of a Blob or
+ * null.
+ * @type {Map<string, Promise<Blob|null>>}
+ */
+let IMAGE_BYTES = new Map();
 
 /**
  * The scroller the ordering key is measured against, fixed for one scroll pass.
@@ -569,7 +629,20 @@ function messageIdOf(el) {
     const first = list.trim().split(/\s+/)[0];
     if (first) return first;
   }
+  // A site that names its own id attribute (Claude 2026-10: data-turn-key,
+  // one per message, #409).
+  const idAttr = typeof SELECTORS !== 'undefined' && SELECTORS.messageIdAttribute;
+  if (idAttr) {
+    const own = el.getAttribute(idAttr);
+    if (own) return own;
+  }
   if (isAgentReply(el)) {
+    // A reply with no unit can still carry its message's id deeper in: an
+    // image reply wraps its gallery in div[data-chatgpt-search-message-ids]
+    // (#411). The real id is worth more than a made-up one (#294).
+    const inner = el.querySelector('[data-chatgpt-search-message-ids]');
+    const innerId = inner && inner.getAttribute('data-chatgpt-search-message-ids').trim().split(/\s+/)[0];
+    if (innerId) return innerId;
     const turnKey = turnKeyOf(el);
     if (turnKey) return `${turnKey}:reply`;
   }
@@ -580,10 +653,13 @@ function messageIdOf(el) {
  * Is this element a reply rendered with no search unit (#399)?
  *
  * The block that directly holds SELECTORS.replyMarker, holds no assistant
- * message element, and holds reply text. Without the text test, a block that
- * carries only a reasoning line — whose unit is in the next block (#400) — is
- * taken for a reply. See replyMarker in selectors-chatgpt.js for the shapes and
- * for why this is code rather than a :has() selector.
+ * message element, and holds reply content: text, or a conversation image.
+ * Without the content test, a block that carries only a reasoning line — whose
+ * unit is in the next block (#400) — is taken for a reply. Without the image
+ * half, a generated-image reply, which has no text at all, is not a message
+ * (#411; the regression #400's text-only test introduced). See replyMarker in
+ * selectors-chatgpt.js for the shapes and for why this is code rather than a
+ * :has() selector.
  *
  * @param {Element} el
  * @returns {boolean}
@@ -592,7 +668,24 @@ function isAgentReply(el) {
   const marker = typeof SELECTORS !== 'undefined' && SELECTORS.replyMarker;
   if (!marker || !el || !el.children || typeof el.querySelector !== 'function') return false;
   const holdsMarker = Array.from(el.children).some(c => c.matches(marker));
-  return holdsMarker && !el.querySelector(SELECTORS.assistantMessage) && holdsReplyText(el);
+  return holdsMarker && !el.querySelector(SELECTORS.assistantMessage) &&
+    (holdsReplyText(el) || conversationImagesIn(el).length > 0);
+}
+
+/**
+ * The conversation images inside `root`: what SELECTORS.image matches, less
+ * citation favicons (isCitationDecoration) and anything inside a tool-activity
+ * line. The one definition of "a conversation image", shared by the message
+ * test above, the offered count (#410) and nothing else that could drift.
+ *
+ * @param {Element|Document} root
+ * @returns {HTMLImageElement[]}
+ */
+function conversationImagesIn(root) {
+  if (!root || typeof root.querySelectorAll !== 'function' || !SELECTORS.image) return [];
+  const activity = SELECTORS.activityHeader;
+  return Array.from(root.querySelectorAll(SELECTORS.image)).filter(img =>
+    !isCitationDecoration(img) && !(activity && img.closest(activity)));
 }
 
 /**
@@ -629,8 +722,13 @@ function isMessageElement(node) {
  * Every message element under `scope`, in document order: what
  * SELECTORS.allMessages matches, plus each unit-less reply (#399). Every place
  * that enumerates messages goes through here, so the two can never disagree
- * about what a message is. On a site with no replyMarker this is exactly
- * querySelectorAll(allMessages).
+ * about what a message is.
+ *
+ * One message, one element: a match nested inside another match is dropped.
+ * On Claude's 2026-10 markup both the user's row and the text bubble inside it
+ * match (the bubble selector is kept for the 2026-05 markup), and the row is
+ * the message (#409). Where no matches nest — ChatGPT, tested — nothing is
+ * dropped.
  *
  * As with querySelectorAll, `scope` itself is not included.
  *
@@ -639,7 +737,16 @@ function isMessageElement(node) {
  */
 function queryMessages(scope) {
   const root = scope || document;
-  const found = Array.from(root.querySelectorAll(SELECTORS.allMessages));
+  const matched = Array.from(root.querySelectorAll(SELECTORS.allMessages));
+  // Ancestor walk against a set, not a pairwise test: a site that keeps every
+  // message in the DOM can hold hundreds, and this runs on every mutation.
+  const matchedSet = new Set(matched);
+  const found = matched.filter(el => {
+    for (let p = el.parentElement; p && p !== root; p = p.parentElement) {
+      if (matchedSet.has(p)) return false;
+    }
+    return true;
+  });
   const marker = SELECTORS.replyMarker;
   if (!marker) return found;
 
@@ -759,8 +866,9 @@ function refreshIfFuller(entry, el, id) {
 /**
  * Snapshot every message currently rendered that we have not already kept, and
  * measure where it sits. A message already kept is re-cloned if its content has
- * grown since (refreshIfFuller). Reasoning the rendered replies offer is noted
- * on the same pass (#400), while it is on screen.
+ * grown since (refreshIfFuller). On the same pass, while it is on screen:
+ * the reasoning the replies offer (#400), the images the exchanges hold
+ * (#410), and the bytes of every `blob:` image (#411).
  * Cheap and idempotent — safe to call on every scroll tick and every mutation.
  * @returns {number} how many new messages were captured
  */
@@ -769,10 +877,14 @@ function captureRenderedMessages() {
   // Only where the export is built from this cache. The other sites keep
   // every message in the DOM, so the end-of-run sweep already sees them all,
   // and doing this on every mutation there would be cost with no gain.
-  if (SELECTORS.ordersFromCapture) sweepReasoningOffered(REASONING_OFFERED);
+  if (SELECTORS.ordersFromCapture) {
+    sweepReasoningOffered(REASONING_OFFERED);
+    sweepImagesOffered(IMAGES_OFFERED);
+  }
   for (const el of queryMessages(document)) {
     const id = messageIdOf(el);
     if (!id) continue;
+    stashImageBytes(el);
     captureMessageArtifacts(el, id);
     const kept = MESSAGE_CACHE.get(id);
     if (kept) {
@@ -839,6 +951,8 @@ function captureDetachedMessages(nodes, record) {
     for (const el of candidates) {
       const id = messageIdOf(el);
       if (!id) continue;
+      // An image leaving the DOM may be the last chance to read its bytes.
+      stashImageBytes(el);
       // Kept already, perhaps as a shell taken before its text rendered: the
       // node leaving the DOM may be the fullest copy there will ever be.
       const kept = MESSAGE_CACHE.get(id);
@@ -1021,6 +1135,8 @@ function resetMessageCache() {
   MESSAGE_RESCUED = 0;
   MESSAGE_REFRESHED = 0;
   REASONING_OFFERED = new Set();
+  IMAGES_OFFERED = new Map();
+  IMAGE_BYTES = new Map();
   MESSAGE_ARTIFACTS = new Map();
   MESSAGE_SCROLLER = null;
 }
@@ -1298,6 +1414,38 @@ async function waitForLoadingComplete() {
  *                    terminationReason: string, finalScrollTop: number,
  *                    warning?: string}>}
  */
+/**
+ * Walk a scroller DOWN from wherever it stands to its bottom, capturing every
+ * message that renders on the way (#413).
+ *
+ * The bottom is the scroller's own geometry, not a step count. A scroller that
+ * will not move three times running counts as at the bottom: nothing more can
+ * be rendered by scrolling it. Bounded by maxScrollAttempts like the walk up.
+ *
+ * @param {Element} sc
+ * @returns {Promise<boolean>} whether the bottom was reached
+ */
+async function walkToBottom(sc) {
+  let still = 0;
+  for (let i = 0; i < SCROLL_CONFIG.maxScrollAttempts; i++) {
+    captureRenderedMessages();
+    if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2) return true;
+    const before = sc.scrollTop;
+    sc.scrollTop = before + Math.max(1, Math.floor(sc.clientHeight * 0.8));
+    sc.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await sleep(SCROLL_CONFIG.scrollDelay);
+    if (sc.scrollTop <= before) {
+      if (++still >= 3) {
+        captureRenderedMessages();
+        return true;
+      }
+    } else {
+      still = 0;
+    }
+  }
+  return false;
+}
+
 async function scrollToLoadAllMessages(onProgress) {
   const scrollContainer = findScrollContainer();
   if (!scrollContainer) {
@@ -1388,7 +1536,23 @@ async function scrollToLoadAllMessages(onProgress) {
     // console.log(`[Clio Scroll #${scrollAttempts}]`, msg, data);
   };
 
+  // Whether the walk down to the newest message got there (#413). True
+  // where no downward walk is needed: a site whose DOM keeps every message.
+  let reachedBottom = true;
+
   try {
+    // Walk DOWN to the bottom first, capturing as it goes (#413). The walk
+    // below only ever scrolls up from where it starts, and on a virtualized
+    // list nothing below the starting point is rendered, so an extraction
+    // begun from the top of a long Claude conversation exported 7 of 18
+    // messages and reported reachedTop: true. Started from the bottom, as a
+    // person usually is, this ends at once.
+    if (SELECTORS.ordersFromCapture) {
+      reachedBottom = await walkToBottom(scrollContainer);
+      lastScrollTop = scrollContainer.scrollTop;
+      lastHeight = scrollContainer.scrollHeight || 0;
+    }
+
     while (scrollAttempts < SCROLL_CONFIG.maxScrollAttempts) {
       scrollAttempts++;
       mutationDetected = false;
@@ -1550,6 +1714,7 @@ async function scrollToLoadAllMessages(onProgress) {
             messagesLoaded: finalCount,
             scrollAttempts,
             reachedTop: true,
+            reachedBottom,
             terminationReason: 'reached-top',
             finalScrollTop: currentScrollTop,
             finalScrollHeight: currentHeight,
@@ -1576,6 +1741,7 @@ async function scrollToLoadAllMessages(onProgress) {
             messagesLoaded: finalCount,
             scrollAttempts,
             reachedTop: false,
+            reachedBottom,
             terminationReason: 'stuck',
             longestArrivalGapMs: longestGapMs,
             finalScrollTop: currentScrollTop,
@@ -1612,6 +1778,7 @@ async function scrollToLoadAllMessages(onProgress) {
     messagesLoaded: finalCount,
     scrollAttempts,
     reachedTop: false,
+    reachedBottom,
     terminationReason: 'max-attempts',
     longestArrivalGapMs: longestGapMs,
     finalScrollTop: scrollContainer.scrollTop,
@@ -2052,13 +2219,109 @@ function findImages(element, turnIndex) {
 }
 
 /**
+ * Read an image's bytes while it is rendered (#411).
+ *
+ * fetch() first: from the content script's isolated world it returns the
+ * original file — measured live, the 3,843-byte test PNG came back as exactly
+ * 3,843 bytes. A canvas copy is the fallback, decoded and re-encoded as PNG
+ * (8,136 bytes for the same image), for a `blob:` URL that will not fetch.
+ *
+ * @param {HTMLImageElement} img
+ * @returns {Promise<Blob|null>}
+ */
+async function readImageBytes(img) {
+  const src = img.src;
+  try {
+    if (typeof fetch === 'function') {
+      const response = await fetch(src);
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob && blob.size > 0) return blob;
+      }
+    }
+  } catch (e) { /* fall through to the canvas copy */ }
+  try {
+    if (!img.complete || !img.naturalWidth || typeof document.createElement !== 'function') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext && canvas.getContext('2d');
+    if (!ctx || typeof canvas.toBlob !== 'function') return null;
+    ctx.drawImage(img, 0, 0);
+    return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Start reading the bytes of every `blob:` conversation image under `root`,
+ * once per URL (#411). A `blob:` URL is valid only while the page keeps it, and
+ * fetchImage() runs after the scroll, against cached clones whose images a
+ * virtualized list has long since unmounted. Other schemes are left to
+ * fetchImage(): an https URL is still there afterwards.
+ *
+ * @param {Element} root
+ */
+function stashImageBytes(root) {
+  for (const img of conversationImagesIn(root)) {
+    const src = img.src || '';
+    if (!src.startsWith('blob:') || IMAGE_BYTES.has(src)) continue;
+    IMAGE_BYTES.set(src, readImageBytes(img));
+  }
+}
+
+/**
+ * Note the conversation images each rendered exchange holds, into `into`
+ * (#410): per exchange, the most seen at once.
+ *
+ * Counted by scanning SELECTORS.imageScope — the region of the thread one
+ * exchange occupies — and NOT through the message selectors, because an image
+ * those selectors cannot reach is exactly the failure #331 was: an export that
+ * found nothing reported nothing missing. The most-at-once per exchange, rather
+ * than a tally of image elements, so a re-render with a fresh `blob:` URL is
+ * still one image.
+ *
+ * @param {Map<string|Element, number>} into
+ */
+function sweepImagesOffered(into) {
+  const scopeSel = typeof SELECTORS !== 'undefined' && SELECTORS.imageScope;
+  if (!scopeSel) return;
+  const attr = SELECTORS.turnKeyAttribute;
+  for (const scope of document.querySelectorAll(scopeSel)) {
+    const key = (attr && scope.getAttribute(attr)) || scope;
+    const n = conversationImagesIn(scope).length;
+    if (n > (into.get(key) || 0)) into.set(key, n);
+  }
+}
+
+/**
+ * How many conversation images the page offered, across the conversation:
+ * those noted during the scroll plus those on screen now. null on a site with
+ * no image scope defined, so no number is invented where nothing was measured.
+ *
+ * @returns {number|null}
+ */
+function countImagesOffered() {
+  if (typeof SELECTORS === 'undefined' || !SELECTORS.imageScope) return null;
+  const offered = new Map(IMAGES_OFFERED);
+  sweepImagesOffered(offered);
+  let n = 0;
+  for (const v of offered.values()) n += v;
+  return n;
+}
+
+/**
  * Extract a single user message.
  * @param {Element} element - DOM element containing user message
  * @param {number} index - Turn index
+ * @param {Element} [imageScope=element] - where to look for its images, when
+ *   they sit outside the element its text is read from (#411: ChatGPT puts an
+ *   upload beside the text, not in it)
  * @returns {Object} - Turn object
  */
-function extractUserTurn(element, index) {
-  const images = findImages(element, index);
+function extractUserTurn(element, index, imageScope) {
+  const images = findImages(imageScope || element, index);
 
   return {
     index,
@@ -2156,9 +2419,14 @@ function stripArtifactWidgetChrome(rootEl) {
 function extractAssistantTurnClaude(element, index) {
   const images = findImages(element, index);
 
-  // Extract thinking from .row-start-1
+  // Extract thinking from .row-start-1 — on the 2026-05 markup only. On the
+  // 2026-10 markup (a reply with SELECTORS.replyTextRoot) that class lands on
+  // a span inside the collapsed status row, so it would export the row's
+  // one-line summary as if it were the reasoning, and count it as captured
+  // when the reasoning itself was not (#409; capturing the real thing is #316).
   let thinking = null;
-  const thinkingEl = element.querySelector(SELECTORS.thinkingContent);
+  const newMarkup = !!(SELECTORS.replyTextRoot && element.querySelector(SELECTORS.replyTextRoot));
+  const thinkingEl = newMarkup ? null : element.querySelector(SELECTORS.thinkingContent);
   if (thinkingEl) {
     thinking = extractTextContent(thinkingEl);
   }
@@ -2187,14 +2455,35 @@ function extractAssistantTurnClaude(element, index) {
   //       div.row-start-1.col-start-1...    <- INNER response body (keep)
   //     [div > div.standard-markdown > p]   <- sibling commentary on
   //                                            artifact turns (keep)
-  const contentClone = element.cloneNode(true);
-  contentClone.querySelectorAll(SELECTORS.thinkingContent).forEach(el => {
-    if (!el.closest(SELECTORS.responseContent)) {
-      el.remove();
-    }
-  });
-  stripArtifactWidgetChrome(contentClone);
-  const content = extractTextContent(contentClone);
+  //
+  // 2026-10 markup (#409): the message element also holds a screen-reader
+  // heading ("Claude responded: …"), a status row and a toolbar with a
+  // timestamp, and none of those is the reply. The text has its own root,
+  // SELECTORS.replyTextRoot; where it exists it IS the content, with the page
+  // chrome inside it (the code label, copy buttons) left out.
+  let content;
+  const textRoots = SELECTORS.replyTextRoot
+    ? Array.from(element.querySelectorAll(SELECTORS.replyTextRoot))
+    : [];
+  if (textRoots.length) {
+    content = textRoots.map(root => {
+      const clone = root.cloneNode(true);
+      if (SELECTORS.replyTextChrome) {
+        clone.querySelectorAll(SELECTORS.replyTextChrome).forEach(el => el.remove());
+      }
+      stripArtifactWidgetChrome(clone);
+      return extractTextContent(clone);
+    }).filter(Boolean).join('\n\n');
+  } else {
+    const contentClone = element.cloneNode(true);
+    contentClone.querySelectorAll(SELECTORS.thinkingContent).forEach(el => {
+      if (!el.closest(SELECTORS.responseContent)) {
+        el.remove();
+      }
+    });
+    stripArtifactWidgetChrome(contentClone);
+    content = extractTextContent(contentClone);
+  }
 
   const turn = {
     index,
@@ -2254,29 +2543,50 @@ function findClaudeAssistantContainer(responseEl) {
 }
 
 /**
+ * 'user', 'assistant', or null, for a Claude message element — live or a
+ * detached cached clone (#409). A clone of the 2026-10 user row no longer sits
+ * under [data-user-scope], so the row selector cannot match it; it is
+ * recognised by the text bubble it holds instead.
+ *
+ * @param {Element} el
+ * @returns {string|null}
+ */
+function claudeRoleOf(el) {
+  if (!el || typeof el.matches !== 'function') return null;
+  if (el.matches(SELECTORS.assistantMessage)) return 'assistant';
+  if (el.matches(SELECTORS.userMessage)) return 'user';
+  if (SELECTORS.userContent && (el.matches(SELECTORS.userContent) || el.querySelector(SELECTORS.userContent))) return 'user';
+  return null;
+}
+
+/**
  * Extract turns from a Claude conversation.
- * User turns are identified by [data-testid="user-message"].
- * Assistant turns are identified by .row-start-2 (response-content row).
+ *
+ * Messages come from the capture cache where the site orders from it: the
+ * 2026-10 transcript virtualizes, and the live DOM after the scroll holds one
+ * window of it (#409). On the 2026-05 markup nothing carries an id, nothing is
+ * cached, and getCapturedMessageEls() hands back the live DOM in document
+ * order, as before.
+ *
  * @returns {Promise<Array>} - Array of turn objects
  */
 async function extractTurnsClaude() {
   const turns = [];
   let turnIndex = 0;
 
-  const userMsgs = Array.from(document.querySelectorAll(SELECTORS.userMessage));
-  const responseEls = Array.from(document.querySelectorAll(SELECTORS.assistantMessage));
-
-  const allMsgs = [...userMsgs, ...responseEls].sort((a, b) => {
-    const position = a.compareDocumentPosition(b);
-    return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-  });
+  const allMsgs = SELECTORS.ordersFromCapture ? getCapturedMessageEls() : queryMessages(document);
 
   for (let i = 0; i < allMsgs.length; i++) {
     const element = allMsgs[i];
-    const isUser = element.matches(SELECTORS.userMessage);
+    const role = claudeRoleOf(element);
+    if (!role) continue;
 
-    if (isUser) {
-      turns.push(extractUserTurn(element, turnIndex++));
+    if (role === 'user') {
+      // Text from the bubble; images from the whole row, because an upload
+      // sits beside the bubble, not inside it (#409).
+      const textEl = (SELECTORS.userContent && !element.matches(SELECTORS.userContent) &&
+        element.querySelector(SELECTORS.userContent)) || element;
+      turns.push(extractUserTurn(textEl, turnIndex++, element));
     } else {
       // element IS the per-turn container (.font-claude-response) — no
       // walking-up needed. Pre-2026-05 code used .row-start-2 as the
@@ -2284,6 +2594,14 @@ async function extractTurnsClaude() {
       // findClaudeAssistantContainer to find the bounding turn. With the
       // new selector that step is unnecessary (#114).
       turns.push(extractAssistantTurnClaude(element, turnIndex++));
+    }
+
+    // The message's own identity (#294), now that the site has one (#409);
+    // null, present and explicit, on markup that does not.
+    const messageId = messageIdOf(element);
+    turns[turns.length - 1].id = messageId || null;
+    if (messageId && SELECTORS.ordersFromCapture && !wasMeasuredOnSettledDom(messageId)) {
+      turns[turns.length - 1].orderFromUnsettledMeasurement = true;
     }
 
     if (i > 0 && i % 20 === 0) {
@@ -2327,11 +2645,15 @@ function extractAssistantTurnChatGPT(messageEl, index) {
   if (roots.length) {
     content = roots.map(extractTextContent).filter(Boolean).join('\n\n');
   } else {
-    // No content root at all: the whole message, minus any activity lines, so
-    // a reply showing only "Stopped" comes out empty rather than as a turn
-    // whose text is the word "Stopped".
+    // No content root at all: the whole message, minus its chrome — activity
+    // lines, screen-reader headings and buttons — so a reply showing only
+    // "Stopped" comes out empty rather than as a turn whose text is the word
+    // "Stopped", and an image-only reply comes out empty rather than as
+    // "ChatGPT said:Edit" (measured live, #411). Its images are found from
+    // messageEl itself, above, so nothing taken out here is lost.
     const bare = messageEl.cloneNode(true);
-    if (activitySelector) bare.querySelectorAll(activitySelector).forEach(el => el.remove());
+    const chrome = [activitySelector, '.sr-only', 'button', '[role="button"]'].filter(Boolean).join(', ');
+    bare.querySelectorAll(chrome).forEach(el => el.remove());
     content = extractTextContent(bare);
   }
 
@@ -2383,7 +2705,9 @@ async function extractTurnsChatGPT() {
       const contentSelector = SELECTORS.userContent || '.whitespace-pre-wrap';
       const contentEl = messageEl.querySelector(contentSelector);
       const element = contentEl || messageEl;
-      turns.push(extractUserTurn(element, turnIndex++));
+      // Text from the text element; images from the whole message, because an
+      // upload sits beside the text, not inside it (#411).
+      turns.push(extractUserTurn(element, turnIndex++, messageEl));
     } else if (turnType === 'assistant') {
       turns.push(extractAssistantTurnChatGPT(messageEl, turnIndex++));
     } else {
@@ -2596,6 +2920,21 @@ async function fetchImage(src, turnIndex, imageIndex) {
       };
     }
 
+    // A blob: image read while it was on screen (#411). Its URL may be dead by
+    // now; the bytes taken then are not.
+    if (IMAGE_BYTES.has(src)) {
+      const stashed = await IMAGE_BYTES.get(src);
+      if (stashed) {
+        const ext = getImageExtension(stashed.type, src);
+        return {
+          blob: stashed,
+          filename: `images/${String(imageIndex).padStart(3, '0')}.${ext}`,
+          originalSrc: src,
+          turnIndex
+        };
+      }
+    }
+
     // Handle blob URLs and https URLs
     const response = await fetch(src, {
       credentials: 'include' // For googleusercontent.com
@@ -2625,7 +2964,13 @@ async function fetchImage(src, turnIndex, imageIndex) {
   } catch (error) {
     return {
       type: 'image_fetch',
-      message: error.message || 'Unknown fetch error',
+      // A bare "Failed to fetch" names no cause. A dead blob: URL means the
+      // page dropped the image before anything read it; anything else is
+      // almost always a cross-origin refusal, and the host is the specific
+      // reason #331 asks for (live: images.openai.com, #411).
+      message: src.startsWith('blob:')
+        ? 'blob: image no longer available: the page released it before it was read'
+        : `${error.message || 'Unknown fetch error'} (${(() => { try { return new URL(src).host; } catch (e) { return 'unknown host'; } })()})`,
       turnIndex,
       originalSrc: src,
       timestamp
@@ -2813,6 +3158,12 @@ async function extractConversation() {
       incompleteReasons.push(
         'Scrolling did not reach the top of the conversation, so earlier messages are missing.');
     }
+    // The other end (#413): a virtualized list walked down from the starting
+    // point and never got to the newest message.
+    if (scrollResult.reachedBottom === false) {
+      incompleteReasons.push(
+        'Scrolling did not reach the end of the conversation, so later messages may be missing.');
+    }
     if (ordersFromCapture && orderStats.withoutOrderKey > 0) {
       incompleteReasons.push(
         `${orderStats.withoutOrderKey} of ${orderStats.captured} message(s) could not be positioned and were appended in capture order`);
@@ -2837,6 +3188,19 @@ async function extractConversation() {
       incompleteReasons.push(
         `${reasoningAffordances - reasoningCaptured} message(s) show reasoning that was not captured`);
     }
+    // Images the page offered that the capture neither took nor reported
+    // (#410). "Fail Open for Images" covers a fetch that failed — that is
+    // recorded in mediaErrors and costs nothing here. It never covered an image
+    // nothing found: until this, a conversation with images and a capture that
+    // found none exported identically, imageCount 0 and contentComplete true
+    // (#331). Every image is now in one of three places — the ZIP, mediaErrors,
+    // or this line.
+    const imagesOffered = countImagesOffered();
+    const imagesAccounted = images.length + errors.filter(e => e && e.type === 'image_fetch').length;
+    if (imagesOffered !== null && imagesOffered > imagesAccounted) {
+      incompleteReasons.push(
+        `${imagesOffered - imagesAccounted} of ${imagesOffered} image(s) on the page were not captured`);
+    }
     const contentComplete = incompleteReasons.length === 0;
 
     // Image fetches are Fail Open by design — the transcript is unaffected when
@@ -2857,6 +3221,10 @@ async function extractConversation() {
         url,
         messageCount: turns.length,
         imageCount: images.length,
+        // What the page offered, beside what was taken (#410), reported even
+        // when equal. Absent, not zero, where the site has no image scope yet:
+        // a zero there would claim a measurement nobody made.
+        ...(imagesOffered !== null ? { imagesOffered } : {}),
         fileCount: fileAttachments,
         // What was deliberately not fetched, so the drop is auditable and a
         // regression in the decoration test is visible as a number moving
@@ -2884,6 +3252,8 @@ async function extractConversation() {
           // that number meant, so the judgement does not have to be made by
           // whoever reads the export (#278).
           reachedTop: scrollResult.reachedTop === true,
+          // Present on sites that walk down first (#413); absent elsewhere.
+          ...(typeof scrollResult.reachedBottom === 'boolean' ? { reachedBottom: scrollResult.reachedBottom } : {}),
           terminationReason: scrollResult.terminationReason || 'unknown',
           finalScrollTop: typeof scrollResult.finalScrollTop === 'number'
             ? Math.round(scrollResult.finalScrollTop)
@@ -3045,6 +3415,12 @@ if (typeof module !== 'undefined' && module.exports) {
     extractImages,
     // Citation decoration (#279)
     findImages,
+    // Images offered, and blob: bytes read while on screen (#410, #411)
+    conversationImagesIn,
+    countImagesOffered,
+    stashImageBytes,
+    readImageBytes,
+    fetchImage,
     isCitationDecoration,
     resetDecorationCount,
     getDecorationCount,
@@ -3056,6 +3432,8 @@ if (typeof module !== 'undefined' && module.exports) {
     countMessages,
     isRealScroller,
     findScrollContainer,
+    splitSelectorList,
+    claudeRoleOf,
     waitForLoadingComplete,
     scrollToLoadAllMessages,
     // Virtualized-list capture (#256) and bottom-anchored ordering (#264)

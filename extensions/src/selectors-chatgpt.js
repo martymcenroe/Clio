@@ -101,6 +101,12 @@ const SELECTORS = {
   turnContainer: '[data-turn-key]',
   turnKeyAttribute: 'data-turn-key',
 
+  // Where the images-offered count looks (#410): each exchange's region, NOT
+  // the message elements. A generated image arrived on 2026-10-17 in a reply
+  // block outside every message selector, and a count taken through those
+  // selectors would have missed it exactly as the capture did.
+  imageScope: '[data-turn-key]',
+
   // Content selectors within messages
   // User text is inside .whitespace-pre-wrap — still true in the 2026-10 markup.
   userContent: '.whitespace-pre-wrap',

@@ -66,9 +66,12 @@ async function inspect(file) {
     messages: messages.length,
     roles: messages.reduce((m, x) => { m[x.role] = (m[x.role] || 0) + 1; return m; }, {}),
     metadata: {
+      // Which Clio made it (#419); absent from exports made before 1.9.9.
+      clioVersion: 'clioVersion' in md ? md.clioVersion : '(not recorded)',
       messageCount: md.messageCount,
       imageCount: md.imageCount,
       imagesOffered: md.imagesOffered,
+      imagesReduced: md.imagesReduced,
       mediaErrors: (md.mediaErrors || []).length,
       decorationSkipped: md.decorationSkipped,
       contentComplete: md.contentComplete,

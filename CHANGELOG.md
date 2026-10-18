@@ -6,9 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
-## [Unreleased]
+## [1.9.4] — 2026-10-17
+
+ChatGPT images are captured. Measured through the real extension on a test conversation with one uploaded and one generated image, 1.9.3 exported **0 of 2** and reported nothing missing (#331).
+
+### Fixed
+- A generated-image reply is a message again. It has no text, and 1.9.3 took a reply block for a message only if it held text — a regression #400 introduced. It now also counts a block holding a conversation image, and uses the reply's real message id where the page provides one (#411)
+- An uploaded image beside a user message's text is attached to that message; only the text element was searched before (#411)
+- `blob:` images are read while they are on screen. Images were fetched after the scroll, from cached copies, by which time the page could have released the URL; a failure that happens anyway now says so instead of "Failed to fetch" (#411)
+- A reply with no text block exports empty text, not its screen-reader heading and button captions (#411)
 
 ### Added
+- `imagesOffered`: the conversation images the page rendered, counted from each exchange rather than through the message selectors. An image neither in the ZIP nor in `mediaErrors` is named in `incompleteReasons` and makes the capture incomplete — an export with images missing can no longer report clean (#410). ChatGPT only for now; Claude and Gemini get theirs with their own fixes
 - `tools/extension/` — capture through the real, loaded extension (popup click to ZIP), inspect what a ZIP actually holds, compare a real capture with an injected one by message id, and generate synthetic test images. The first live coverage of the extension itself since Chrome stopped honouring `--load-extension` (#406, toward #308)
 
 ## [1.9.3] — 2026-10-17

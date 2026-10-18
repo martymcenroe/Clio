@@ -440,6 +440,25 @@ let MESSAGE_REFRESHED = 0;
 let REASONING_OFFERED = new Set();
 
 /**
+ * Conversation images the page rendered, per exchange (#410): the most seen at
+ * once in each. Counted independently of the message selectors, so an image
+ * those selectors cannot reach is still counted — the failure #331 was. See
+ * sweepImagesOffered().
+ * @type {Map<string|Element, number>}
+ */
+let IMAGES_OFFERED = new Map();
+
+/**
+ * The bytes of `blob:` images, read while they were on screen (#411). A blob
+ * URL lives only as long as the page keeps it, and images are fetched after
+ * the scroll from cached clones, by which time a virtualized list has
+ * unmounted most of them. Keyed by URL; each value a Promise of a Blob or
+ * null.
+ * @type {Map<string, Promise<Blob|null>>}
+ */
+let IMAGE_BYTES = new Map();
+
+/**
  * The scroller the ordering key is measured against, fixed for one scroll pass.
  * findScrollContainer() walks the whole document, which is far too expensive to
  * repeat inside a MutationObserver, so it is resolved once and cached.
@@ -570,6 +589,12 @@ function messageIdOf(el) {
     if (first) return first;
   }
   if (isAgentReply(el)) {
+    // A reply with no unit can still carry its message's id deeper in: an
+    // image reply wraps its gallery in div[data-chatgpt-search-message-ids]
+    // (#411). The real id is worth more than a made-up one (#294).
+    const inner = el.querySelector('[data-chatgpt-search-message-ids]');
+    const innerId = inner && inner.getAttribute('data-chatgpt-search-message-ids').trim().split(/\s+/)[0];
+    if (innerId) return innerId;
     const turnKey = turnKeyOf(el);
     if (turnKey) return `${turnKey}:reply`;
   }
@@ -580,10 +605,13 @@ function messageIdOf(el) {
  * Is this element a reply rendered with no search unit (#399)?
  *
  * The block that directly holds SELECTORS.replyMarker, holds no assistant
- * message element, and holds reply text. Without the text test, a block that
- * carries only a reasoning line — whose unit is in the next block (#400) — is
- * taken for a reply. See replyMarker in selectors-chatgpt.js for the shapes and
- * for why this is code rather than a :has() selector.
+ * message element, and holds reply content: text, or a conversation image.
+ * Without the content test, a block that carries only a reasoning line — whose
+ * unit is in the next block (#400) — is taken for a reply. Without the image
+ * half, a generated-image reply, which has no text at all, is not a message
+ * (#411; the regression #400's text-only test introduced). See replyMarker in
+ * selectors-chatgpt.js for the shapes and for why this is code rather than a
+ * :has() selector.
  *
  * @param {Element} el
  * @returns {boolean}
@@ -592,7 +620,24 @@ function isAgentReply(el) {
   const marker = typeof SELECTORS !== 'undefined' && SELECTORS.replyMarker;
   if (!marker || !el || !el.children || typeof el.querySelector !== 'function') return false;
   const holdsMarker = Array.from(el.children).some(c => c.matches(marker));
-  return holdsMarker && !el.querySelector(SELECTORS.assistantMessage) && holdsReplyText(el);
+  return holdsMarker && !el.querySelector(SELECTORS.assistantMessage) &&
+    (holdsReplyText(el) || conversationImagesIn(el).length > 0);
+}
+
+/**
+ * The conversation images inside `root`: what SELECTORS.image matches, less
+ * citation favicons (isCitationDecoration) and anything inside a tool-activity
+ * line. The one definition of "a conversation image", shared by the message
+ * test above, the offered count (#410) and nothing else that could drift.
+ *
+ * @param {Element|Document} root
+ * @returns {HTMLImageElement[]}
+ */
+function conversationImagesIn(root) {
+  if (!root || typeof root.querySelectorAll !== 'function' || !SELECTORS.image) return [];
+  const activity = SELECTORS.activityHeader;
+  return Array.from(root.querySelectorAll(SELECTORS.image)).filter(img =>
+    !isCitationDecoration(img) && !(activity && img.closest(activity)));
 }
 
 /**
@@ -759,8 +804,9 @@ function refreshIfFuller(entry, el, id) {
 /**
  * Snapshot every message currently rendered that we have not already kept, and
  * measure where it sits. A message already kept is re-cloned if its content has
- * grown since (refreshIfFuller). Reasoning the rendered replies offer is noted
- * on the same pass (#400), while it is on screen.
+ * grown since (refreshIfFuller). On the same pass, while it is on screen:
+ * the reasoning the replies offer (#400), the images the exchanges hold
+ * (#410), and the bytes of every `blob:` image (#411).
  * Cheap and idempotent — safe to call on every scroll tick and every mutation.
  * @returns {number} how many new messages were captured
  */
@@ -769,10 +815,14 @@ function captureRenderedMessages() {
   // Only where the export is built from this cache. The other sites keep
   // every message in the DOM, so the end-of-run sweep already sees them all,
   // and doing this on every mutation there would be cost with no gain.
-  if (SELECTORS.ordersFromCapture) sweepReasoningOffered(REASONING_OFFERED);
+  if (SELECTORS.ordersFromCapture) {
+    sweepReasoningOffered(REASONING_OFFERED);
+    sweepImagesOffered(IMAGES_OFFERED);
+  }
   for (const el of queryMessages(document)) {
     const id = messageIdOf(el);
     if (!id) continue;
+    stashImageBytes(el);
     captureMessageArtifacts(el, id);
     const kept = MESSAGE_CACHE.get(id);
     if (kept) {
@@ -839,6 +889,8 @@ function captureDetachedMessages(nodes, record) {
     for (const el of candidates) {
       const id = messageIdOf(el);
       if (!id) continue;
+      // An image leaving the DOM may be the last chance to read its bytes.
+      stashImageBytes(el);
       // Kept already, perhaps as a shell taken before its text rendered: the
       // node leaving the DOM may be the fullest copy there will ever be.
       const kept = MESSAGE_CACHE.get(id);
@@ -1021,6 +1073,8 @@ function resetMessageCache() {
   MESSAGE_RESCUED = 0;
   MESSAGE_REFRESHED = 0;
   REASONING_OFFERED = new Set();
+  IMAGES_OFFERED = new Map();
+  IMAGE_BYTES = new Map();
   MESSAGE_ARTIFACTS = new Map();
   MESSAGE_SCROLLER = null;
 }
@@ -2052,13 +2106,109 @@ function findImages(element, turnIndex) {
 }
 
 /**
+ * Read an image's bytes while it is rendered (#411).
+ *
+ * fetch() first: from the content script's isolated world it returns the
+ * original file — measured live, the 3,843-byte test PNG came back as exactly
+ * 3,843 bytes. A canvas copy is the fallback, decoded and re-encoded as PNG
+ * (8,136 bytes for the same image), for a `blob:` URL that will not fetch.
+ *
+ * @param {HTMLImageElement} img
+ * @returns {Promise<Blob|null>}
+ */
+async function readImageBytes(img) {
+  const src = img.src;
+  try {
+    if (typeof fetch === 'function') {
+      const response = await fetch(src);
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob && blob.size > 0) return blob;
+      }
+    }
+  } catch (e) { /* fall through to the canvas copy */ }
+  try {
+    if (!img.complete || !img.naturalWidth || typeof document.createElement !== 'function') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext && canvas.getContext('2d');
+    if (!ctx || typeof canvas.toBlob !== 'function') return null;
+    ctx.drawImage(img, 0, 0);
+    return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Start reading the bytes of every `blob:` conversation image under `root`,
+ * once per URL (#411). A `blob:` URL is valid only while the page keeps it, and
+ * fetchImage() runs after the scroll, against cached clones whose images a
+ * virtualized list has long since unmounted. Other schemes are left to
+ * fetchImage(): an https URL is still there afterwards.
+ *
+ * @param {Element} root
+ */
+function stashImageBytes(root) {
+  for (const img of conversationImagesIn(root)) {
+    const src = img.src || '';
+    if (!src.startsWith('blob:') || IMAGE_BYTES.has(src)) continue;
+    IMAGE_BYTES.set(src, readImageBytes(img));
+  }
+}
+
+/**
+ * Note the conversation images each rendered exchange holds, into `into`
+ * (#410): per exchange, the most seen at once.
+ *
+ * Counted by scanning SELECTORS.imageScope — the region of the thread one
+ * exchange occupies — and NOT through the message selectors, because an image
+ * those selectors cannot reach is exactly the failure #331 was: an export that
+ * found nothing reported nothing missing. The most-at-once per exchange, rather
+ * than a tally of image elements, so a re-render with a fresh `blob:` URL is
+ * still one image.
+ *
+ * @param {Map<string|Element, number>} into
+ */
+function sweepImagesOffered(into) {
+  const scopeSel = typeof SELECTORS !== 'undefined' && SELECTORS.imageScope;
+  if (!scopeSel) return;
+  const attr = SELECTORS.turnKeyAttribute;
+  for (const scope of document.querySelectorAll(scopeSel)) {
+    const key = (attr && scope.getAttribute(attr)) || scope;
+    const n = conversationImagesIn(scope).length;
+    if (n > (into.get(key) || 0)) into.set(key, n);
+  }
+}
+
+/**
+ * How many conversation images the page offered, across the conversation:
+ * those noted during the scroll plus those on screen now. null on a site with
+ * no image scope defined, so no number is invented where nothing was measured.
+ *
+ * @returns {number|null}
+ */
+function countImagesOffered() {
+  if (typeof SELECTORS === 'undefined' || !SELECTORS.imageScope) return null;
+  const offered = new Map(IMAGES_OFFERED);
+  sweepImagesOffered(offered);
+  let n = 0;
+  for (const v of offered.values()) n += v;
+  return n;
+}
+
+/**
  * Extract a single user message.
  * @param {Element} element - DOM element containing user message
  * @param {number} index - Turn index
+ * @param {Element} [imageScope=element] - where to look for its images, when
+ *   they sit outside the element its text is read from (#411: ChatGPT puts an
+ *   upload beside the text, not in it)
  * @returns {Object} - Turn object
  */
-function extractUserTurn(element, index) {
-  const images = findImages(element, index);
+function extractUserTurn(element, index, imageScope) {
+  const images = findImages(imageScope || element, index);
 
   return {
     index,
@@ -2327,11 +2477,15 @@ function extractAssistantTurnChatGPT(messageEl, index) {
   if (roots.length) {
     content = roots.map(extractTextContent).filter(Boolean).join('\n\n');
   } else {
-    // No content root at all: the whole message, minus any activity lines, so
-    // a reply showing only "Stopped" comes out empty rather than as a turn
-    // whose text is the word "Stopped".
+    // No content root at all: the whole message, minus its chrome — activity
+    // lines, screen-reader headings and buttons — so a reply showing only
+    // "Stopped" comes out empty rather than as a turn whose text is the word
+    // "Stopped", and an image-only reply comes out empty rather than as
+    // "ChatGPT said:Edit" (measured live, #411). Its images are found from
+    // messageEl itself, above, so nothing taken out here is lost.
     const bare = messageEl.cloneNode(true);
-    if (activitySelector) bare.querySelectorAll(activitySelector).forEach(el => el.remove());
+    const chrome = [activitySelector, '.sr-only', 'button', '[role="button"]'].filter(Boolean).join(', ');
+    bare.querySelectorAll(chrome).forEach(el => el.remove());
     content = extractTextContent(bare);
   }
 
@@ -2383,7 +2537,9 @@ async function extractTurnsChatGPT() {
       const contentSelector = SELECTORS.userContent || '.whitespace-pre-wrap';
       const contentEl = messageEl.querySelector(contentSelector);
       const element = contentEl || messageEl;
-      turns.push(extractUserTurn(element, turnIndex++));
+      // Text from the text element; images from the whole message, because an
+      // upload sits beside the text, not inside it (#411).
+      turns.push(extractUserTurn(element, turnIndex++, messageEl));
     } else if (turnType === 'assistant') {
       turns.push(extractAssistantTurnChatGPT(messageEl, turnIndex++));
     } else {
@@ -2596,6 +2752,21 @@ async function fetchImage(src, turnIndex, imageIndex) {
       };
     }
 
+    // A blob: image read while it was on screen (#411). Its URL may be dead by
+    // now; the bytes taken then are not.
+    if (IMAGE_BYTES.has(src)) {
+      const stashed = await IMAGE_BYTES.get(src);
+      if (stashed) {
+        const ext = getImageExtension(stashed.type, src);
+        return {
+          blob: stashed,
+          filename: `images/${String(imageIndex).padStart(3, '0')}.${ext}`,
+          originalSrc: src,
+          turnIndex
+        };
+      }
+    }
+
     // Handle blob URLs and https URLs
     const response = await fetch(src, {
       credentials: 'include' // For googleusercontent.com
@@ -2625,7 +2796,13 @@ async function fetchImage(src, turnIndex, imageIndex) {
   } catch (error) {
     return {
       type: 'image_fetch',
-      message: error.message || 'Unknown fetch error',
+      // A bare "Failed to fetch" names no cause. A dead blob: URL means the
+      // page dropped the image before anything read it; anything else is
+      // almost always a cross-origin refusal, and the host is the specific
+      // reason #331 asks for (live: images.openai.com, #411).
+      message: src.startsWith('blob:')
+        ? 'blob: image no longer available: the page released it before it was read'
+        : `${error.message || 'Unknown fetch error'} (${(() => { try { return new URL(src).host; } catch (e) { return 'unknown host'; } })()})`,
       turnIndex,
       originalSrc: src,
       timestamp
@@ -2837,6 +3014,19 @@ async function extractConversation() {
       incompleteReasons.push(
         `${reasoningAffordances - reasoningCaptured} message(s) show reasoning that was not captured`);
     }
+    // Images the page offered that the capture neither took nor reported
+    // (#410). "Fail Open for Images" covers a fetch that failed — that is
+    // recorded in mediaErrors and costs nothing here. It never covered an image
+    // nothing found: until this, a conversation with images and a capture that
+    // found none exported identically, imageCount 0 and contentComplete true
+    // (#331). Every image is now in one of three places — the ZIP, mediaErrors,
+    // or this line.
+    const imagesOffered = countImagesOffered();
+    const imagesAccounted = images.length + errors.filter(e => e && e.type === 'image_fetch').length;
+    if (imagesOffered !== null && imagesOffered > imagesAccounted) {
+      incompleteReasons.push(
+        `${imagesOffered - imagesAccounted} of ${imagesOffered} image(s) on the page were not captured`);
+    }
     const contentComplete = incompleteReasons.length === 0;
 
     // Image fetches are Fail Open by design — the transcript is unaffected when
@@ -2857,6 +3047,10 @@ async function extractConversation() {
         url,
         messageCount: turns.length,
         imageCount: images.length,
+        // What the page offered, beside what was taken (#410), reported even
+        // when equal. Absent, not zero, where the site has no image scope yet:
+        // a zero there would claim a measurement nobody made.
+        ...(imagesOffered !== null ? { imagesOffered } : {}),
         fileCount: fileAttachments,
         // What was deliberately not fetched, so the drop is auditable and a
         // regression in the decoration test is visible as a number moving
@@ -3045,6 +3239,12 @@ if (typeof module !== 'undefined' && module.exports) {
     extractImages,
     // Citation decoration (#279)
     findImages,
+    // Images offered, and blob: bytes read while on screen (#410, #411)
+    conversationImagesIn,
+    countImagesOffered,
+    stashImageBytes,
+    readImageBytes,
+    fetchImage,
     isCitationDecoration,
     resetDecorationCount,
     getDecorationCount,

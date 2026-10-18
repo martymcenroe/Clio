@@ -33,9 +33,17 @@ const say = (s) => process.stdout.write(s + '\n');
 
 async function main() {
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${PORT}`);
+  // CLIO_TARGET picks the tab when more than one conversation is open;
+  // otherwise the first ChatGPT conversation tab.
+  const target = process.env.CLIO_TARGET;
   let page = null;
   for (const c of browser.contexts()) {
-    for (const p of c.pages()) if (/chatgpt\.com\/(?:.*\/)?c\//.test(p.url())) { page = p; break; }
+    for (const p of c.pages()) {
+      if (!/chatgpt\.com\/(?:.*\/)?c\//.test(p.url())) continue;
+      if (target && !p.url().includes(target)) continue;
+      page = p;
+      break;
+    }
     if (page) break;
   }
   if (!page) { say('no ChatGPT conversation page on ' + PORT); return; }
@@ -198,6 +206,9 @@ async function main() {
         // What the page offered against what was taken (#324, #400).
         reasoningAffordances: res.data.metadata.reasoningAffordances,
         reasoningCaptured: res.data.metadata.reasoningCaptured,
+        imagesOffered: res.data.metadata.imagesOffered,
+        imageCount: res.data.metadata.imageCount,
+        mediaErrors: (res.data.metadata.mediaErrors || []).map((e) => e.message),
         scrollInfo: res.data.metadata.scrollInfo,
         orderInfo: res.data.metadata.orderInfo
       },

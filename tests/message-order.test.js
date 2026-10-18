@@ -254,7 +254,10 @@ describe('order reporting is scoped to the site that orders from capture (#272)'
   test('each site states whether its export is ordered from the capture cache', () => {
     expect(SELECTORS.ordersFromCapture).toBe(true);
     expect(geminiSelectors.ordersFromCapture).toBe(false);
-    expect(claudeSelectors.ordersFromCapture).toBe(false);
+    // Claude moved to the capture cache in #409: its 2026-10 transcript
+    // virtualizes (3 to 11 of 18 rows in the DOM at once, measured live), so
+    // its export IS ordered from the cache now and the report is about it.
+    expect(claudeSelectors.ordersFromCapture).toBe(true);
   });
 
   test('a Gemini message carrying an id is cached but raises no false alarm', async () => {

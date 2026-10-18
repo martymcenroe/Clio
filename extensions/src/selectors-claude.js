@@ -23,6 +23,31 @@
  *
  * User-message selector `[data-testid="user-message"]` is stable across
  * both eras.
+ *
+ * RE-VERIFIED: 2026-10-17 against the live page through the real extension
+ * (#409), after a capture exported the user's message and none of Claude's
+ * replies while reporting contentComplete: true. Nothing on the page carries
+ * `.font-claude-response` any more. The reply is now:
+ *
+ *   div[data-testid="assistant-message"][data-turn-key][data-is-streaming]
+ *     h2.sr-only[data-find-omitted]               "Claude responded: …"
+ *     … .group/status[data-find-omitted]          a collapsed status row
+ *     … [data-transcript-engine-root]             the reply text
+ *         … div[role="group"][aria-label="bash code"]   a code block
+ *             div[data-find-omitted]                    its language label
+ *             pre.code-block__code > code.language-bash
+ *     div[data-testid="message-actions"]          toolbar, with a timestamp
+ *
+ * and the user row:
+ *
+ *   div[data-user-scope] > div[data-turn-key]
+ *     … div[data-testid="file-thumbnail"] … img (blob:)   an upload, BESIDE
+ *     … div[data-testid="user-message"]                   the text
+ *
+ * `data-find-omitted` is the page's own mark for "not content" (it keeps an
+ * element out of find-in-page); it is on the heading, the status row and the
+ * code label, and all three are stripped from the reply text. The 2026-05
+ * selectors stay beside the new ones.
  */
 
 const SELECTORS = {
@@ -35,19 +60,53 @@ const SELECTORS = {
   sessionTitle: null, // Claude has no in-page title element; use document.title
 
   // Scroll container
-  scrollContainer: '[class*="flex-1"][class*="overflow-y-auto"], [data-scroll-container]',
+  //
+  // 2026-10 (#409): the transcript scrolls in div[data-autoscroll-container],
+  // and it goes first. The class test below it matches the conversation-list
+  // SIDEBAR first in document order, and the sidebar really scrolls, so it
+  // won: measured live, Clio scrolled the sidebar and exported the 7 of 18
+  // messages already rendered.
+  scrollContainer: '[data-autoscroll-container], [class*="flex-1"][class*="overflow-y-auto"], [data-scroll-container]',
 
   // Message elements
-  userMessage: '[data-testid="user-message"]',
+  // 2026-10 (#409): the user's whole ROW, [data-user-scope] [data-turn-key],
+  // not just its text bubble: an upload sits in the row beside the bubble, and
+  // the row is what the capture cache clones, so the clone must hold both.
+  // The bubble selector stays for the 2026-05 markup; where both match, the
+  // bubble is inside the row and queryMessages() keeps only the row.
+  userMessage: '[data-testid="user-message"], [data-user-scope] [data-turn-key]',
+  // The user's text, inside the row (or the message itself, 2026-05).
+  userContent: '[data-testid="user-message"]',
   // One .font-claude-response per assistant turn — the outer response-container.
   // Stable across both pre-redesign (oldest) and modern Claude DOM.
   // Do NOT use [data-testid="action-bar-copy"] — Claude renders that on user
   // messages too, which caused duplicate assistant entries (issue #32).
   // Do NOT use [class="font-claude-response-body"] — that's per paragraph, not per turn.
-  assistantMessage: '.font-claude-response:not(.font-claude-response-body)',
+  // 2026-10 (#409): [data-testid="assistant-message"], one per reply.
+  assistantMessage: '.font-claude-response:not(.font-claude-response-body), [data-testid="assistant-message"]',
 
   // All messages (union of user + assistant)
-  allMessages: '[data-testid="user-message"], .font-claude-response:not(.font-claude-response-body)',
+  allMessages: '[data-testid="user-message"], [data-user-scope] [data-turn-key], ' +
+    '.font-claude-response:not(.font-claude-response-body), [data-testid="assistant-message"]',
+
+  // 2026-10 (#409): each message's own id. Measured over a full walk of an
+  // 18-message conversation: 18 distinct keys, one per row, none changing as
+  // rows mounted and unmounted. It keys the capture cache, which Claude now
+  // needs — see ordersFromCapture.
+  messageIdAttribute: 'data-turn-key',
+
+  // 2026-10 (#409): the reply's text lives here, apart from the heading,
+  // the status row and the toolbar that share the message element. Where it
+  // is present it is the content; where absent, the 2026-05 path runs.
+  replyTextRoot: '[data-transcript-engine-root]',
+  // Page chrome inside the text root: the code block's language label is
+  // data-find-omitted, and copy buttons and status announcements are not text.
+  replyTextChrome: '[data-find-omitted], button, [role="status"]',
+
+  // Where the images-offered count looks (#410): each message's row. Both
+  // the user row and the reply carry data-turn-key.
+  imageScope: '[data-turn-key]',
+  turnKeyAttribute: 'data-turn-key',
 
   // Expandable content — thinking toggles in Claude
   expandButton: null, // Claude doesn't use generic expand buttons
@@ -68,6 +127,9 @@ const SELECTORS = {
   // Code blocks
   codeBlock: 'pre code, .code-block code',
   codeLanguage: '[data-language], .language-label',
+  // 2026-10 (#409): the block's wrapper, holding the label and copy button
+  // beside the <pre>; replaced whole by the fence (codeBlockRootOf).
+  codeBlockRoot: '[role="group"][aria-label*="code"]',
 
   // Images
   image: 'img',
@@ -82,15 +144,26 @@ const SELECTORS = {
   // Attached-file capture (#262) is ChatGPT-only for now: no equivalent card
   // or download control has been verified on this site's DOM. Left null so the
   // scan is skipped rather than guessing at selectors nobody has probed.
-  // Turns are read from the live DOM here, not from the capture cache, so the
-  // cache's ordering confidence is not about this site's export (#272).
-  ordersFromCapture: false,
+  //
+  // 2026-10 (#409): Claude's transcript now virtualizes. Measured on an
+  // 18-message conversation: 3 to 11 rows in the DOM at once, 7 at the top.
+  // Reading the live DOM after the scroll — what this site did until now —
+  // exports one window of the conversation. So, as on ChatGPT, turns come from
+  // the capture cache, and the cache's ordering confidence is about this
+  // site's export (#272). On the 2026-05 markup no element carries
+  // messageIdAttribute, nothing is cached, and extraction falls back to the
+  // live DOM exactly as before.
+  ordersFromCapture: true,
 
   uploadedFileCard: null,
   downloadAffordance: null,
 
   // Streaming indicator
-  streamingIndicator: 'button[aria-label*="Stop"], [data-streaming="true"]',
+  // `^=`, not `*=` (#409): the 2026-10 markup puts the message's own text into
+  // button labels ("Show message actions for You said: …"), so a substring
+  // test refused every conversation in which anyone had typed "Stop", claiming
+  // Claude was still generating. The real control's label begins with it.
+  streamingIndicator: 'button[aria-label^="Stop"], [data-streaming="true"], [data-is-streaming="true"]',
 
   // Loading indicator
   loadingIndicator: '[role="progressbar"], [aria-busy="true"], .loading-spinner'

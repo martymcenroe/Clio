@@ -113,9 +113,10 @@ The extension creates a zip file containing:
 ```
 
 `orderInfo` appears only on sites whose export is ordered from the scroll capture
-cache — ChatGPT today. Gemini and Claude read turns from the live DOM, so the
-cache's ordering confidence would say nothing about their exports and the key is
-omitted rather than reported as meaningless zeros.
+cache — ChatGPT, and Claude since its transcript began virtualizing. Gemini reads
+turns from the live DOM, so the cache's ordering confidence would say nothing
+about its exports and the key is omitted rather than reported as meaningless
+zeros.
 
 ### Reading the metadata
 
@@ -133,6 +134,7 @@ questions.
 | `reasoningAffordances` | Assistant turns that visibly offer reasoning ("Worked for 5m 34s" and similar). Reported even when zero, so "there was none to capture" stays distinguishable from "we captured all of it". |
 | `reasoningCaptured` | Messages whose `thinking` is non-empty. When it is below `reasoningAffordances`, the shortfall is named in `incompleteReasons` and the capture is not complete. |
 | `scrollInfo.reachedTop` | Whether the walk reached the beginning of the conversation. A capture that stopped short sets `contentComplete: false` and names the gap. |
+| `scrollInfo.reachedBottom` | On sites whose transcript virtualizes, the walk first goes down from wherever the page was to the newest message, because nothing below the starting point is rendered until scrolled to. Whether it got there; `false` makes the capture incomplete. Absent where no such walk is needed. |
 | `orderInfo.neverMeasuredOnSettledDom` | Messages positioned from a measurement taken before the page settled. Each one is marked `orderFromUnsettledMeasurement` in `messages`. |
 | `messages[].id` | The site's own message identity. `index` is a position within *this* capture and shifts whenever the capture does; `id` does not, so two captures of one conversation can be compared exactly. `null` on sites that expose no such attribute — present-and-null, never absent, so "this site has no identity" is distinguishable from "this build is old". |
 

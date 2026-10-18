@@ -291,12 +291,11 @@ function resetScrollConfig() {
 function countMessages() {
   const site = getSite();
   if (site === 'claude') {
-    // Assistant turns: one .font-claude-response per turn. Do not use
-    // action-bar-copy (appears on user messages too, inflated the count —
-    // issue #32). Do not use .row-start-2 (broken on pre-redesign Claude — #114).
-    const userMsgs = document.querySelectorAll('[data-testid="user-message"]');
-    const assistantMsgs = document.querySelectorAll('.font-claude-response:not(.font-claude-response-body)');
-    return userMsgs.length + assistantMsgs.length;
+    // queryMessages(), not a copy of the selectors: the copy that lived here
+    // counted only the 2026-05 markup, and so counted none of the 2026-10
+    // replies (#409). Do not use action-bar-copy (appears on user messages
+    // too, inflated the count — issue #32).
+    return queryMessages(document).length;
   }
   if (site === 'chatgpt') {
     // queryMessages() rather than a copy of the selectors: a hardcoded copy
@@ -338,6 +337,37 @@ function isRealScroller(el) {
 }
 
 /**
+ * Split a CSS selector list at its top-level commas: not those inside
+ * brackets, parentheses or quotes, so `[aria-label="a, b"]` and `:is(a, b)`
+ * stay whole.
+ * @param {string} list
+ * @returns {string[]}
+ */
+function splitSelectorList(list) {
+  const parts = [];
+  let depth = 0;
+  let quote = null;
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === '(' || c === '[') depth++;
+    else if (c === ')' || c === ']') depth--;
+    else if (c === ',' && depth === 0) {
+      parts.push(list.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(list.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+/**
  * Find the scrollable container for the conversation.
  * @returns {Element|null} - The scroll container element
  */
@@ -345,10 +375,21 @@ function findScrollContainer() {
   // Selector matches, in SELECTOR order. querySelector() with a selector list
   // returns the first match in DOCUMENT order, so for a list like
   // 'main [class*="overflow-y-auto"], main' the ancestor <main> always won and
-  // the intended first choice was dead code (#255). Iterate instead.
-  const matches = SELECTORS.scrollContainer
-    ? Array.from(document.querySelectorAll(SELECTORS.scrollContainer))
-    : [];
+  // the intended first choice was dead code (#255).
+  //
+  // querySelectorAll() over the whole list has the same flaw, which is what
+  // this code did until #409: the isRealScroller() test below rejected #255's
+  // <main>, but among real scrollers the first in the document still won. On
+  // Claude's 2026-10 page that was the conversation-list sidebar, ahead of the
+  // transcript in the document, so the sidebar was scrolled and only the
+  // messages already rendered were exported. Each selector is now tried in
+  // turn.
+  const matches = [];
+  for (const part of splitSelectorList(SELECTORS.scrollContainer || '')) {
+    for (const el of document.querySelectorAll(part)) {
+      if (!matches.includes(el)) matches.push(el);
+    }
+  }
   for (const el of matches) {
     if (isRealScroller(el)) return el;
   }
@@ -588,6 +629,13 @@ function messageIdOf(el) {
     const first = list.trim().split(/\s+/)[0];
     if (first) return first;
   }
+  // A site that names its own id attribute (Claude 2026-10: data-turn-key,
+  // one per message, #409).
+  const idAttr = typeof SELECTORS !== 'undefined' && SELECTORS.messageIdAttribute;
+  if (idAttr) {
+    const own = el.getAttribute(idAttr);
+    if (own) return own;
+  }
   if (isAgentReply(el)) {
     // A reply with no unit can still carry its message's id deeper in: an
     // image reply wraps its gallery in div[data-chatgpt-search-message-ids]
@@ -674,8 +722,13 @@ function isMessageElement(node) {
  * Every message element under `scope`, in document order: what
  * SELECTORS.allMessages matches, plus each unit-less reply (#399). Every place
  * that enumerates messages goes through here, so the two can never disagree
- * about what a message is. On a site with no replyMarker this is exactly
- * querySelectorAll(allMessages).
+ * about what a message is.
+ *
+ * One message, one element: a match nested inside another match is dropped.
+ * On Claude's 2026-10 markup both the user's row and the text bubble inside it
+ * match (the bubble selector is kept for the 2026-05 markup), and the row is
+ * the message (#409). Where no matches nest — ChatGPT, tested — nothing is
+ * dropped.
  *
  * As with querySelectorAll, `scope` itself is not included.
  *
@@ -684,7 +737,16 @@ function isMessageElement(node) {
  */
 function queryMessages(scope) {
   const root = scope || document;
-  const found = Array.from(root.querySelectorAll(SELECTORS.allMessages));
+  const matched = Array.from(root.querySelectorAll(SELECTORS.allMessages));
+  // Ancestor walk against a set, not a pairwise test: a site that keeps every
+  // message in the DOM can hold hundreds, and this runs on every mutation.
+  const matchedSet = new Set(matched);
+  const found = matched.filter(el => {
+    for (let p = el.parentElement; p && p !== root; p = p.parentElement) {
+      if (matchedSet.has(p)) return false;
+    }
+    return true;
+  });
   const marker = SELECTORS.replyMarker;
   if (!marker) return found;
 
@@ -1352,6 +1414,38 @@ async function waitForLoadingComplete() {
  *                    terminationReason: string, finalScrollTop: number,
  *                    warning?: string}>}
  */
+/**
+ * Walk a scroller DOWN from wherever it stands to its bottom, capturing every
+ * message that renders on the way (#413).
+ *
+ * The bottom is the scroller's own geometry, not a step count. A scroller that
+ * will not move three times running counts as at the bottom: nothing more can
+ * be rendered by scrolling it. Bounded by maxScrollAttempts like the walk up.
+ *
+ * @param {Element} sc
+ * @returns {Promise<boolean>} whether the bottom was reached
+ */
+async function walkToBottom(sc) {
+  let still = 0;
+  for (let i = 0; i < SCROLL_CONFIG.maxScrollAttempts; i++) {
+    captureRenderedMessages();
+    if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2) return true;
+    const before = sc.scrollTop;
+    sc.scrollTop = before + Math.max(1, Math.floor(sc.clientHeight * 0.8));
+    sc.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await sleep(SCROLL_CONFIG.scrollDelay);
+    if (sc.scrollTop <= before) {
+      if (++still >= 3) {
+        captureRenderedMessages();
+        return true;
+      }
+    } else {
+      still = 0;
+    }
+  }
+  return false;
+}
+
 async function scrollToLoadAllMessages(onProgress) {
   const scrollContainer = findScrollContainer();
   if (!scrollContainer) {
@@ -1442,7 +1536,23 @@ async function scrollToLoadAllMessages(onProgress) {
     // console.log(`[Clio Scroll #${scrollAttempts}]`, msg, data);
   };
 
+  // Whether the walk down to the newest message got there (#413). True
+  // where no downward walk is needed: a site whose DOM keeps every message.
+  let reachedBottom = true;
+
   try {
+    // Walk DOWN to the bottom first, capturing as it goes (#413). The walk
+    // below only ever scrolls up from where it starts, and on a virtualized
+    // list nothing below the starting point is rendered, so an extraction
+    // begun from the top of a long Claude conversation exported 7 of 18
+    // messages and reported reachedTop: true. Started from the bottom, as a
+    // person usually is, this ends at once.
+    if (SELECTORS.ordersFromCapture) {
+      reachedBottom = await walkToBottom(scrollContainer);
+      lastScrollTop = scrollContainer.scrollTop;
+      lastHeight = scrollContainer.scrollHeight || 0;
+    }
+
     while (scrollAttempts < SCROLL_CONFIG.maxScrollAttempts) {
       scrollAttempts++;
       mutationDetected = false;
@@ -1604,6 +1714,7 @@ async function scrollToLoadAllMessages(onProgress) {
             messagesLoaded: finalCount,
             scrollAttempts,
             reachedTop: true,
+            reachedBottom,
             terminationReason: 'reached-top',
             finalScrollTop: currentScrollTop,
             finalScrollHeight: currentHeight,
@@ -1630,6 +1741,7 @@ async function scrollToLoadAllMessages(onProgress) {
             messagesLoaded: finalCount,
             scrollAttempts,
             reachedTop: false,
+            reachedBottom,
             terminationReason: 'stuck',
             longestArrivalGapMs: longestGapMs,
             finalScrollTop: currentScrollTop,
@@ -1666,6 +1778,7 @@ async function scrollToLoadAllMessages(onProgress) {
     messagesLoaded: finalCount,
     scrollAttempts,
     reachedTop: false,
+    reachedBottom,
     terminationReason: 'max-attempts',
     longestArrivalGapMs: longestGapMs,
     finalScrollTop: scrollContainer.scrollTop,
@@ -2306,9 +2419,14 @@ function stripArtifactWidgetChrome(rootEl) {
 function extractAssistantTurnClaude(element, index) {
   const images = findImages(element, index);
 
-  // Extract thinking from .row-start-1
+  // Extract thinking from .row-start-1 — on the 2026-05 markup only. On the
+  // 2026-10 markup (a reply with SELECTORS.replyTextRoot) that class lands on
+  // a span inside the collapsed status row, so it would export the row's
+  // one-line summary as if it were the reasoning, and count it as captured
+  // when the reasoning itself was not (#409; capturing the real thing is #316).
   let thinking = null;
-  const thinkingEl = element.querySelector(SELECTORS.thinkingContent);
+  const newMarkup = !!(SELECTORS.replyTextRoot && element.querySelector(SELECTORS.replyTextRoot));
+  const thinkingEl = newMarkup ? null : element.querySelector(SELECTORS.thinkingContent);
   if (thinkingEl) {
     thinking = extractTextContent(thinkingEl);
   }
@@ -2337,14 +2455,35 @@ function extractAssistantTurnClaude(element, index) {
   //       div.row-start-1.col-start-1...    <- INNER response body (keep)
   //     [div > div.standard-markdown > p]   <- sibling commentary on
   //                                            artifact turns (keep)
-  const contentClone = element.cloneNode(true);
-  contentClone.querySelectorAll(SELECTORS.thinkingContent).forEach(el => {
-    if (!el.closest(SELECTORS.responseContent)) {
-      el.remove();
-    }
-  });
-  stripArtifactWidgetChrome(contentClone);
-  const content = extractTextContent(contentClone);
+  //
+  // 2026-10 markup (#409): the message element also holds a screen-reader
+  // heading ("Claude responded: …"), a status row and a toolbar with a
+  // timestamp, and none of those is the reply. The text has its own root,
+  // SELECTORS.replyTextRoot; where it exists it IS the content, with the page
+  // chrome inside it (the code label, copy buttons) left out.
+  let content;
+  const textRoots = SELECTORS.replyTextRoot
+    ? Array.from(element.querySelectorAll(SELECTORS.replyTextRoot))
+    : [];
+  if (textRoots.length) {
+    content = textRoots.map(root => {
+      const clone = root.cloneNode(true);
+      if (SELECTORS.replyTextChrome) {
+        clone.querySelectorAll(SELECTORS.replyTextChrome).forEach(el => el.remove());
+      }
+      stripArtifactWidgetChrome(clone);
+      return extractTextContent(clone);
+    }).filter(Boolean).join('\n\n');
+  } else {
+    const contentClone = element.cloneNode(true);
+    contentClone.querySelectorAll(SELECTORS.thinkingContent).forEach(el => {
+      if (!el.closest(SELECTORS.responseContent)) {
+        el.remove();
+      }
+    });
+    stripArtifactWidgetChrome(contentClone);
+    content = extractTextContent(contentClone);
+  }
 
   const turn = {
     index,
@@ -2404,29 +2543,50 @@ function findClaudeAssistantContainer(responseEl) {
 }
 
 /**
+ * 'user', 'assistant', or null, for a Claude message element — live or a
+ * detached cached clone (#409). A clone of the 2026-10 user row no longer sits
+ * under [data-user-scope], so the row selector cannot match it; it is
+ * recognised by the text bubble it holds instead.
+ *
+ * @param {Element} el
+ * @returns {string|null}
+ */
+function claudeRoleOf(el) {
+  if (!el || typeof el.matches !== 'function') return null;
+  if (el.matches(SELECTORS.assistantMessage)) return 'assistant';
+  if (el.matches(SELECTORS.userMessage)) return 'user';
+  if (SELECTORS.userContent && (el.matches(SELECTORS.userContent) || el.querySelector(SELECTORS.userContent))) return 'user';
+  return null;
+}
+
+/**
  * Extract turns from a Claude conversation.
- * User turns are identified by [data-testid="user-message"].
- * Assistant turns are identified by .row-start-2 (response-content row).
+ *
+ * Messages come from the capture cache where the site orders from it: the
+ * 2026-10 transcript virtualizes, and the live DOM after the scroll holds one
+ * window of it (#409). On the 2026-05 markup nothing carries an id, nothing is
+ * cached, and getCapturedMessageEls() hands back the live DOM in document
+ * order, as before.
+ *
  * @returns {Promise<Array>} - Array of turn objects
  */
 async function extractTurnsClaude() {
   const turns = [];
   let turnIndex = 0;
 
-  const userMsgs = Array.from(document.querySelectorAll(SELECTORS.userMessage));
-  const responseEls = Array.from(document.querySelectorAll(SELECTORS.assistantMessage));
-
-  const allMsgs = [...userMsgs, ...responseEls].sort((a, b) => {
-    const position = a.compareDocumentPosition(b);
-    return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-  });
+  const allMsgs = SELECTORS.ordersFromCapture ? getCapturedMessageEls() : queryMessages(document);
 
   for (let i = 0; i < allMsgs.length; i++) {
     const element = allMsgs[i];
-    const isUser = element.matches(SELECTORS.userMessage);
+    const role = claudeRoleOf(element);
+    if (!role) continue;
 
-    if (isUser) {
-      turns.push(extractUserTurn(element, turnIndex++));
+    if (role === 'user') {
+      // Text from the bubble; images from the whole row, because an upload
+      // sits beside the bubble, not inside it (#409).
+      const textEl = (SELECTORS.userContent && !element.matches(SELECTORS.userContent) &&
+        element.querySelector(SELECTORS.userContent)) || element;
+      turns.push(extractUserTurn(textEl, turnIndex++, element));
     } else {
       // element IS the per-turn container (.font-claude-response) — no
       // walking-up needed. Pre-2026-05 code used .row-start-2 as the
@@ -2434,6 +2594,14 @@ async function extractTurnsClaude() {
       // findClaudeAssistantContainer to find the bounding turn. With the
       // new selector that step is unnecessary (#114).
       turns.push(extractAssistantTurnClaude(element, turnIndex++));
+    }
+
+    // The message's own identity (#294), now that the site has one (#409);
+    // null, present and explicit, on markup that does not.
+    const messageId = messageIdOf(element);
+    turns[turns.length - 1].id = messageId || null;
+    if (messageId && SELECTORS.ordersFromCapture && !wasMeasuredOnSettledDom(messageId)) {
+      turns[turns.length - 1].orderFromUnsettledMeasurement = true;
     }
 
     if (i > 0 && i % 20 === 0) {
@@ -2990,6 +3158,12 @@ async function extractConversation() {
       incompleteReasons.push(
         'Scrolling did not reach the top of the conversation, so earlier messages are missing.');
     }
+    // The other end (#413): a virtualized list walked down from the starting
+    // point and never got to the newest message.
+    if (scrollResult.reachedBottom === false) {
+      incompleteReasons.push(
+        'Scrolling did not reach the end of the conversation, so later messages may be missing.');
+    }
     if (ordersFromCapture && orderStats.withoutOrderKey > 0) {
       incompleteReasons.push(
         `${orderStats.withoutOrderKey} of ${orderStats.captured} message(s) could not be positioned and were appended in capture order`);
@@ -3078,6 +3252,8 @@ async function extractConversation() {
           // that number meant, so the judgement does not have to be made by
           // whoever reads the export (#278).
           reachedTop: scrollResult.reachedTop === true,
+          // Present on sites that walk down first (#413); absent elsewhere.
+          ...(typeof scrollResult.reachedBottom === 'boolean' ? { reachedBottom: scrollResult.reachedBottom } : {}),
           terminationReason: scrollResult.terminationReason || 'unknown',
           finalScrollTop: typeof scrollResult.finalScrollTop === 'number'
             ? Math.round(scrollResult.finalScrollTop)
@@ -3256,6 +3432,8 @@ if (typeof module !== 'undefined' && module.exports) {
     countMessages,
     isRealScroller,
     findScrollContainer,
+    splitSelectorList,
+    claudeRoleOf,
     waitForLoadingComplete,
     scrollToLoadAllMessages,
     // Virtualized-list capture (#256) and bottom-anchored ordering (#264)

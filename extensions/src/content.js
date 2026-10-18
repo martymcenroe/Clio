@@ -431,13 +431,13 @@ let MESSAGE_RESCUED = 0;
 let MESSAGE_REFRESHED = 0;
 
 /**
- * Exchanges whose reply has been captured as an assistant unit (#399), and how
- * many provisional reply-block entries that unit displaced. See
- * supersedeReplyBlock().
- * @type {Set<string>}
+ * Replies seen offering reasoning during the scroll (#400), keyed per exchange
+ * (or per message where the site has no exchange container). Accumulated as
+ * messages render, because the live DOM at the end of a scroll holds one
+ * window of a virtualized list. See sweepReasoningOffered().
+ * @type {Set<string|Element>}
  */
-let UNIT_REPLY_EXCHANGES = new Set();
-let MESSAGE_SUPERSEDED = 0;
+let REASONING_OFFERED = new Set();
 
 /**
  * The scroller the ordering key is measured against, fixed for one scroll pass.
@@ -579,9 +579,11 @@ function messageIdOf(el) {
 /**
  * Is this element a reply rendered with no search unit (#399)?
  *
- * The block that directly holds SELECTORS.replyMarker and holds no assistant
- * message element. See replyMarker in selectors-chatgpt.js for why this is
- * code rather than a :has() selector.
+ * The block that directly holds SELECTORS.replyMarker, holds no assistant
+ * message element, and holds reply text. Without the text test, a block that
+ * carries only a reasoning line — whose unit is in the next block (#400) — is
+ * taken for a reply. See replyMarker in selectors-chatgpt.js for the shapes and
+ * for why this is code rather than a :has() selector.
  *
  * @param {Element} el
  * @returns {boolean}
@@ -590,7 +592,31 @@ function isAgentReply(el) {
   const marker = typeof SELECTORS !== 'undefined' && SELECTORS.replyMarker;
   if (!marker || !el || !el.children || typeof el.querySelector !== 'function') return false;
   const holdsMarker = Array.from(el.children).some(c => c.matches(marker));
-  return holdsMarker && !el.querySelector(SELECTORS.assistantMessage);
+  return holdsMarker && !el.querySelector(SELECTORS.assistantMessage) && holdsReplyText(el);
+}
+
+/**
+ * The content roots that make up a reply's text, in order: every root in the
+ * message except those inside a tool-activity line ("Inspected config.yaml",
+ * "Worked for 5m 34s") and those nested in another root, which the outer one
+ * already covers. A unit reply holds one; an agent-style reply holds several.
+ *
+ * @param {Element} messageEl
+ * @returns {Element[]}
+ */
+function replyContentRoots(messageEl) {
+  const contentSelector = SELECTORS.assistantContent || '.markdown';
+  const activitySelector = SELECTORS.activityHeader;
+  return Array.from(messageEl.querySelectorAll(contentSelector)).filter(root => {
+    if (activitySelector && root.closest(activitySelector)) return false;
+    const outer = root.parentElement && root.parentElement.closest(contentSelector);
+    return !(outer && messageEl.contains(outer));
+  });
+}
+
+/** Does this element hold any reply text, activity lines aside? */
+function holdsReplyText(el) {
+  return replyContentRoots(el).some(root => (root.textContent || '').trim());
 }
 
 /** Is this node one message — matched by a selector, or a unit-less reply? */
@@ -731,52 +757,22 @@ function refreshIfFuller(entry, el, id) {
 }
 
 /**
- * Keep one cache entry per reply when its block is seen before its unit (#399).
- *
- * A reply's block counts as a unit-less reply (isAgentReply) only while it
- * holds no assistant unit, and during a scroll-back a block can be on screen
- * for a moment before its unit mounts. Measured live: 39 of 79 blocks were
- * caught that way, each under the provisional id `<exchange>:reply`, beside the
- * real unit captured a moment later. So:
- *
- *   - capturing an assistant unit marks its exchange as having one, and drops
- *     the provisional block entry if there is one;
- *   - a block whose exchange is already marked is not cached at all.
- *
- * A no-op on a site with no replyMarker.
- *
- * @param {Element} el
- * @returns {boolean} true when `el` must not be cached
- */
-function supersedeReplyBlock(el) {
-  if (typeof SELECTORS === 'undefined' || !SELECTORS.replyMarker) return false;
-  if (isAgentReply(el)) {
-    const key = turnKeyOf(el);
-    return !!key && UNIT_REPLY_EXCHANGES.has(key);
-  }
-  if (chatgptRoleOf(el) !== 'assistant') return false;
-  const key = turnKeyOf(el);
-  if (!key || UNIT_REPLY_EXCHANGES.has(key)) return false;
-  UNIT_REPLY_EXCHANGES.add(key);
-  const provisional = `${key}:reply`;
-  if (MESSAGE_CACHE.delete(provisional)) MESSAGE_SUPERSEDED++;
-  MESSAGE_ARTIFACTS.delete(provisional);
-  return false;
-}
-
-/**
  * Snapshot every message currently rendered that we have not already kept, and
  * measure where it sits. A message already kept is re-cloned if its content has
- * grown since (refreshIfFuller).
+ * grown since (refreshIfFuller). Reasoning the rendered replies offer is noted
+ * on the same pass (#400), while it is on screen.
  * Cheap and idempotent — safe to call on every scroll tick and every mutation.
  * @returns {number} how many new messages were captured
  */
 function captureRenderedMessages() {
   let added = 0;
+  // Only where the export is built from this cache. The other sites keep
+  // every message in the DOM, so the end-of-run sweep already sees them all,
+  // and doing this on every mutation there would be cost with no gain.
+  if (SELECTORS.ordersFromCapture) sweepReasoningOffered(REASONING_OFFERED);
   for (const el of queryMessages(document)) {
     const id = messageIdOf(el);
     if (!id) continue;
-    if (supersedeReplyBlock(el)) continue;
     captureMessageArtifacts(el, id);
     const kept = MESSAGE_CACHE.get(id);
     if (kept) {
@@ -843,7 +839,6 @@ function captureDetachedMessages(nodes, record) {
     for (const el of candidates) {
       const id = messageIdOf(el);
       if (!id) continue;
-      if (supersedeReplyBlock(el)) continue;
       // Kept already, perhaps as a shell taken before its text rendered: the
       // node leaving the DOM may be the fullest copy there will ever be.
       const kept = MESSAGE_CACHE.get(id);
@@ -928,11 +923,6 @@ function getRescuedCount() {
 /** How many cached clones were replaced by a fuller render since the last reset (#399). */
 function getRefreshedCount() {
   return MESSAGE_REFRESHED;
-}
-
-/** How many provisional reply-block entries a unit displaced since the last reset (#399). */
-function getSupersededCount() {
-  return MESSAGE_SUPERSEDED;
 }
 
 /**
@@ -1030,8 +1020,7 @@ function resetMessageCache() {
   MESSAGE_CACHE_SEQ = 0;
   MESSAGE_RESCUED = 0;
   MESSAGE_REFRESHED = 0;
-  UNIT_REPLY_EXCHANGES = new Set();
-  MESSAGE_SUPERSEDED = 0;
+  REASONING_OFFERED = new Set();
   MESSAGE_ARTIFACTS = new Map();
   MESSAGE_SCROLLER = null;
 }
@@ -1205,24 +1194,77 @@ function isReasoningAffordance(el) {
 }
 
 /**
- * How many assistant turns visibly offer reasoning?
+ * Does anything in `scope` offer reasoning?
  *
- * Counted per TURN, not per element, so a turn carrying two matching controls
- * cannot inflate the number past the count of messages it is compared against.
+ * Two shapes. A control whose own text or attributes say so
+ * (isReasoningAffordance) — the 2026-05 markup. Or, in the 2026-10 markup
+ * (#400), a control inside a tool-activity line whose text carries the
+ * duration: the line reads "Worked for 5m 34s" and the control in it is a bare
+ * expand button with no text and no label. Measured live, 36 of the 38
+ * duration lines in one conversation carried one; a line without a control has
+ * nothing to reveal and does not count.
+ *
+ * @param {Element} scope
+ * @returns {boolean}
+ */
+function offersReasoning(scope) {
+  if (!scope || typeof scope.querySelectorAll !== 'function') return false;
+  const activity = typeof SELECTORS !== 'undefined' && SELECTORS.activityHeader;
+  for (const control of scope.querySelectorAll(REASONING_CLICKABLE)) {
+    if (isReasoningAffordance(control)) return true;
+    if (!activity) continue;
+    for (let line = control.closest(activity); line && scope.contains(line);
+      line = line.parentElement && line.parentElement.closest(activity)) {
+      if (REASONING_DURATION.test(line.textContent || '')) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Note every rendered reply that offers reasoning, once per reply, into `into`.
+ *
+ * Where the reasoning line lives decides where to look. In the 2026-05 markup
+ * it is inside the assistant message. In the 2026-10 markup it is in the
+ * marker's block, and the unit is in the next block (#400), so the marker
+ * blocks are read directly. Both key on the exchange where there is one, so a
+ * reply found both ways counts once; otherwise on the message id, and failing
+ * that the element.
+ *
+ * @param {Set<string|Element>} into
+ */
+function sweepReasoningOffered(into) {
+  if (typeof SELECTORS === 'undefined' || !SELECTORS.assistantMessage) return;
+  const consider = (el) => {
+    const key = turnKeyOf(el) || messageIdOf(el) || el;
+    if (!into.has(key) && offersReasoning(el)) into.add(key);
+  };
+  if (SELECTORS.replyMarker) {
+    for (const marker of document.querySelectorAll(SELECTORS.replyMarker)) {
+      if (marker.parentElement) consider(marker.parentElement);
+    }
+  }
+  for (const el of document.querySelectorAll(SELECTORS.assistantMessage)) consider(el);
+}
+
+/**
+ * How many assistant replies visibly offer reasoning?
+ *
+ * Counted per REPLY, not per element, so a reply carrying two matching
+ * controls cannot inflate the number past the count of messages it is
+ * compared against.
+ *
+ * The replies noted during the scroll (captureRenderedMessages), plus those on
+ * screen now. Reading only the live DOM at the end of an extraction saw one
+ * window of a virtualized list (#400).
  *
  * @returns {number}
  */
 function countReasoningAffordances() {
   if (!SELECTORS.assistantMessage) return 0;
-  let n = 0;
-  const turns = document.querySelectorAll(SELECTORS.assistantMessage);
-  for (const turn of turns) {
-    const controls = turn.querySelectorAll(REASONING_CLICKABLE);
-    for (const el of controls) {
-      if (isReasoningAffordance(el)) { n++; break; }
-    }
-  }
-  return n;
+  const offered = new Set(REASONING_OFFERED);
+  sweepReasoningOffered(offered);
+  return offered.size;
 }
 
 /**
@@ -2277,18 +2319,10 @@ function extractAssistantTurnChatGPT(messageEl, index) {
   }
 
   // Response content: every content root in the message, in order, read as
-  // one. A unit reply holds one; an agent-style reply (#399) interleaves
-  // several with tool-activity lines, and reading only the first dropped the
-  // rest. Activity lines are not the reply's text and are skipped, as is any
-  // root nested inside another, which the outer one already covers.
-  const contentSelector = SELECTORS.assistantContent || '.markdown';
+  // one (replyContentRoots). Reading only the first dropped the rest of an
+  // agent-style reply (#399).
   const activitySelector = SELECTORS.activityHeader;
-  const inActivity = (el) => !!(activitySelector && el.closest(activitySelector));
-  const roots = Array.from(messageEl.querySelectorAll(contentSelector)).filter(root => {
-    if (inActivity(root)) return false;
-    const outer = root.parentElement && root.parentElement.closest(contentSelector);
-    return !(outer && messageEl.contains(outer));
-  });
+  const roots = replyContentRoots(messageEl);
   let content;
   if (roots.length) {
     content = roots.map(extractTextContent).filter(Boolean).join('\n\n');
@@ -2338,8 +2372,6 @@ async function extractTurnsChatGPT() {
   // Every message seen during the scroll, not just the window still rendered.
   // ChatGPT evicts as it loads, so reading the live DOM here would return one
   // window of a long conversation (#256).
-  // A reply block caught before its unit mounted has already been dropped from
-  // the cache by supersedeReplyBlock(), so each reply arrives here once.
   const messageEls = getCapturedMessageEls();
 
   for (let i = 0; i < messageEls.length; i++) {
@@ -2905,10 +2937,6 @@ async function extractConversation() {
         // re-cloned once it had (#399). Before the refresh existed they were
         // dropped as blank turns from a capture reporting contentComplete.
         refreshedAfterLateRender: getRefreshedCount(),
-        // Reply blocks seen before their unit mounted, whose provisional entry
-        // the unit replaced (#399). Each one is a reply that would otherwise
-        // have been exported twice or out of place.
-        replyBlocksSupersededByUnit: getSupersededCount(),
         // The counter said 35 of 233 and nothing told anyone (#282). A reader
         // had to know the field existed, find it inside orderInfo, and already
         // know what a non-zero value implies. This says it instead.
@@ -3011,6 +3039,7 @@ if (typeof module !== 'undefined' && module.exports) {
     expandAllContent,
     // Reasoning the page offers versus what we captured (#324)
     isReasoningAffordance,
+    offersReasoning,
     countReasoningAffordances,
     REASONING_DURATION,
     extractImages,
@@ -3034,6 +3063,8 @@ if (typeof module !== 'undefined' && module.exports) {
     messageIdOf,
     chatgptRoleOf,
     isAgentReply,
+    replyContentRoots,
+    holdsReplyText,
     isMessageElement,
     queryMessages,
     turnKeyOf,
@@ -3043,7 +3074,6 @@ if (typeof module !== 'undefined' && module.exports) {
     interpolateFromSiblings,
     getRescuedCount,
     getRefreshedCount,
-    getSupersededCount,
     layoutRectOf,
     remeasureRenderedMessages,
     getCapturedMessageEls,

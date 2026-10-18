@@ -195,6 +195,9 @@ async function main() {
         messageCount: res.data.metadata.messageCount,
         contentComplete: res.data.metadata.contentComplete,
         incompleteReasons: res.data.metadata.incompleteReasons,
+        // What the page offered against what was taken (#324, #400).
+        reasoningAffordances: res.data.metadata.reasoningAffordances,
+        reasoningCaptured: res.data.metadata.reasoningCaptured,
         scrollInfo: res.data.metadata.scrollInfo,
         orderInfo: res.data.metadata.orderInfo
       },

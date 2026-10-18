@@ -27,7 +27,8 @@ const {
   getCapturedMessageEls,
   getCaptureOrderStats,
   getRefreshedCount,
-  getSupersededCount,
+  countReasoningAffordances,
+  offersReasoning,
   layoutRectOf,
   measureFromBottom,
   resetMessageCache,
@@ -285,49 +286,43 @@ describe('extracted turns', () => {
     expect(turns.some(t => /Worked for/.test(t.content))).toBe(false);
   });
 
-  test('a block caught before its unit mounted is dropped in favour of the unit', async () => {
-    // Exchange 4 mid-mount: the reply text present in a bare root, no unit yet.
-    const block = document.querySelector('[data-chatgpt-search-unit-key="fallback-turn-3:2:assistant"]').parentElement;
-    const unit = block.querySelector('[data-chatgpt-search-unit-key]');
-    const bare = document.createElement('div');
-    bare.innerHTML = '<div data-markdown-text-style="assistant-message" data-markdown-text-tone="primary" class="MarkdownRoot-rZKhxa"><p>Removed the second timeout line.</p></div>';
-    unit.replaceWith(bare);
-    captureRenderedMessages();
-    expect(getCapturedMessageEls().map(messageIdOf)).toContain('55555555-5555-4555-8555-555555555555:reply');
+  test('the block holding only a reasoning line is not a message; its exchange\'s unit is', () => {
+    // Live, #400: in 37 of 37 exchanges with both, the marker's block held only
+    // "Worked for …" and the unit sat in the next block.
+    const workedBlock = document.querySelector('[data-turn-key="55555555-5555-4555-8555-555555555555"] [data-chatgpt-agent-turn-start]').parentElement;
+    expect(isAgentReply(workedBlock)).toBe(false);
 
-    // Then the unit arrives in its place.
-    bare.replaceWith(unit);
     captureRenderedMessages();
-
-    // The provisional entry is gone from the cache, not merely skipped later,
-    // so the capture counts describe what is exported.
-    expect(getSupersededCount()).toBe(1);
     expect(getCapturedMessageEls().map(messageIdOf)).not.toContain('55555555-5555-4555-8555-555555555555:reply');
     expect(getCaptureOrderStats().captured).toBe(8);
+  });
 
+  test('a marker block carrying reply text is kept even when its exchange also has a unit', async () => {
+    // Never observed, and the reason the rule is "keep" rather than "replace":
+    // a reply exported twice is visible, a reply dropped is not.
+    const workedBlock = document.querySelector('[data-turn-key="55555555-5555-4555-8555-555555555555"] [data-chatgpt-agent-turn-start]').parentElement;
+    const text = document.createElement('div');
+    text.innerHTML = '<div data-markdown-text-style="assistant-message" data-markdown-text-tone="tertiary" class="MarkdownRoot-rZKhxa"><p>Looking at the file first.</p></div>';
+    workedBlock.appendChild(text);
+
+    captureRenderedMessages();
     const turns = await extractTurnsChatGPT();
-    const replies = turns.filter(t => t.content === 'Removed the second timeout line.');
-    expect(replies.map(t => t.id)).toEqual(['dddddddd-dddd-4ddd-8ddd-dddddddddddd']);
+    expect(turns.slice(7).map(t => [t.id, t.content])).toEqual([
+      ['55555555-5555-4555-8555-555555555555:reply', 'Looking at the file first.'],
+      ['dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'Removed the second timeout line.']
+    ]);
   });
 
-  test('a block is not cached at all once its exchange has a unit', () => {
-    captureRenderedMessages();
-    // The unit is virtualized away while its block stays: the block now looks
-    // unit-less, holding only its "Worked for" line.
-    document.querySelector('[data-chatgpt-search-unit-key="fallback-turn-3:2:assistant"]').remove();
-    captureRenderedMessages();
-    expect(getCapturedMessageEls().map(messageIdOf)).not.toContain('55555555-5555-4555-8555-555555555555:reply');
-  });
-
-  test('a unit-less reply showing only an activity line exports empty, not as its caption', async () => {
+  test('a marker block with nothing but an activity line is not a message at all', async () => {
     // Live: a cancelled reply whose block held nothing but "Stopped thinking".
     const reply = document.querySelector('[data-turn-key="44444444-4444-4444-8444-444444444444"] [data-chatgpt-agent-turn-start]').parentElement;
     reply.querySelectorAll('[data-markdown-text-tone]').forEach(root => {
       if (!root.closest('[class*="activity-header"]')) root.remove();
     });
+    expect(isAgentReply(reply)).toBe(false);
     const turns = await extractTurnsChatGPT();
-    expect(turns[5].id).toBe(IDS[5]);
-    expect(turns[5].content).toBe('');
+    expect(turns.map(t => t.id)).not.toContain(IDS[5]);
+    expect(turns).toHaveLength(7);
   });
 
   test('a code block with no <pre> is fenced with its header language, and the header does not leak', async () => {
@@ -362,6 +357,42 @@ describe('code-block language comes from the header, not from sniffing', () => {
     const code = document.querySelectorAll('[data-code-block] code')[i];
     expect(codeBlockRootOf(code)).toBe(document.querySelectorAll('[data-code-block]')[i]);
     expect(detectCodeLanguage(code, codeBlockRootOf(code))).toBe(lang);
+  });
+});
+
+describe('reasoning offered on the 2026-10 markup (#400)', () => {
+  const workedBlock = () =>
+    document.querySelector('[data-turn-key="55555555-5555-4555-8555-555555555555"] [data-chatgpt-agent-turn-start]').parentElement;
+
+  test('a "Worked for" line with its expand button counts, though the button has no text or label', () => {
+    expect(offersReasoning(workedBlock())).toBe(true);
+    expect(countReasoningAffordances()).toBe(1);
+  });
+
+  test('a tool-activity line with no duration is not reasoning', () => {
+    const agentBlock = document.querySelector('[data-turn-key="44444444-4444-4444-8444-444444444444"] [data-chatgpt-agent-turn-start]').parentElement;
+    agentBlock.querySelector('[class*="activity-header"]').appendChild(document.createElement('button'));
+    expect(offersReasoning(agentBlock)).toBe(false);
+  });
+
+  test('a duration line with no control has nothing to reveal and does not count', () => {
+    // Live: 2 of 38 duration lines carried no control.
+    workedBlock().querySelector('button[aria-expanded]').remove();
+    expect(countReasoningAffordances()).toBe(0);
+  });
+
+  test('counted once per reply, however many controls it carries', () => {
+    const line = workedBlock().querySelector('[class*="activity-header"]');
+    line.appendChild(document.createElement('button'));
+    expect(countReasoningAffordances()).toBe(1);
+  });
+
+  test('a reply evicted from the page after it rendered still counts', () => {
+    // The old counter read the live DOM at the end of the extraction, which on
+    // a virtualized list is one window of the conversation.
+    captureRenderedMessages();
+    document.querySelector('[data-turn-key="55555555-5555-4555-8555-555555555555"]').remove();
+    expect(countReasoningAffordances()).toBe(1);
   });
 });
 

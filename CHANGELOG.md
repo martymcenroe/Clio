@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.9.3] — 2026-10-17
+
+### Fixed
+- On ChatGPT, the check that reports reasoning the page offered but the capture did not take (#324) works on the 2026-10 markup again. The "Worked for 5m 34s" line sits in a block beside the reply, and its expand button carries no text or label, so the old count was zero on every conversation. It now counts per reply, from what rendered during the scroll rather than only what is on screen at the end (#400)
+- A reply's marker block counts as a message only when it holds reply text. A block holding only a reasoning line is no longer taken for a reply and then discarded, and a block that does hold text is always kept, even beside a unit, so no reply text can be dropped (#400)
+
+### Changed
+- **ChatGPT conversations that show reasoning now export with `contentComplete: false`** and an `incompleteReasons` entry naming how many replies' reasoning was not captured. That is the truthful answer while reasoning capture is unbuilt (#316). It was the answer 1.9.2 should have given and did not
+- `orderInfo.replyBlocksSupersededByUnit` is removed; the mechanism it counted no longer exists (#400)
+
+### Added
+- `tools/chatgpt/README.md` describes running the live probes from Ubuntu (WSL) as well as Windows, and why the two sides cannot be mixed (#403)
+
 ## [1.9.2] — 2026-10-17
 
 ChatGPT replaced its conversation markup, and every ChatGPT extraction in 1.9.1 failed before it began with "ChatGPT UI may have changed. Missing selectors: messages." This release reads the new markup and keeps reading the old (#399).
@@ -17,7 +30,7 @@ ChatGPT replaced its conversation markup, and every ChatGPT extraction in 1.9.1 
 - A message first seen before its content rendered is re-captured once the content arrives: an assistant reply before its text, an image-only user message before its image. Without this, 24 of 75 replies in one measured capture were dropped as blank in an export that reported `contentComplete: true`. `orderInfo.refreshedAfterLateRender` counts them (#399)
 - Agent-style replies, which ChatGPT renders with no message unit and no id (tool activity interleaved with text), are captured, every text block in order, without the activity lines. One measured conversation had 12 of them, all previously missing (#399)
 - Reply blocks are `display: contents` and have no box of their own; they are now positioned by their first laid-out child, so they sort into place rather than being appended at the end (#399)
-- A reply block caught before its unit mounted is replaced by the unit in the capture cache, so no reply is exported twice. `orderInfo.replyBlocksSupersededByUnit` counts them (#399)
+- A reply's marker block that holds only a reasoning line is replaced in the capture cache by its exchange's unit, so no reply is exported twice. `orderInfo.replyBlocksSupersededByUnit` counts them (#399). *Corrected 2026-10-17: this entry first said such a block had been "caught before its unit mounted". It had not; the unit is in the next block of the exchange by design, which 1.9.3 handles directly (#400).*
 
 ### Added
 - `tools/chatgpt/probe-turns.js` — structural census of the live thread markup, the probe that found the new shape (#399)

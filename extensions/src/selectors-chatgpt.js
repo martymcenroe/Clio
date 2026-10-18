@@ -74,18 +74,21 @@ const SELECTORS = {
 
   // A reply with no search unit (#399).
   //
-  // Every reply's block opens with this marker. In most replies the assistant
-  // unit follows somewhere in that block. In an agent-style reply — tool
-  // activity ("Inspected…", "Fetched…") interleaved with text — no unit is ever
-  // rendered: the text sits in bare MarkdownRoots with no message id anywhere.
-  // One live conversation had 12 such replies out of 79, all invisible to the
-  // unit selectors. So the block holding the marker is the message, but only
-  // when it holds no unit, which keeps the two shapes from ever matching one
-  // reply twice.
+  // Every reply opens with this marker, in a block of its own. Three shapes,
+  // all measured on one live conversation (79 replies):
   //
-  // Not "the element after the marker": in 39 of those 79 replies that element
-  // is the "Worked for 5m 34s" line, with the unit further down the block, and
-  // selecting it would have invented an assistant turn per reply.
+  //   28  the assistant unit is in the marker's block, right after the marker;
+  //   39  the marker's block holds only a reasoning line ("Worked for 5m 34s",
+  //       with an expand button), and the unit is in the NEXT block of the
+  //       exchange (#400 — verified on 37 of 37 that had both);
+  //   12  agent-style: tool activity ("Inspected…", "Fetched…") and text in
+  //       bare MarkdownRoots, no unit and no message id anywhere.
+  //
+  // The third shape is invisible to the unit selectors, so the marker's block
+  // is the message when it holds no unit AND holds reply text. The text test is
+  // what keeps the second shape, a block of reasoning chrome, from being taken
+  // for a reply; 1.9.2 caught those blocks and then discarded them in favour of
+  // the unit, which reached the same export by a longer road.
   //
   // Found in code (content.js isAgentReply) rather than with
   // `div:has(> marker):not(:has(unit))`: Chrome evaluates that, but jsdom's

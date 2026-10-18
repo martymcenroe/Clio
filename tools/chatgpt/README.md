@@ -29,6 +29,38 @@ action at all.
 
 None of these scripts ever close a browser. The operator owns those windows.
 
+## Windows or Ubuntu: which browser, which node
+
+The scripts run on either side, but the node, the Chrome and the profile have
+to come from the **same** side (#403).
+
+**From Windows** (Git Bash or PowerShell): Windows node, Windows Chrome, and the
+profiles in the Windows home, `C:\Users\<you>\.clio-profiles\`.
+
+**From Ubuntu (WSL)**: Linux node and Linux Chrome (`/usr/bin/google-chrome`).
+Run `node tools/chatgpt/open-session.js` as usual. It finds Linux Chrome on its
+own, and `os.homedir()` puts the profile at `~/.clio-profiles/chatgpt` in the
+**Linux** home. The window opens on the Ubuntu desktop through WSLg. The first
+time, sign in to the site in that window; the profile keeps the login after
+that.
+
+Three things rule out mixing the sides:
+
+- **Windows node from Ubuntu** (`/mnt/c/Program Files/nodejs/node.exe`) is
+  refused by the shell guard as an accidental Windows build. Use the `node` on
+  the Ubuntu PATH.
+- **Linux node cannot reach a Windows Chrome.** WSL in `nat` networking mode
+  (`wslinfo --networking-mode`) gives Ubuntu its own `127.0.0.1`, so
+  `connectOverCDP('http://127.0.0.1:9333')` finds nothing on the Windows side.
+- **The Windows profile is no use to Linux Chrome.** Its cookies are encrypted
+  with a Windows-only key, so it opens signed out, and two Chromes sharing one
+  profile across the `/mnt/c` mount risk corrupting it.
+
+Chrome shows a bar reading "You are using an unsupported command-line flag:
+--disable-blink-features=AutomationControlled". That is `open-session.js`
+working as intended: the flag stops the site treating the window as automated.
+Dismiss it.
+
 ## Environment
 
 | variable | meaning |

@@ -18,9 +18,10 @@
       language label sits beside the copy/wrap controls;
     - an agent-style reply (exchange 3) with NO search unit and no message id:
       tertiary and primary MarkdownRoots around a tool-activity line;
-    - a reply (exchange 4) whose "Worked for" activity line sits in the block
-      before its unit, the shape in which the element after the reply marker
-      is not the reply.
+    - a reply with reasoning (exchange 4): the marker's block holds only the
+      "Worked for" line and its expand button, and the unit is in the NEXT
+      block. Verified live on 37 of 37 such exchanges (#400); an earlier
+      version of this fixture put both in one block, which was never observed.
   No element carries data-message-author-role, data-message-id, data-turn-id or
   .markdown, which is the whole defect.
 -->
@@ -173,7 +174,9 @@
                         </div>
                         <div class="block-BQZwFn">
                           <span data-chatgpt-agent-turn-start></span>
-                          <div class="min-w-0 text-size-chat relative overflow-visible"><div class="flex min-w-0 flex-col"><div class="group/activity-header relative inline-flex min-w-0"><span class="inline-flex min-w-0 gap-1.5"><span class="text-text/60 flex min-w-0 max-w-full">Worked for 5m 34s</span></span></div></div></div>
+                          <div class="flex min-w-0 items-start gap-3"><div class="min-w-0 text-size-chat relative overflow-visible"><div class="flex min-w-0 flex-col"><div class="group/activity-header relative inline-flex min-w-0"><span class="inline-flex min-w-0 gap-1.5"><span class="text-text/60 flex min-w-0 max-w-full">Worked for 5m 34s</span><button aria-expanded="false" class="no-drag cursor-interaction items-center select-none"><svg><use></use></svg></button></span></div></div></div></div>
+                        </div>
+                        <div class="block-BQZwFn">
                           <div data-content-search-unit-key="fallback-turn-3:2:assistant" data-chatgpt-search-unit-key="fallback-turn-3:2:assistant" data-chatgpt-search-message-ids="dddddddd-dddd-4ddd-8ddd-dddddddddddd dddddddd-dddd-4ddd-8ddd-dddddddddddd">
                             <h4 data-conversation-role="assistant" class="sr-only m-0 select-none print:not-sr-only">ChatGPT said:</h4>
                             <div data-chatgpt-selection-conversation-id="cccccccc-cccc-4ccc-8ccc-cccccccccccc" data-chatgpt-selection-message-id="dddddddd-dddd-4ddd-8ddd-dddddddddddd" class="group flex min-w-0 flex-col">

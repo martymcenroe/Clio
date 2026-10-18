@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [Unreleased]
+
+### Added
+- `tools/extension/` — capture through the real, loaded extension (popup click to ZIP), inspect what a ZIP actually holds, compare a real capture with an injected one by message id, and generate synthetic test images. The first live coverage of the extension itself since Chrome stopped honouring `--load-extension` (#406, toward #308)
+
 ## [1.9.3] — 2026-10-17
 
 ### Fixed

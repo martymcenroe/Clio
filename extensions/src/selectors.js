@@ -98,13 +98,23 @@ const SELECTORS = {
   // 1024 (measured: 1024×559, 16,227 bytes). Gemini's own "Download full size
   // image" asks for the same kind of URL with =d-I (1408×768, 321,273 bytes),
   // so that is tried first and the displayed copy kept, and marked, if it
-  // fails. Once an image is shown, the page swaps its src for a blob: URL, so
-  // the https URL is remembered as it goes (trackSwaps, watchImageSrcSwaps).
+  // fails.
+  //
+  // The page has two loading paths for the image, recorded from document
+  // start: on one it sets that https URL as the <img> src and leaves it; on
+  // the other it fetches the image itself, discards the <img>, and sets a
+  // blob: on a fresh one, so the URL is never in the page. A src that does
+  // change from the https URL to blob: on the same element is remembered
+  // (trackSwaps, watchImageSrcSwaps); an image inside `generated-image` that
+  // nothing identifies is marked as the displayed copy from where it sits
+  // (displayedIn), since every generated image measured is shown capped and
+  // re-encoded.
   imageRenditions: {
     reduced: '^(https://lh3\\.googleusercontent\\.com/gg/[^=/?#]+)=(?:[^/?#]*-)?[swh][1-9][0-9]*(?:-[^/?#]*)?$',
     rendition: 'display',
     fullSize: '$1=d-I',
-    trackSwaps: true
+    trackSwaps: true,
+    displayedIn: 'generated-image'
   },
 
   // Citation decoration (#279). Null because no citation-favicon markup has

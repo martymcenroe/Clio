@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.9.8] — 2026-10-18
+
+### Fixed
+- A Gemini generated image captured as the displayed copy is marked on every loading path. Recorded from document start, the page loads the image one of two ways: it sets the size-capped https URL as the `<img>` src, or it fetches the image itself, discards the `<img>` and sets a `blob:` on a fresh one, so the URL is never in the page. 1.9.7 knew a copy was reduced only from its URL, so on the second path, which every real capture so far has met, it exported the displayed copy (1024×559, 16,227 bytes) unmarked and complete. An image inside `generated-image` that nothing else identifies is now marked `"display"` from where it sits; where the URL is known, the full size is still tried first (#425)
+
 ## [1.9.7] — 2026-10-18
 
 ### Fixed

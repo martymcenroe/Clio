@@ -2340,10 +2340,11 @@ function findImages(element, turnIndex) {
       DECORATION_SKIPPED++;
       return false;
     })
-    .map(img => ({
-      src: img.src,
-      turnIndex
-    }));
+    .map(img => {
+      // Read here, where the element is in hand (#425).
+      const shownAs = shownAsOf(img);
+      return { src: img.src, turnIndex, ...(shownAs ? { shownAs } : {}) };
+    });
 }
 
 /**
@@ -2456,11 +2457,7 @@ function extractUserTurn(element, index, imageScope) {
     role: 'user',
     content: extractTextContent(element),
     thinking: null,
-    attachments: images.map((img) => ({
-      type: 'image',
-      filename: null, // Will be set during image processing
-      originalSrc: img.src
-    }))
+    attachments: images.map(imageAttachment)
   };
 }
 
@@ -2486,11 +2483,7 @@ function extractAssistantTurn(element, index) {
     role: 'assistant',
     content: extractTextContent(contentClone),
     thinking,
-    attachments: images.map(img => ({
-      type: 'image',
-      filename: null,
-      originalSrc: img.src
-    }))
+    attachments: images.map(imageAttachment)
   };
 }
 
@@ -2619,11 +2612,7 @@ function extractAssistantTurnClaude(element, index) {
     content,
     thinking,
     toolUse,
-    attachments: images.map(img => ({
-      type: 'image',
-      filename: null,
-      originalSrc: img.src
-    }))
+    attachments: images.map(imageAttachment)
   };
 
   // Mark turns whose entire response lived inside the expandable thinking
@@ -2800,11 +2789,7 @@ function extractAssistantTurnChatGPT(messageEl, index) {
     content,
     thinking,
     modelSlug,
-    attachments: images.map(img => ({
-      type: 'image',
-      filename: null,
-      originalSrc: img.src
-    }))
+    attachments: images.map(imageAttachment)
   };
 }
 
@@ -3093,6 +3078,38 @@ function imageRendition(src) {
 }
 
 /**
+ * What an image is shown as, from where it sits rather than from its URL
+ * (#425): on Gemini, an image inside `generated-image` is shown capped and
+ * re-encoded, and on one of its two loading paths the page fetches it itself
+ * and sets a blob: on a fresh element, so its URL is never in the page and
+ * imageRendition() cannot tell. null where the site has no such rule.
+ *
+ * @param {Element} img
+ * @returns {string|null}
+ */
+function shownAsOf(img) {
+  const r = typeof SELECTORS !== 'undefined' && SELECTORS.imageRenditions;
+  if (!r || !r.displayedIn || !img || typeof img.closest !== 'function') return null;
+  return img.closest(r.displayedIn) ? r.rendition : null;
+}
+
+/**
+ * The attachment an image found by findImages() becomes. `shownAs` is a hint
+ * for extractImages() and does not reach the export.
+ *
+ * @param {{src: string, shownAs?: string}} found
+ * @returns {{type: string, filename: null, originalSrc: string, shownAs?: string}}
+ */
+function imageAttachment(found) {
+  return {
+    type: 'image',
+    filename: null, // Will be set during image processing
+    originalSrc: found.src,
+    ...(found.shownAs ? { shownAs: found.shownAs } : {})
+  };
+}
+
+/**
  * The full-size image a reduced copy stands for, or null when it cannot be
  * had (#425). Failure is expected and silent: the displayed copy is kept, and
  * marked, by the caller.
@@ -3124,10 +3141,12 @@ async function fetchFullSize(url, src, turnIndex, imageIndex) {
  * @param {string} src - Image source URL
  * @param {number} turnIndex - Which turn this image belongs to
  * @param {number} imageIndex - Image sequence number
+ * @param {string|null} [shownAs] - what the image's place says it is shown
+ *   as (shownAsOf), used when its URL says nothing
  * @returns {Promise<Object>} - ImageData or error object
  */
-async function fetchImage(src, turnIndex, imageIndex) {
-  const rendition = imageRendition(src);
+async function fetchImage(src, turnIndex, imageIndex, shownAs) {
+  const rendition = imageRendition(src) || (shownAs ? { rendition: shownAs, fullSize: null } : null);
   if (rendition && rendition.fullSize) {
     const full = await fetchFullSize(rendition.fullSize, src, turnIndex, imageIndex);
     if (full) return full;
@@ -3253,11 +3272,15 @@ async function extractImages(turns) {
   const imageSources = [];
   turns.forEach(turn => {
     turn.attachments.forEach(att => {
+      // The placement hint is for the fetch only, not the export (#425).
+      const shownAs = att.shownAs || null;
+      delete att.shownAs;
       if (att.type === 'image' && att.originalSrc) {
         imageSources.push({
           src: att.originalSrc,
           turnIndex: turn.index,
-          attachment: att
+          attachment: att,
+          shownAs
         });
       }
     });
@@ -3272,7 +3295,7 @@ async function extractImages(turns) {
 
     const results = await Promise.all(
       batch.map((item, batchIdx) =>
-        fetchImage(item.src, item.turnIndex, imageIndex + batchIdx)
+        fetchImage(item.src, item.turnIndex, imageIndex + batchIdx, item.shownAs)
       )
     );
 
@@ -3705,6 +3728,8 @@ if (typeof module !== 'undefined' && module.exports) {
     fetchImage,
     fetchImageAsShown,
     imageRendition,
+    shownAsOf,
+    imageAttachment,
     watchImageSrcSwaps,
     SRC_ORIGINALS,
     isCitationDecoration,

@@ -1825,7 +1825,11 @@ async function scrollToLoadAllMessages(onProgress) {
  */
 function extractTitle() {
   if (SELECTORS.sessionTitle) {
-    const titleEl = document.querySelector(SELECTORS.sessionTitle);
+    // A match inside the site's title chrome is a page label, not the
+    // conversation's title (#423: Gemini's mode picker, "Auto").
+    const chrome = SELECTORS.titleChrome;
+    const titleEl = Array.from(document.querySelectorAll(SELECTORS.sessionTitle))
+      .find(el => !(chrome && el.closest(chrome)));
     if (titleEl) {
       return titleEl.textContent.trim();
     }
@@ -1836,7 +1840,10 @@ function extractTitle() {
   if (site === 'claude') {
     title = title.replace(/ - Claude$/, '');
   } else if (site === 'gemini') {
-    title = title.replace(/ - Gemini$/, '');
+    // " - Google Gemini" since 2026-10 (#423), " - Gemini" before. A page
+    // titled only with the product's name has no title of its own yet.
+    title = title.replace(/ - (?:Google )?Gemini$/, '');
+    if (/^(?:Google )?Gemini$/.test(title.trim())) title = '';
   }
   // ChatGPT: title is already clean (no suffix)
   return title.trim() || 'Untitled Conversation';
@@ -2131,6 +2138,11 @@ function extractTextContent(element) {
   // animated web-search "Research complete" widget injects <style> keyframes
   // inside the message subtree, which would land in the extracted text (#206).
   clone.querySelectorAll('style, script').forEach(el => el.remove());
+  // A site's own marks for text that is not content, such as Gemini's
+  // screen-reader headings ("You said", "Gemini said", #421).
+  if (typeof SELECTORS !== 'undefined' && SELECTORS.textChrome) {
+    clone.querySelectorAll(SELECTORS.textChrome).forEach(el => el.remove());
+  }
 
   // Process code blocks - preserve with markdown formatting
   const codeBlocks = clone.querySelectorAll(SELECTORS.codeBlock);
@@ -2150,12 +2162,99 @@ function extractTextContent(element) {
     // replacing anything smaller leaves the label ("Bash") in the text.
     const pre = codeBlockRootOf(code) || outermostPre(code) || code;
     const lang = detectCodeLanguage(code, pre);
-    const codeText = code.textContent;
+    // A trailing newline in the code would stand as a blank line before the
+    // closing fence (#422).
+    const codeText = code.textContent.replace(/\n+$/, '');
     const replacement = document.createTextNode(`\n\`\`\`${lang}\n${codeText}\n\`\`\`\n`);
     pre.replaceWith(replacement);
   });
 
+  // After the fences, so nothing is inserted into code.
+  separateBlocks(clone);
+
   return clone.textContent.trim();
+}
+
+/**
+ * Paragraph-level blocks: a blank line between two of them (#426).
+ * @type {Set<string>}
+ */
+const PARAGRAPH_BLOCKS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+  'BLOCKQUOTE', 'PRE', 'TABLE', 'UL', 'OL', 'HR']);
+/**
+ * Line-level blocks: a single newline between two of them (#426).
+ * @type {Set<string>}
+ */
+const LINE_BLOCKS = new Set(['LI', 'TR', 'THEAD', 'TBODY', 'TFOOT', 'DIV']);
+
+/**
+ * Put the breaks between blocks back into a clone, so its textContent reads as
+ * the page does (#426).
+ *
+ * textContent puts nothing between two elements. Two paragraphs stay apart
+ * only if the page leaves whitespace between them, and measured live on
+ * 2026-10-18 it mostly does not: on ChatGPT 200 of 200 adjacent blocks had
+ * none, on Gemini 3 of 3, on Claude 3 of 50. Every such boundary ran its two
+ * blocks together ("as requested.The format follows"). A separator is added
+ * only where none is there, so a page that already spaces its blocks (Claude,
+ * mostly) is left as it was; a <br> becomes a newline. Inline elements are
+ * untouched.
+ *
+ * @param {Element} root - a detached clone, modified in place
+ */
+function separateBlocks(root) {
+  const doc = root.ownerDocument || document;
+  root.querySelectorAll('br').forEach(br => br.replaceWith(doc.createTextNode('\n')));
+
+  // Cells within a row: " | ", as the markdown table the reply was written
+  // in. Measured on the same ChatGPT conversation, adjacent table cells were
+  // the only boundaries left once blocks were separated (10 of 10). Any
+  // whitespace between two cells is template layout and is replaced, so a row
+  // stays on one line.
+  for (const cell of Array.from(root.querySelectorAll('td, th'))) {
+    let n = cell.nextSibling;
+    while (n && n.nodeType !== 1) {
+      const next = n.nextSibling;
+      if (n.nodeType === 3 && !/\S/.test(n.textContent)) n.remove();
+      else if (n.nodeType === 3) break;
+      n = next;
+    }
+    const after = cell.nextElementSibling;
+    if (after && (after.tagName === 'TD' || after.tagName === 'TH')) {
+      cell.after(doc.createTextNode(' | '));
+    }
+  }
+
+  // Is `el` already set apart from what is beside it, on one side? true when
+  // the neighbouring text (a text node's, or an element's, such as a wrapper
+  // around a code fence, which starts with a newline) has whitespace at the
+  // edge that touches `el`; false when content touches it; null when nothing
+  // is there. Comments and empty nodes are looked through: they show nothing.
+  const separated = (el, dir) => {
+    for (let n = el[dir]; n; n = n[dir]) {
+      if (n.nodeType !== 1 && n.nodeType !== 3) continue;
+      const t = n.textContent || '';
+      if (!t) continue;
+      return /\s/.test(dir === 'nextSibling' ? t[0] : t[t.length - 1]);
+    }
+    return null;
+  };
+
+  for (const el of Array.from(root.querySelectorAll('*'))) {
+    const para = PARAGRAPH_BLOCKS.has(el.tagName);
+    if (!para && !LINE_BLOCKS.has(el.tagName)) continue;
+    // A block with no text (an <hr>, an empty wrapper) separates nothing.
+    const own = el.textContent || '';
+    if (!/\S/.test(own)) continue;
+    const sep = para ? '\n\n' : '\n';
+    // Whitespace at the block's own edge already sets it apart on that side.
+    if (separated(el, 'nextSibling') === false && !/\s/.test(own[own.length - 1])) {
+      el.after(doc.createTextNode(sep));
+    }
+    if (separated(el, 'previousSibling') === false && !/\s/.test(own[0])) {
+      el.before(doc.createTextNode(sep));
+    }
+  }
 }
 
 /**
@@ -2794,6 +2893,30 @@ async function extractTurnsChatGPT() {
 }
 
 /**
+ * A Gemini prompt's text, line by line (#421).
+ *
+ * The 2026-10 prompt holds one `p.query-text-line` per line, with nothing but
+ * Angular comments between them, beside a screen-reader heading that repeats
+ * the prompt cut short. Read whole, it came out as "You said <the prompt,
+ * truncated>…  <the prompt>", its lines run together. Each line carries one
+ * space of template whitespace at either end, which is removed; any other
+ * leading space is the user's, and kept. An empty line is kept, so a blank
+ * line in the prompt survives.
+ *
+ * @param {Element} userEl
+ * @returns {string|null} null where the prompt has no line elements, so the
+ *   caller keeps its own reading (the older markup)
+ */
+function geminiPromptLines(userEl) {
+  const sel = typeof SELECTORS !== 'undefined' && SELECTORS.userLine;
+  if (!sel || !userEl || typeof userEl.querySelectorAll !== 'function') return null;
+  const lines = Array.from(userEl.querySelectorAll(sel));
+  if (!lines.length) return null;
+  return lines.map(p => (p.textContent || '').replace(/^ /, '').replace(/ $/, ''))
+    .join('\n').replace(/^\n+|\n+$/g, '');
+}
+
+/**
  * Extract turns from a Gemini conversation.
  * Gemini uses .conversation-container elements with user-query and model-response inside.
  * @returns {Promise<Array>} - Array of turn objects
@@ -2810,7 +2933,10 @@ async function extractTurnsGemini() {
     for (const container of containers) {
       const userEl = container.querySelector('user-query, [data-message-author-role="user"]');
       if (userEl) {
-        turns.push(extractUserTurn(userEl, turnIndex++));
+        const turn = extractUserTurn(userEl, turnIndex++);
+        const lines = geminiPromptLines(userEl);
+        if (lines !== null) turn.content = lines;
+        turns.push(turn);
       }
 
       const assistantEl = container.querySelector('model-response, [data-message-author-role="model"]');
@@ -2845,7 +2971,10 @@ async function extractTurnsGemini() {
                    element.getAttribute('data-message-author-role') === 'user';
 
     if (isUser) {
-      turns.push(extractUserTurn(element, turnIndex++));
+      const turn = extractUserTurn(element, turnIndex++);
+      const lines = geminiPromptLines(element);
+      if (lines !== null) turn.content = lines;
+      turns.push(turn);
     } else {
       turns.push(extractAssistantTurn(element, turnIndex++));
     }
@@ -3421,6 +3550,8 @@ if (typeof module !== 'undefined' && module.exports) {
     extractTitle,
     extractConversationId,
     extractTextContent,
+    separateBlocks,
+    geminiPromptLines,
     detectCodeLanguage,
     sniffCodeLanguage,
     outermostPre,

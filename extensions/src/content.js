@@ -560,8 +560,16 @@ function setMessageScroller(el) {
  */
 function measureFromBottom(el, scroller) {
   if (!scroller || !el || typeof el.getBoundingClientRect !== 'function') return null;
-  // A container that does not actually scroll gives a meaningless key.
-  if (!(scroller.scrollHeight > scroller.clientHeight)) return null;
+  // A container that does not actually scroll gives a meaningless key, when
+  // something inside it does: the message moves as that inner scroller moves
+  // and the container does not, so keys taken at different moments disagree.
+  // When nothing between the two scrolls, the message cannot move relative to
+  // the container and the key is exact (#407). That is a conversation that
+  // fits on screen: no candidate scrolls and findScrollContainer() falls back to
+  // <body>. Measured live (injected, viewport emulated at 1800px), every message
+  // of a 4-message conversation went unpositioned on ChatGPT and on Claude, and
+  // the export said contentComplete: false.
+  if (!(scroller.scrollHeight > scroller.clientHeight) && !fixedWithin(el, scroller)) return null;
   const r = layoutRectOf(el, 3);
   // Height 0 means the node is in the DOM but not yet laid out — a measurement
   // here is junk, and junk that outranks "unknown" is worse than no key at all.
@@ -569,6 +577,27 @@ function measureFromBottom(el, scroller) {
   const sr = scroller.getBoundingClientRect();
   const offsetTop = r.top - sr.top + scroller.scrollTop;
   return scroller.scrollHeight - offsetTop;
+}
+
+/**
+ * Does scrolling leave this element where it is, relative to the scroller?
+ * (#407)
+ *
+ * True when the scroller holds the element and no element between them is a
+ * real scroller. Scrolling the scroller itself, or anything above it, moves
+ * both together. A scroller that does not hold the element, or a real scroller
+ * in between, can move one without the other.
+ *
+ * @param {Element} el
+ * @param {Element} scroller
+ * @returns {boolean}
+ */
+function fixedWithin(el, scroller) {
+  if (typeof scroller.contains !== 'function' || !scroller.contains(el)) return false;
+  for (let n = el.parentElement; n && n !== scroller; n = n.parentElement) {
+    if (isRealScroller(n)) return false;
+  }
+  return true;
 }
 
 /**
@@ -3460,6 +3489,7 @@ if (typeof module !== 'undefined' && module.exports) {
     resetMessageCache,
     setMessageScroller,
     measureFromBottom,
+    fixedWithin,
     // Attached-file capture during the scroll (#262)
     captureMessageArtifacts,
     getMessageArtifacts,

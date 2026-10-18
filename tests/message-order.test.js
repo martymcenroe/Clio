@@ -62,10 +62,10 @@ function renderWindow(first, last) {
   // below the window, so the scrollable height covers that whole range.
   const loaded = TOTAL - first;
   Object.defineProperty(scroller, 'scrollHeight', { value: loaded * H, configurable: true });
-  // Deliberately shorter than the smallest window any test renders: a viewport
-  // as tall as everything loaded is not scrolling, measureFromBottom correctly
-  // declines to measure it, and the ordering would then be resting on capture
-  // order rather than on the key under test.
+  // Deliberately shorter than the smallest window any test renders, so the
+  // scroller genuinely scrolls: these tests are about the scrolling case. A
+  // conversation that fits on screen, with nothing to scroll, is #407's tests
+  // below.
   Object.defineProperty(scroller, 'clientHeight', { value: 2 * H, configurable: true });
   scroller.scrollTop = 0;
   scroller.getBoundingClientRect = () => ({ top: 0, height: 2 * H });
@@ -203,18 +203,144 @@ describe('bottom-anchored ordering (#264)', () => {
     expect(getCaptureOrderStats().withoutOrderKey).toBe(6);
   });
 
-  test('a container that does not scroll yields no key', () => {
-    const scroller = renderWindow(0, 3);
-    Object.defineProperty(scroller, 'scrollHeight', { value: 3 * H, configurable: true });
-    Object.defineProperty(scroller, 'clientHeight', { value: 3 * H, configurable: true });
+  // Until #407 this test read "a container that does not scroll yields no
+  // key", and asserted it for a container with nothing scrolling inside it
+  // either: a conversation that fits on screen. That rule is what flagged every
+  // short conversation. The key is meaningless only when something BETWEEN the
+  // container and the message scrolls, so that is what is held here (#407 R2).
+  test('a non-scrolling container with a real scroller inside it yields no key', () => {
+    const inner = renderWindow(0, 3);          // scrolls: 12H of content, 2H tall
+    inner.style.overflowY = 'auto';
+    const outer = document.createElement('div');
+    document.body.appendChild(outer);
+    outer.appendChild(inner);
+    Object.defineProperty(outer, 'scrollHeight', { value: 2 * H, configurable: true });
+    Object.defineProperty(outer, 'clientHeight', { value: 2 * H, configurable: true });
+    outer.getBoundingClientRect = () => ({ top: 0, height: 2 * H });
 
     const el = document.querySelector('[data-message-id="m1"]');
-    expect(measureFromBottom(el, scroller)).toBeNull();
+    expect(measureFromBottom(el, outer)).toBeNull();
+
+    setMessageScroller(outer);
+    captureRenderedMessages();
+    expect(getCaptureOrderStats().withoutOrderKey).toBe(4);   // still reported
+  });
+
+  test('a non-scrolling container that does not hold the message yields no key', () => {
+    renderWindow(0, 3);
+    const elsewhere = document.createElement('div');
+    document.body.appendChild(elsewhere);
+    Object.defineProperty(elsewhere, 'scrollHeight', { value: H, configurable: true });
+    Object.defineProperty(elsewhere, 'clientHeight', { value: H, configurable: true });
+    elsewhere.getBoundingClientRect = () => ({ top: 0, height: H });
+
+    expect(measureFromBottom(document.querySelector('[data-message-id="m1"]'), elsewhere)).toBeNull();
   });
 
   test('the live DOM is used when nothing was captured', () => {
     renderWindow(0, 3);
     expect(captured()).toEqual(['m0', 'm1', 'm2', 'm3']);
+  });
+});
+
+// ============================================================================
+// A conversation that fits on screen (#407)
+// ============================================================================
+
+/**
+ * Measured live: a 4-message conversation in a viewport tall enough to hold it
+ * has nothing to scroll, findScrollContainer() falls back to <body>, and until
+ * #407 measureFromBottom() refused every message because <body> does not
+ * scroll. Every short conversation exported contentComplete: false with "4 of
+ * 4 message(s) could not be positioned". Nothing between <body> and the
+ * messages scrolls, so nothing can move, and the distance from the bottom is
+ * an exact key.
+ */
+describe('a conversation that fits on screen is positioned (#407)', () => {
+  /**
+   * Three messages, laid out m0, m1, m2 from the top, but in the DOM as m2, m0,
+   * m1, so ordering by position and ordering by capture give different answers.
+   * The scroller is exactly as tall as its content.
+   */
+  function renderFitting(scrollerIsBody) {
+    const order = ['m2', 'm0', 'm1'];
+    const html = order.map((id) => `
+      <div><div data-message-author-role="${id === 'm1' ? 'assistant' : 'user'}"
+                data-message-id="${id}">${id}</div></div>`).join('');
+    document.body.innerHTML = scrollerIsBody ? html : `<div id="scroller">${html}</div>`;
+    const scroller = scrollerIsBody ? document.body : document.getElementById('scroller');
+    Object.defineProperty(scroller, 'scrollHeight', { value: 3 * H, configurable: true });
+    Object.defineProperty(scroller, 'clientHeight', { value: 3 * H, configurable: true });
+    scroller.getBoundingClientRect = () => ({ top: 0, height: 3 * H });
+    for (const el of document.querySelectorAll(SELECTORS.allMessages)) {
+      const index = Number(el.getAttribute('data-message-id').slice(1));
+      el.getBoundingClientRect = () => ({ top: index * H, height: H });
+    }
+    return scroller;
+  }
+
+  test('every message gets a key, from its position', () => {
+    const scroller = renderFitting(false);
+    const keys = ['m0', 'm1', 'm2'].map((id) =>
+      measureFromBottom(document.querySelector(`[data-message-id="${id}"]`), scroller));
+    expect(keys).toEqual([3 * H, 2 * H, H]);
+  });
+
+  test('the transcript is ordered by position, not capture order', () => {
+    setMessageScroller(renderFitting(false));
+    captureRenderedMessages();
+    expect(captured()).toEqual(['m0', 'm1', 'm2']);
+    expect(getCaptureOrderStats().withoutOrderKey).toBe(0);
+  });
+
+  test('with <body> as the scroller, as findScrollContainer() returns when nothing scrolls', () => {
+    setMessageScroller(renderFitting(true));
+    captureRenderedMessages();
+    expect(captured()).toEqual(['m0', 'm1', 'm2']);
+    expect(getCaptureOrderStats().withoutOrderKey).toBe(0);
+  });
+
+  test('the settled-DOM pass measures them too', () => {
+    setMessageScroller(renderFitting(true));
+    captureRenderedMessages();
+    expect(remeasureRenderedMessages()).toBe(3);
+    expect(getCaptureOrderStats().neverMeasuredOnSettledDom).toBe(0);
+  });
+
+  describe('through the whole extraction', () => {
+    const FAST = {
+      scrollStep: 100, scrollDelay: 5, loadingAppearDelay: 5, mutationTimeout: 10,
+      maxScrollAttempts: 5, loadingCheckInterval: 5, maxLoadingWait: 20,
+      progressUpdateInterval: 2, topSettleRounds: 1, minTopWaitMs: 0
+    };
+    beforeEach(() => setScrollConfig(FAST));
+    afterEach(() => resetScrollConfig());
+
+    test('the export is complete and makes no ordering complaint', async () => {
+      document.body.innerHTML = `
+        <main>
+          <div data-message-author-role="user" data-message-id="c1">
+            <div class="whitespace-pre-wrap">hello</div>
+          </div>
+          <div data-message-author-role="assistant" data-message-id="c2">
+            <div class="markdown">hi there</div>
+          </div>
+        </main>`;
+      // jsdom: nothing has a size, so nothing scrolls and findScrollContainer()
+      // returns <body>, exactly as live. Only the messages are laid out.
+      document.querySelector('[data-message-id="c1"]').getBoundingClientRect = () => ({ top: 0, height: H });
+      document.querySelector('[data-message-id="c2"]').getBoundingClientRect = () => ({ top: H, height: H });
+
+      const result = await extractConversation();
+
+      expect(result.success).toBe(true);
+      const meta = result.data.metadata;
+      expect(meta.orderInfo.withoutOrderKey).toBe(0);
+      expect(meta.incompleteReasons.join(' ')).not.toContain('could not be positioned');
+      expect(result.warnings.join(' ')).not.toContain('could not be positioned');
+      expect(meta.contentComplete).toBe(true);
+      expect(result.data.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    });
   });
 });
 

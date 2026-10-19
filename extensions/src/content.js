@@ -3343,17 +3343,28 @@ async function extractImages(turns) {
 
 /**
  * Main extraction entry point. Checks state, expands content, extracts data.
+ * @param {Object} [options]
+ * @param {boolean} [options.whileGenerating] - extract even though the page
+ *   shows a reply being generated (#435). The export is marked incomplete.
  * @returns {Promise<Object>} - ExtractionResult
  */
-async function extractConversation() {
+async function extractConversation(options = {}) {
   try {
     // Phase 0: Pre-flight checks
     const siteNames = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini' };
     const siteName = siteNames[getSite()] || 'Unknown';
 
-    if (isStreaming()) {
+    // A page showing a reply being generated is refused by default, since the
+    // last reply may still be changing. A site can stay in that state for good
+    // (a conversation at its length limit, stuck "thinking"), and then the
+    // refusal never clears and the conversation cannot be saved at all (#435).
+    // So the refusal says it is about generation, the popup offers to extract
+    // anyway, and an export taken that way is marked rather than passed clean.
+    const generating = isStreaming();
+    if (generating && !options.whileGenerating) {
       return {
         success: false,
+        generating: true,
         error: `${siteName} is currently generating a response. Please wait for completion before extracting.`
       };
     }
@@ -3510,6 +3521,11 @@ async function extractConversation() {
       incompleteReasons.push(
         `${imagesReduced} image(s) are the site's reduced copy, not the original`);
     }
+    // Extracted anyway while the page showed a reply being generated (#435).
+    if (generating) {
+      incompleteReasons.push(
+        `${siteName} showed a reply still being generated, so the last reply may be partial or missing.`);
+    }
     const contentComplete = incompleteReasons.length === 0;
 
     // Image fetches are Fail Open by design — the transcript is unaffected when
@@ -3532,6 +3548,9 @@ async function extractConversation() {
         // or null outside the extension, so an injected capture cannot pass
         // for a real one.
         clioVersion: clioVersion(),
+        // The page showed a reply being generated, and the operator extracted
+        // anyway (#435). Reported false otherwise, on every export.
+        extractedWhileGenerating: generating,
         messageCount: turns.length,
         imageCount: images.length,
         // What the page offered, beside what was taken (#410), reported even
@@ -3672,7 +3691,7 @@ if (typeof SELECTORS !== 'undefined' && SELECTORS.imageRenditions &&
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'extract') {
-    extractConversation().then(result => {
+    extractConversation({ whileGenerating: !!request.whileGenerating }).then(result => {
       // Convert blobs to base64 for message passing
       if (result.images && result.images.length > 0) {
         Promise.all(result.images.map(async img => {

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.9.10] — 2026-10-19
+
+### Added
+- **Extract anyway.** While the page shows a reply being generated, Clio refuses to extract, and a page can stay that way for good: a ChatGPT conversation that had reached its length limit sat on "thinking" and could not be saved at all. The refusal now offers "Extract anyway", which saves what is on the page. Such an export carries `metadata.extractedWhileGenerating: true`, `contentComplete: false`, and a reason in `incompleteReasons` saying the last reply may be partial or missing; every other export carries `extractedWhileGenerating: false`. A plain "Extract Conversation" still refuses (#435)
+
 ## [1.9.9] — 2026-10-18
 
 ### Added

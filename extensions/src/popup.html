@@ -84,6 +84,23 @@
       cursor: not-allowed;
     }
 
+    #extractAnywayBtn {
+      width: 100%;
+      padding: 10px 20px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #c62828;
+      background: #fff;
+      border: 1px solid #c62828;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    #extractAnywayBtn:hover {
+      background: #ffebee;
+    }
+
     .progress {
       margin-top: 12px;
       display: none;
@@ -184,6 +201,11 @@
   <div id="status" class="status ready">
     Ready to extract conversation.
   </div>
+
+  <!-- Shown only after a refusal because the page shows a reply being
+       generated (#435): a page stuck that way never clears, and without this
+       the conversation cannot be saved. The export is marked incomplete. -->
+  <button id="extractAnywayBtn" style="display: none;">Extract anyway</button>
 
   <button id="extractBtn">Extract Conversation</button>
   <button id="downloadAllBtn" style="margin-top: 8px; background: #eef2f7; color: #223; border: 1px solid #cdd7e3;">Download All Conversations</button>

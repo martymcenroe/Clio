@@ -243,6 +243,18 @@ function setButtonState(enabled, text = 'Extract Conversation') {
   extractBtn.textContent = text;
 }
 
+/**
+ * Show or hide "Extract anyway" (#435). It appears only after an extraction
+ * was refused because the page shows a reply being generated, and goes away
+ * when any extraction starts.
+ * @param {boolean} visible
+ */
+function showExtractAnyway(visible) {
+  const el = document.getElementById('extractAnywayBtn');
+  if (!el) return;
+  el.style.display = visible ? 'block' : 'none';
+}
+
 // ============================================================================
 // Site Detection Helpers
 // ============================================================================
@@ -406,10 +418,15 @@ function scriptsForSite(site) {
  * sendMessage wrapper that converts the Chrome callback-style API to a
  * Promise. Resolves with the response or rejects with an Error whose
  * message is chrome.runtime.lastError.message.
+ * @param {number} tabId
+ * @param {Object} [options] - { whileGenerating } (#435)
  */
-function sendExtractMessageOnce(tabId) {
+function sendExtractMessageOnce(tabId, options = {}) {
+  const message = options.whileGenerating
+    ? { action: 'extract', whileGenerating: true }
+    : { action: 'extract' };
   return new Promise((resolve, reject) => {
-    chrome.tabs.sendMessage(tabId, { action: 'extract' }, response => {
+    chrome.tabs.sendMessage(tabId, message, response => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
       } else {
@@ -425,10 +442,12 @@ function sendExtractMessageOnce(tabId) {
  * connection"), inject it via chrome.scripting.executeScript and retry
  * exactly once. Any other error bubbles up unchanged. After exhausting
  * the retry, raises a user-friendly Error.
+ * @param {Object} tab
+ * @param {Object} [options] - passed to the content script (#435)
  */
-async function sendExtractMessage(tab) {
+async function sendExtractMessage(tab, options = {}) {
   try {
-    return await sendExtractMessageOnce(tab.id);
+    return await sendExtractMessageOnce(tab.id, options);
   } catch (err) {
     if (!RECEIVING_END_ERROR.test(err.message || '')) {
       throw err; // unrelated extraction error — let it surface as-is
@@ -451,7 +470,7 @@ async function sendExtractMessage(tab) {
       throw new Error("Couldn't reach the page. Please reload the tab and try again.", { cause: injectErr });
     }
     try {
-      return await sendExtractMessageOnce(tab.id);
+      return await sendExtractMessageOnce(tab.id, options);
     } catch (retryErr) {
       throw new Error("Couldn't reach the page. Please reload the tab and try again.", { cause: retryErr });
     }
@@ -464,9 +483,12 @@ async function sendExtractMessage(tab) {
 
 /**
  * Handle extract button click.
+ * @param {Object} [options] - { whileGenerating: true } from "Extract anyway"
+ *   (#435); a plain click passes nothing.
  */
-async function handleExtract() {
+async function handleExtract(options = {}) {
   try {
+    showExtractAnyway(false);
     setButtonState(false, 'Extracting...');
     setStatus('Starting extraction...', 'info');
     showProgress('Connecting to page...');
@@ -489,10 +511,17 @@ async function handleExtract() {
     // recovery message (#139).
     showProgress('Extracting conversation...');
 
-    const result = await sendExtractMessage(tab);
+    const result = await sendExtractMessage(tab, options);
 
     if (!result.success) {
-      setStatus(result.error || 'Extraction failed', 'error');
+      if (result.generating) {
+        // A page stuck generating never clears, so the refusal offers a way
+        // past it (#435).
+        setStatus(`${result.error} If it is stuck, Extract anyway saves what is on the page, marked incomplete.`, 'error');
+        showExtractAnyway(true);
+      } else {
+        setStatus(result.error || 'Extraction failed', 'error');
+      }
       setButtonState(true);
       hideProgress();
       return;
@@ -577,7 +606,13 @@ async function handleExtract() {
 // Only set up event listeners if DOM elements exist (not in test environment loading)
 const extractBtn = document.getElementById('extractBtn');
 if (extractBtn) {
-  extractBtn.addEventListener('click', handleExtract);
+  // A plain click never extracts while the page shows a reply being generated;
+  // only "Extract anyway" does (#435).
+  extractBtn.addEventListener('click', () => handleExtract());
+  const extractAnywayBtn = document.getElementById('extractAnywayBtn');
+  if (extractAnywayBtn) {
+    extractAnywayBtn.addEventListener('click', () => handleExtract({ whileGenerating: true }));
+  }
 
   // Determine active tab's site, then restore the last extraction's
   // stats ONLY if it was from the same site (#138). On an unsupported
@@ -644,6 +679,7 @@ if (typeof module !== 'undefined' && module.exports) {
     showOrderConfidence,
     totalFailureCount,
     setButtonState,
+    showExtractAnyway,
     createZip,
     downloadBlob,
     handleExtract,
